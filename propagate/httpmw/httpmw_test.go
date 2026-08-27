@@ -423,3 +423,112 @@ func TestRedirectAcrossTrustBoundaryStrips(t *testing.T) {
 		}
 	}
 }
+
+func TestIngressEstimatorStampsUnknownAmounts(t *testing.T) {
+	// Opt-in: a hook that cannot determine the amount sets Estimated=true
+	// and leaves Amount 0; the estimator fills it. A KNOWN amount
+	// (including a genuine 0) has Estimated=false and is untouched.
+	cases := []struct {
+		name        string
+		segment     string
+		flow        string
+		inAmount    int64
+		inEstimated bool
+		wantAmount  int64
+		wantEst     bool
+	}{
+		{"unknown amount opted in, known segment", "enterprise", "invoice.pay", 0, true, 91000, true},
+		{"unknown amount opted in, default segment", "smb", "invoice.pay", 0, true, 14200, true},
+		{"genuine free checkout is NOT overwritten", "smb", "invoice.pay", 0, false, 0, false},
+		{"known amount is left untouched", "smb", "invoice.pay", 500, false, 500, false},
+		{"opted-in unregistered flow: no estimator, stays 0 estimated", "smb", "mystery.flow", 0, true, 0, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hook := func(r *http.Request) (biz.ValueContext, bool) {
+				return biz.ValueContext{
+					Flow:       c.flow,
+					EntityID:   "cart_1",
+					CustomerID: "h:c",
+					Segment:    c.segment,
+					Money:      biz.Money{Amount: c.inAmount, Currency: "USD", Exponent: 2},
+					Kind:       biz.KindFee,
+					Estimated:  c.inEstimated,
+				}, true
+			}
+			h := &captureHandler{}
+			mw := Middleware(testRegistry(t), WithIngress(hook))(h)
+			req := httptest.NewRequest(http.MethodGet, "/cart", nil)
+			mw.ServeHTTP(httptest.NewRecorder(), req)
+			if !h.ok {
+				t.Fatalf("stamp did not reach downstream")
+			}
+			if h.vc.Money.Amount != c.wantAmount {
+				t.Fatalf("amount = %d, want %d", h.vc.Money.Amount, c.wantAmount)
+			}
+			if h.vc.Estimated != c.wantEst {
+				t.Fatalf("estimated = %v, want %v", h.vc.Estimated, c.wantEst)
+			}
+		})
+	}
+}
+
+func TestEstimatorRespectsExponent(t *testing.T) {
+	// A JPY/0 flow's estimator must apply its own exponent, not inherit a
+	// USD/2 assumption (the 100x-error finding).
+	regYAML := `
+version: 1
+segments: [smb]
+propagation:
+  allow_hosts: ["api.example.com"]
+flows:
+  jpy.pay:
+    money: { kind: fee }
+    stages:
+      - { name: auth, signals: ["http:POST /pay"] }
+    estimator: { default_minor: 18750, exponent: 0 }
+    baseline: { seasonality: hour_of_week, lookback_weeks: 8 }
+    recovery: { model: usage_loss_curve, recovered_fraction: 0 }
+    reconcile: { source: "sql:ledger.payments" }
+`
+	reg, err := registry.Parse([]byte(regYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := func(r *http.Request) (biz.ValueContext, bool) {
+		return biz.ValueContext{
+			Flow: "jpy.pay", EntityID: "c1", CustomerID: "h:c", Segment: "smb",
+			Money: biz.Money{Amount: 0, Currency: "JPY", Exponent: 0}, Kind: biz.KindFee,
+			Estimated: true,
+		}, true
+	}
+	h := &captureHandler{}
+	mw := Middleware(&reg, WithIngress(hook))(h)
+	mw.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/cart", nil))
+	if h.vc.Money.Exponent != 0 || h.vc.Money.Amount != 18750 {
+		t.Fatalf("estimator exponent not applied: %+v", h.vc.Money)
+	}
+}
+
+func TestEstimatorDoesNotOverrideWireContext(t *testing.T) {
+	// A valid biz.vc on the wire wins; the estimator only ever fires on
+	// the ingress-stamp path.
+	wire := vcFixture()
+	wire.Money.Amount = 0 // unknown on the wire, but present and valid
+	enc, err := biz.EncodeVC(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := func(r *http.Request) (biz.ValueContext, bool) {
+		t.Fatal("hook must not run when wire context is present")
+		return biz.ValueContext{}, false
+	}
+	h := &captureHandler{}
+	mw := Middleware(testRegistry(t), WithIngress(hook))(h)
+	req := httptest.NewRequest(http.MethodGet, "/cart", nil)
+	req.Header.Set("baggage", "biz.vc="+enc)
+	mw.ServeHTTP(httptest.NewRecorder(), req)
+	if !h.ok || h.vc.Money.Amount != 0 || h.vc.Estimated {
+		t.Fatalf("wire context was altered by the estimator: %+v", h.vc)
+	}
+}

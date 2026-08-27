@@ -77,6 +77,12 @@ func writeMembers(h http.Header, members map[string]baggage.Member) error {
 
 // IngressFunc recognizes a flow on an incoming request and builds its
 // ValueContext. Return false when the request is not a flow entry point.
+//
+// Entry-point estimation: when the amount is not knowable at ingress,
+// set Estimated=true and leave Money.Amount 0 (keep a valid Currency);
+// the middleware fills the registry estimator's value at its declared
+// exponent. A KNOWN amount — including a genuine 0 — must have
+// Estimated=false; it is never overwritten.
 type IngressFunc func(*http.Request) (biz.ValueContext, bool)
 
 // MWOption configures Middleware.
@@ -104,7 +110,6 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 	for _, o := range opts {
 		o(&cfg)
 	}
-	_ = reg // reserved for the estimator hook (the sibling M3 step)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -128,6 +133,7 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 				}
 				if cfg.ingress != nil {
 					if vc, stamp := cfg.ingress(r); stamp {
+						vc = estimate(reg, vc)
 						if err := vc.Validate(); err != nil {
 							cfg.logger.Warn("httpmw: ingress stamp rejected — the hook's output must satisfy the same fences as the wire", "error", err)
 						} else if stamped, err := biz.WithValueContext(ctx, vc); err != nil {
@@ -141,6 +147,29 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// estimate fills an ingress stamp's amount from the registry's entry-point
+// estimator. It is OPT-IN and never touches a known amount: a hook that
+// cannot determine the amount (e.g. GET /cart) signals so by setting
+// Estimated=true and leaving Money.Amount 0; estimate then fills the
+// default or by-segment value at the estimator's declared exponent (a
+// genuine, KNOWN $0 has Estimated=false and is never overwritten — the
+// free-checkout that must not become $187.50). The stamp's currency is
+// kept; a flow with no estimator or the wrong signal is returned
+// unchanged.
+func estimate(reg *registry.Registry, vc biz.ValueContext) biz.ValueContext {
+	if !vc.Estimated || vc.Money.Amount != 0 || reg == nil {
+		return vc
+	}
+	f, ok := reg.Flow(vc.Flow)
+	if !ok {
+		return vc
+	}
+	if m, ok := f.EstimateMoney(vc.Segment, vc.Money.Currency); ok {
+		vc.Money = m
+	}
+	return vc
 }
 
 // Transport is the client-side egress fence. It implements

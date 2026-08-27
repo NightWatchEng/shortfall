@@ -703,3 +703,22 @@ func BenchmarkRecordSuppressed(b *testing.B) {
 		em.Record(ctx, "capture", biz.ResultFailed)
 	}
 }
+
+func TestEstimatedOutcomeStaysOutOfValueMetric(t *testing.T) {
+	exp := &captureExporter{}
+	em := newTestEmitter(t, exp)
+	vc := emitterVC()
+	vc.Estimated = true
+	em.Record(ctxWithVC(t, vc), "auth", biz.ResultAbandoned)
+	metrics, events := flushAndSnapshot(t, em, exp)
+	byName := metricsByName(metrics)
+	if len(byName["biz_value_total"]) != 0 {
+		t.Fatalf("estimated value leaked into biz_value_total: %v", byName["biz_value_total"])
+	}
+	if len(byName["biz_txn_total"]) != 1 {
+		t.Fatalf("estimated outcome should still count: %v", byName["biz_txn_total"])
+	}
+	if len(events) != 1 || !events[0].VC.Estimated {
+		t.Fatalf("estimated outcome must still ride the event: %+v", events)
+	}
+}

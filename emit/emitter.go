@@ -191,15 +191,6 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 
 	flowLabel, stageLabel := s.flowStageLabels(vc.Flow, stage)
 	segLabel := s.segmentLabel(vc.Segment)
-	valuePoint := MetricPoint{
-		Name: "biz_value_total",
-		Labels: map[string]string{
-			"flow": flowLabel, "stage": stageLabel, "outcome": string(result),
-			"currency": vc.Money.Currency, "kind": string(vc.Kind), "segment": segLabel,
-		},
-		Value: vc.Money.Amount,
-		At:    at,
-	}
 	txnPoint := MetricPoint{
 		Name: "biz_txn_total",
 		Labels: map[string]string{
@@ -209,7 +200,25 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 		Value: 1,
 		At:    at,
 	}
-	s.appendMetrics(valuePoint, txnPoint)
+	// biz_value_total is the REALIZED value sum: estimated amounts never
+	// enter it (ADR-0004 froze its label set with no evidence axis, and
+	// "realized and estimate never merged" is an invariant). The estimated
+	// amount still rides the outcome EVENT, where the counterfactual leg
+	// reads it. A count is fine either way.
+	if vc.Estimated {
+		s.appendMetrics(txnPoint)
+	} else {
+		valuePoint := MetricPoint{
+			Name: "biz_value_total",
+			Labels: map[string]string{
+				"flow": flowLabel, "stage": stageLabel, "outcome": string(result),
+				"currency": vc.Money.Currency, "kind": string(vc.Kind), "segment": segLabel,
+			},
+			Value: vc.Money.Amount,
+			At:    at,
+		}
+		s.appendMetrics(valuePoint, txnPoint)
+	}
 }
 
 // SetInFlight implements Emitter: one gauge sample per (flow, stage,
