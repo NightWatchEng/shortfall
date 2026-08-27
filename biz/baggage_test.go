@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel/baggage"
 )
 
 func codecVC() ValueContext {
@@ -91,14 +93,20 @@ func TestEncodeSizeCap(t *testing.T) {
 func TestDecodeRejections(t *testing.T) {
 	valid, _ := EncodeVC(codecVC())
 	cases := map[string]string{
-		"empty":           "",
-		"unknown version": "2" + valid[1:],
-		"no version":      strings.TrimPrefix(valid, "1|"),
-		"truncated":       valid[:len(valid)/2],
-		"extra field":     valid + "|extra",
-		"bad amount":      strings.Replace(valid, "14900", "14x00", 1),
-		"bad escape":      "1|f|%zz|c|s|1|USD|2|fee|0|0",
-		"oversize decode": "1|" + strings.Repeat("a", 600),
+		"empty":                      "",
+		"unknown version":            "2" + valid[1:],
+		"field count (version gone)": strings.TrimPrefix(valid, "1|"),
+		"truncated":                  valid[:len(valid)/2],
+		"extra field":                valid + "|extra",
+		"bad amount":                 strings.Replace(valid, "14900", "14x00", 1),
+		"bad escape":                 "1|f|%zz|c|s|1|USD|2|fee|0|0",
+		"lowercase hex escape":       "1|f|%7c|c|s|1|USD|2|fee|0|0",
+		"raw byte needing escape":    "1|f|a b|c|s|1|USD|2|fee|0|0",
+		"raw quote needing escape":   `1|f|a"b|c|s|1|USD|2|fee|0|0`,
+		"negative deadline":          "1|f|e|c|s|1|USD|2|fee|0|-5",
+		"deadline beyond year 3000":  "1|f|e|c|s|1|USD|2|fee|0|9223372036854775807",
+		"flags outside version 1":    "1|f|e|c|s|1|USD|2|fee|2|0",
+		"oversize decode":            "1|" + strings.Repeat("a", 600),
 	}
 	for name, s := range cases {
 		if _, err := DecodeVC(s); err == nil {
@@ -109,20 +117,100 @@ func TestDecodeRejections(t *testing.T) {
 
 func TestContextRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	if _, ok := FromContext(ctx); ok {
-		t.Fatal("empty context reported a ValueContext")
+	if _, ok, err := FromContext(ctx); ok || err != nil {
+		t.Fatalf("empty context: ok=%v err=%v, want absent with no error", ok, err)
 	}
 	vc := codecVC()
 	ctx, err := WithValueContext(ctx, vc)
 	if err != nil {
 		t.Fatalf("WithValueContext: %v", err)
 	}
-	got, ok := FromContext(ctx)
-	if !ok {
-		t.Fatal("ValueContext lost in context round trip")
+	got, ok, err := FromContext(ctx)
+	if !ok || err != nil {
+		t.Fatalf("ValueContext lost in context round trip: ok=%v err=%v", ok, err)
 	}
 	if got.EntityID != vc.EntityID || got.Money != vc.Money {
 		t.Fatalf("context round trip drifted: %+v", got)
+	}
+	// Re-setting replaces rather than duplicates.
+	ctx, err = WithValueContext(ctx, got)
+	if err != nil {
+		t.Fatalf("second WithValueContext: %v", err)
+	}
+	if _, ok, err := FromContext(ctx); !ok || err != nil {
+		t.Fatalf("second write lost the member: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestFromContextDistinguishesCorruptFromAbsent(t *testing.T) {
+	member, err := baggage.NewMemberRaw(MemberKey, "1|f|e|c|s|NOTANUMBER|USD|2|fee|0|0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bag, err := baggage.New(member)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := baggage.ContextWithBaggage(context.Background(), bag)
+	_, ok, err := FromContext(ctx)
+	if ok {
+		t.Fatal("corrupt member decoded as ok")
+	}
+	if err == nil {
+		t.Fatal("corrupt member indistinguishable from absent — corruption must be loud")
+	}
+}
+
+func TestWithValueContextPreservesForeignMembers(t *testing.T) {
+	foreign, err := baggage.NewMemberRaw("tenant", "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bag, err := baggage.New(foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := baggage.ContextWithBaggage(context.Background(), bag)
+	ctx, err = WithValueContext(ctx, codecVC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := baggage.FromContext(ctx)
+	if out.Member("tenant").Value() != "acme" {
+		t.Fatal("foreign baggage member clobbered")
+	}
+	if out.Len() != 2 {
+		t.Fatalf("baggage has %d members, want 2", out.Len())
+	}
+}
+
+func TestDeadlineDomain(t *testing.T) {
+	vc := codecVC()
+	vc.Deadline = time.Date(1969, 6, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := EncodeVC(vc); err == nil {
+		t.Fatal("pre-1970 deadline encoded — the decoder would reject it on the next hop")
+	}
+	vc.Deadline = time.Unix(0, 0)
+	if _, err := EncodeVC(vc); err == nil {
+		t.Fatal("epoch deadline encoded — the wire zero means no deadline and must not be reachable")
+	}
+	vc.Deadline = time.Date(3001, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := EncodeVC(vc); err == nil {
+		t.Fatal("beyond-3000 deadline encoded")
+	}
+	// Sub-second precision truncates by contract (documented): the codec
+	// carries unix seconds.
+	vc.Deadline = time.Date(2026, 8, 27, 14, 32, 0, 500_000_000, time.UTC)
+	enc, err := EncodeVC(vc)
+	if err != nil {
+		t.Fatalf("sub-second deadline: %v", err)
+	}
+	got, err := DecodeVC(enc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Deadline.Equal(time.Date(2026, 8, 27, 14, 32, 0, 0, time.UTC)) {
+		t.Fatalf("sub-second deadline did not truncate to the second: %v", got.Deadline)
 	}
 }
 
@@ -159,7 +247,8 @@ func randomVC(rng *rand.Rand) ValueContext {
 		Estimated: rng.IntN(2) == 1,
 	}
 	if rng.IntN(2) == 1 {
-		vc.Deadline = time.Unix(rng.Int64N(4102444800), 0).UTC()
+		// Strictly inside the encodable domain (1970, 3000].
+		vc.Deadline = time.Unix(1+rng.Int64N(32503679999), 0).UTC()
 	}
 	return vc
 }

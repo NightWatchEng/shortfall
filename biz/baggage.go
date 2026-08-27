@@ -32,6 +32,13 @@ const MaxEncodedBytes = 512
 // not know rather than guessing.
 const codecVersion = "1"
 
+// Deadline domain on the wire: strictly after the epoch and no later
+// than year 3000, carried at UNIX-SECOND precision (sub-second components
+// are discarded at encode). Both codec directions enforce the same
+// bounds, so everything encoded decodes and a peer-controlled header can
+// never smuggle a time.Time-overflowing instant into SLA math.
+const maxDeadlineUnix = 32503680000 // 3000-01-01T00:00:00Z
+
 // OversizeError reports an encoding that exceeded MaxEncodedBytes.
 type OversizeError struct {
 	Size int
@@ -53,6 +60,13 @@ func EncodeVC(vc ValueContext) (string, error) {
 	deadline := int64(0)
 	if !vc.Deadline.IsZero() {
 		deadline = vc.Deadline.Unix()
+		// The zero wire value means "no deadline", so the encodable
+		// domain must exclude it — and everything the decoder rejects.
+		// An encoder that emits wire its own decoder refuses loses
+		// context silently on the next hop (a confirmed HIGH finding).
+		if deadline <= 0 || deadline > maxDeadlineUnix {
+			return "", fmt.Errorf("biz: deadline %v outside the encodable domain (1970, 3000]", vc.Deadline)
+		}
 	}
 	flags := int64(0)
 	if vc.Estimated {
@@ -137,8 +151,8 @@ func DecodeVC(s string) (ValueContext, error) {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc flags %q not defined in version 1", fields[9])
 	}
 	deadline, err := strconv.ParseInt(fields[10], 10, 64)
-	if err != nil || deadline < 0 {
-		return ValueContext{}, fmt.Errorf("biz: biz.vc deadline %q", fields[10])
+	if err != nil || deadline < 0 || deadline > maxDeadlineUnix {
+		return ValueContext{}, fmt.Errorf("biz: biz.vc deadline %q outside [0, %d]", fields[10], int64(maxDeadlineUnix))
 	}
 	if deadline > 0 {
 		vc.Deadline = time.Unix(deadline, 0).UTC()
@@ -164,17 +178,23 @@ func WithValueContext(ctx context.Context, vc ValueContext) (context.Context, er
 	return baggage.ContextWithBaggage(ctx, bag), nil
 }
 
-// FromContext decodes the biz.vc member if present and well-formed.
-func FromContext(ctx context.Context) (ValueContext, bool) {
+// FromContext decodes the biz.vc member. The three outcomes are
+// distinguishable on purpose — a corrupted header must never be mistaken
+// for an absent one (money bugs must be loud):
+//
+//	(vc, true, nil)    present and well-formed
+//	(_, false, nil)    absent
+//	(_, false, err)    present but corrupt — surface this into a counter
+func FromContext(ctx context.Context) (ValueContext, bool, error) {
 	member := baggage.FromContext(ctx).Member(MemberKey)
 	if member.Key() == "" {
-		return ValueContext{}, false
+		return ValueContext{}, false, nil
 	}
 	vc, err := DecodeVC(member.Value())
 	if err != nil {
-		return ValueContext{}, false
+		return ValueContext{}, false, err
 	}
-	return vc, true
+	return vc, true, nil
 }
 
 // Escaping: %XX for the delimiter, the escape byte itself, everything the
@@ -203,10 +223,15 @@ func escapeInto(b *strings.Builder, s string) {
 	}
 }
 
-// unescape rejects any raw byte the encoder would have escaped: the
-// accepted wire language must be a SUBSET of the emitted one, or a
-// decode-then-encode round trip could inflate past the size cap (a fuzz
-// finding — its counterexample is committed in testdata).
+// unescape rejects any raw byte the encoder would have escaped (a fuzz
+// finding — its counterexample is committed in testdata). The precise
+// invariant, examiner-verified over all 256 escape bytes: re-encoding a
+// decoded input NEVER lengthens it, so the 512 cap survives round trips.
+// The decoder does still accept some never-emitted forms — non-canonical
+// %XX of bytes needing no escape, zero-padded or plus-signed numbers —
+// all of which only shrink on re-encode. Escapes are UPPERCASE hex only
+// ("%7C", never "%7c"): independent implementations of this wire format
+// must emit uppercase.
 func unescape(s string) (string, error) {
 	// Fast path: no escapes and nothing that should have been — return
 	// the input without copying.
