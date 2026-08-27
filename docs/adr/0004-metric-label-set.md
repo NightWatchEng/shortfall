@@ -1,6 +1,6 @@
 # ADR-0004 — Metrics carry exactly six labels; cardinality is a library guarantee
 
-Status: proposed (ratify at the M2 interface freeze)
+Status: accepted (ratified at the M2 interface freeze, 2026-08-27)
 Date: 2026-08-27
 
 ## Context

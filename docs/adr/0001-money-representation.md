@@ -1,6 +1,6 @@
 # ADR-0001 — Money is int64 minor units + currency + exponent, never float
 
-Status: proposed (ratify at the M2 interface freeze)
+Status: accepted (ratified at the M2 interface freeze, 2026-08-27)
 Date: 2026-08-27
 
 ## Context

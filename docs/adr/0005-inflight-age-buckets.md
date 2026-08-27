@@ -1,6 +1,6 @@
 # ADR-0005 — Fixed in-flight age buckets: lt1m, 1m-5m, 5m-30m, 30m-2h, gt2h
 
-Status: proposed (ratify at the M2 interface freeze)
+Status: accepted (ratified at the M2 interface freeze, 2026-08-27)
 Date: 2026-08-27
 
 ## Context
