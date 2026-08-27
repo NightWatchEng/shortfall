@@ -161,21 +161,24 @@ func TestBlackoutSuppressesAndRecovers(t *testing.T) {
 
 func TestFaultValidation(t *testing.T) {
 	base := Config{Seed: 1, Start: mon, End: mon.Add(time.Hour)}
-	cases := []FaultSpec{
-		{Kind: FaultAPI5xx, Rate: 0, From: mon, To: mon.Add(time.Minute)},                  // rate required
-		{Kind: FaultAPI5xx, Rate: 1.5, From: mon, To: mon.Add(time.Minute)},                // rate > 1
-		{Kind: FaultConsumerStall, Queue: "nope", From: mon, To: mon.Add(time.Minute)},     // bad queue
-		{Kind: FaultBlackout, RecoveredFraction: 0.5, From: mon, To: mon.Add(time.Minute)}, // missing within
-		{Kind: "gremlins", From: mon, To: mon.Add(time.Minute)},                            // unknown kind
-		{Kind: FaultAPI5xx, Rate: 0.5, From: mon.Add(time.Minute), To: mon},                // inverted window
+	cases := []struct {
+		name string
+		f    FaultSpec
+	}{
+		{"rate required", FaultSpec{Kind: FaultAPI5xx, Rate: 0, From: mon, To: mon.Add(time.Minute)}},
+		{"rate above one", FaultSpec{Kind: FaultAPI5xx, Rate: 1.5, From: mon, To: mon.Add(time.Minute)}},
+		{"bad queue", FaultSpec{Kind: FaultConsumerStall, Queue: "nope", From: mon, To: mon.Add(time.Minute)}},
+		{"missing within", FaultSpec{Kind: FaultBlackout, RecoveredFraction: 0.5, From: mon, To: mon.Add(time.Minute)}},
+		{"unknown kind", FaultSpec{Kind: "gremlins", From: mon, To: mon.Add(time.Minute)}},
+		{"inverted window", FaultSpec{Kind: FaultAPI5xx, Rate: 0.5, From: mon.Add(time.Minute), To: mon}},
 	}
-	for _, f := range cases {
-		t.Run(string(f.Kind)+"/"+string(f.Queue), func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			cfg := base
-			cfg.Faults = []FaultSpec{f}
+			cfg.Faults = []FaultSpec{c.f}
 			defer func() {
 				if recover() == nil {
-					t.Errorf("%+v: expected panic", f)
+					t.Errorf("%+v: expected panic", c.f)
 				}
 			}()
 			Run(cfg)
@@ -263,14 +266,15 @@ func TestCommittedScenariosAllLoadAndRun(t *testing.T) {
 		t.Fatalf("expected the three canonical scenarios, got %v (err %v)", matches, err)
 	}
 	for _, path := range matches {
-		sc, err := LoadScenario(path)
-		if err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		res := Run(sc.Config)
-		if len(res.Ledger.Txns) == 0 {
-			t.Fatalf("%s: run produced no transactions", path)
-		}
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			sc, err := LoadScenario(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res := Run(sc.Config); len(res.Ledger.Txns) == 0 {
+				t.Fatal("run produced no transactions")
+			}
+		})
 	}
 }
 

@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +27,14 @@ flows:
     recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }
     reconcile: { source: "sql:ledger.payments" }
 `
+
+// nameOr keeps subtest names bare and -run-able; empty inputs get a word.
+func nameOr(s string) string {
+	if s == "" {
+		return "empty"
+	}
+	return s
+}
 
 func mustParse(t *testing.T) Registry {
 	t.Helper()
@@ -114,7 +121,7 @@ func TestISODurations(t *testing.T) {
 		{"PT-5M", 0, false},
 	}
 	for _, c := range cases {
-		t.Run(fmt.Sprintf("%q", c.s), func(t *testing.T) {
+		t.Run(nameOr(c.s), func(t *testing.T) {
 			got, err := ParseISODuration(c.s)
 			if c.ok && (err != nil || got != c.want) {
 				t.Errorf("ParseISODuration(%q) = %v, %v; want %v", c.s, got, err, c.want)
@@ -190,7 +197,7 @@ func TestPropagationAllowlist(t *testing.T) {
 		{"", false},
 	}
 	for _, c := range cases {
-		t.Run(fmt.Sprintf("%q", c.host), func(t *testing.T) {
+		t.Run(nameOr(c.host), func(t *testing.T) {
 			if got := r.Propagation.HostAllowed(c.host); got != c.ok {
 				t.Errorf("HostAllowed(%q) = %v, want %v", c.host, got, c.ok)
 			}

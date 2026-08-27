@@ -79,7 +79,7 @@ func TestParseMinor(t *testing.T) {
 		{"14900.0", 0, 0, false}, // JPY has no decimals
 	}
 	for _, c := range cases {
-		t.Run(fmt.Sprintf("%q@%d", c.s, c.exp), func(t *testing.T) {
+		t.Run(nameOr(c.s)+"@"+fmt.Sprint(c.exp), func(t *testing.T) {
 			got, err := ParseMinor(c.s, c.exp)
 			if c.ok && (err != nil || got != c.want) {
 				t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
@@ -100,7 +100,7 @@ func TestEnums(t *testing.T) {
 		{Kind("revenue"), false}, {Kind(""), false},
 	}
 	for _, c := range kinds {
-		t.Run("kind "+string(c.k), func(t *testing.T) {
+		t.Run("kind "+nameOr(string(c.k)), func(t *testing.T) {
 			if c.k.Valid() != c.want {
 				t.Errorf("Kind(%q).Valid() = %v, want %v", c.k, !c.want, c.want)
 			}
@@ -115,12 +115,20 @@ func TestEnums(t *testing.T) {
 		{Result("maybe"), false}, {Result(""), false},
 	}
 	for _, c := range results {
-		t.Run("result "+string(c.r), func(t *testing.T) {
+		t.Run("result "+nameOr(string(c.r)), func(t *testing.T) {
 			if c.r.Valid() != c.want {
 				t.Errorf("Result(%q).Valid() = %v, want %v", c.r, !c.want, c.want)
 			}
 		})
 	}
+}
+
+// nameOr keeps subtest names bare and -run-able; empty inputs get a word.
+func nameOr(s string) string {
+	if s == "" {
+		return "empty"
+	}
+	return s
 }
 
 func validVC() ValueContext {
@@ -385,7 +393,7 @@ func TestParseMinorOverflowGuards(t *testing.T) {
 		{"99999999999999999999999", 2, 0, false},
 	}
 	for _, c := range cases {
-		t.Run(fmt.Sprintf("%q@%d", c.s, c.exp), func(t *testing.T) {
+		t.Run(nameOr(c.s)+"@"+fmt.Sprint(c.exp), func(t *testing.T) {
 			got, err := ParseMinor(c.s, c.exp)
 			if c.ok && (err != nil || got != c.want) {
 				t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
