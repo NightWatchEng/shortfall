@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "f53b457ea975f77148e24c9f5dd683b5f0901660",
+  "base_sha": "ac759bcf3909260aeb8ad7cef235a9fe02e36877",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-27T21:28:05+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 read emit/biz types, inspected sdk/log@v0.22.0 source"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude), separate context \u2014 verified each finding against repo + SDK source"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-27T21:28:05+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "f53b457ea975f77148e24c9f5dd683b5f0901660",
+      "base_sha": "ac759bcf3909260aeb8ad7cef235a9fe02e36877",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 123,
+      "severity": "MEDIUM",
+      "finding": "newWith doc comment claimed the conformance suite currently drives the seam; no exporter conformance suite exists in the tree (testkit/expected.go says it 'will also host' it \u2014 future M4.2).",
+      "evidence": "// newWith wires arbitrary pushers \u2014 the seam the conformance/unit tests drive with in-memory collectors.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Comment now reads 'the unit tests drive ... (and the M4.2 conformance suite once it lands)' \u2014 future work named as future.",
+      "id": "bef231701f45fe17"
+    },
+    {
+      "ts": "2026-08-27T21:28:05+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "f53b457ea975f77148e24c9f5dd683b5f0901660",
+      "base_sha": "ac759bcf3909260aeb8ad7cef235a9fe02e36877",
+      "rule_id": "unmapped:misleading-comment",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 113,
+      "severity": "LOW",
+      "finding": "Attribute-limit comment claimed the SDK default would silently drop an outcome's ~12 attributes; sdk/log@v0.22.0 default attribute count limit is 128 (defaultAttrCntLim), so the default would NOT drop them. Rationale was false; the -1 setting itself is correct.",
+      "evidence": "// SDK's default limit would silently drop them (a real sdk/log footgun, ADR-0002's experimental-dependency risk realized here).",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Rewrote to the true rationale: WithAttributeCountLimit(-1) removes the cap so field growth never silently truncates; the 128 default clears today's ~12 but is a silent cliff, and a directly built zero-value Record has limit 0.",
+      "id": "98b7fc6521fa103d"
+    },
+    {
+      "ts": "2026-08-27T21:28:05+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "f53b457ea975f77148e24c9f5dd683b5f0901660",
+      "base_sha": "ac759bcf3909260aeb8ad7cef235a9fe02e36877",
+      "rule_id": "unmapped:error-handling",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 157,
+      "severity": "MEDIUM",
+      "finding": "Shutdown returned only the metric-leg error when both legs failed, discarding the log-leg error (a flush failure that can mean dropped outcome data). Both Shutdowns ran (no leak) but the second error was swallowed.",
+      "evidence": "if mErr != nil { return mErr }; return lErr",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Shutdown now returns errors.Join(mErr, lErr). Regression test TestShutdownJoinsBothErrors (both-fail, metric-only, event-only) asserts each leg's error surfaces via errors.Is and both legs always close.",
+      "id": "17cafa61f0350c9d"
+    },
+    {
+      "ts": "2026-08-27T21:28:05+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "f53b457ea975f77148e24c9f5dd683b5f0901660",
+      "base_sha": "ac759bcf3909260aeb8ad7cef235a9fe02e36877",
+      "rule_id": "unmapped:trace-linking",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 60,
+      "severity": "LOW",
+      "finding": "Reconstructed span context set only TraceID; TraceFlags left zero, so emitted outcome events carried an unset (unsampled) flag. Backends that gate log-to-trace correlation on the sampled flag may drop the linkage.",
+      "evidence": "sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{TraceID: tid})",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Set TraceFlags: oteltrace.FlagsSampled on the SpanContextConfig. SpanID deliberately stays zero \u2014 an outcome references a transaction's trace, not a specific span; documented in the code comment.",
+      "id": "cc5bf1894b6cedcd"
+    }
+  ]
+}
