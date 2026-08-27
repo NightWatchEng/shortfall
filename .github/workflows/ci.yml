@@ -12,6 +12,10 @@ name: ci
 
 on:
   pull_request:
+    # `edited` included so a title edit after the pr-title lint passes
+    # re-runs the fence — squash merge uses the CURRENT title as the main
+    # commit header.
+    types: [opened, edited, synchronize, reopened]
   push:
     branches: [main]
 
@@ -129,6 +133,32 @@ jobs:
             cat /tmp/benchstat.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  pr-title:
+    name: pr title lint
+    # Squash-merge uses the PR title as the commit header on main, so the
+    # title is where the commit convention is actually enforced. The local
+    # .githooks/commit-msg hook is a convenience; this is the fence.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      BASE_REF: ${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          fetch-depth: 0
+      # Never execute PR-controlled gate code (same rule as the warden
+      # gate): use the BASE ref's copy of the linter when one exists — the
+      # PR's own copy runs only on the bootstrap PR that introduces it.
+      - name: pin linter to the base ref
+        run: |
+          if git cat-file -e "origin/${BASE_REF}:scripts/commit-lint.sh" 2>/dev/null; then
+            git checkout "origin/${BASE_REF}" -- scripts/commit-lint.sh
+          else
+            echo "linter absent on base ref (bootstrap PR): using this PR's copy"
+          fi
+      - run: ./scripts/commit-lint.sh "$PR_TITLE"
 
   gitleaks:
     name: gitleaks

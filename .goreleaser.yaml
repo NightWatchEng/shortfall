@@ -1,0 +1,37 @@
+# goreleaser config for the shortfall CLI. Library consumers use go get +
+# module tags; this ships cmd/shortfall binaries on v* tags.
+# Validate: goreleaser check · local dry-run: goreleaser release --snapshot --clean
+version: 2
+
+project_name: shortfall
+
+builds:
+  - id: shortfall
+    main: ./cmd/shortfall
+    binary: shortfall
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  filters:
+    exclude: ["^chore:", "^docs:"]
+
+release:
+  draft: false
+  # `auto` marks a release pre-release ONLY when the tag carries a semver
+  # pre-release suffix (v0.3.0-rc1); a plain v0.2.0 publishes as a full
+  # release. Instability of v0.x is a semver-policy statement (README),
+  # not something this flag provides.
+  prerelease: auto
