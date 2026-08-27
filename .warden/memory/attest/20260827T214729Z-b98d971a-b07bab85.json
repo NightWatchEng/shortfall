@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "b98d971a6100e7f1f6584ae303d57751859e27fd",
+  "base_sha": "45555b49f7a0047d275994bc0e40ac5ed887dbec",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-27T21:47:29+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified batching math, OTLP harness faithfulness, table-driven self-tests, no secrets"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude), separate context \u2014 confirmed the doc-vs-mechanism gap against the AST/substring code"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-27T21:47:29+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "b98d971a6100e7f1f6584ae303d57751859e27fd",
+      "base_sha": "45555b49f7a0047d275994bc0e40ac5ed887dbec",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "testkit/conformance",
+      "file": "testkit/conformance/enforcement_test.go",
+      "line": 20,
+      "severity": "MEDIUM",
+      "finding": "The enforcement doc claimed the structural check 'guarantees the call site exists and CI executes it', but the mechanism was strings.Contains(fileBytes, \"conformance.RunExporter\") \u2014 which also matches a comment mention or a string literal and cannot prove execution. Overstated guarantee.",
+      "evidence": "it guarantees the call site exists and CI executes it; whether the harness is faithful is the harness author's responsibility and the suite's own assertions catch a lying harness at run time.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "moduleRefsSuite now parses each *_test.go with go/parser (comments stripped) and matches a real conformance.RunExporter selector in the AST, resolving the import's local name including an alias \u2014 a comment/string mention no longer satisfies it (negative-tested: a comment-only module now FAILS enforcement). Doc rewritten to state exactly what it guarantees (a real non-comment code reference exists) and what it does not (execution \u2014 a skipped or `var _ =` reference would pass the tripwire; the adapter's own go test run is what executes the suite).",
+      "id": "cdbfa2369083c8de"
+    }
+  ]
+}
