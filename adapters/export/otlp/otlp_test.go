@@ -114,7 +114,7 @@ func TestBuildRecordCarriesMoneyOnEventsOnly(t *testing.T) {
 	}
 	attrs := map[string]string{}
 	r.WalkAttributes(func(kv attribute.KeyValue) bool {
-		attrs[string(kv.Key)] = kv.Value.Emit()
+		attrs[string(kv.Key)] = kv.Value.String()
 		return true
 	})
 	want := map[string]string{
