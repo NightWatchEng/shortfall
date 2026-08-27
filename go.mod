@@ -1,4 +1,4 @@
-module github.com/Nigthwatch-eng/shortfall
+module github.com/NightWatchEng/shortfall
 
 go 1.23
 

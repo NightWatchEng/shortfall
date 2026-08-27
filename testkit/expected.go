@@ -13,7 +13,7 @@ package testkit
 import (
 	"time"
 
-	"github.com/Nigthwatch-eng/shortfall/examples/checkout"
+	"github.com/NightWatchEng/shortfall/examples/checkout"
 )
 
 // Expected holds a scenario's golden impact numbers over a window.

@@ -6,7 +6,7 @@
 # Bump procedure: update PIN_SHA here AND platform.pin in repo.yaml together
 # (one PR; both files are HIGH-tier).
 PIN_SHA="9d1bee823edf1ea928e85fa08c01144e92df7db4"   # = v1.0.0
-FROM="git+ssh://git@github.com/Nigthwatch-eng/agentops@${PIN_SHA}"
+FROM="git+ssh://git@github.com/NightWatchEng/agentops@${PIN_SHA}"
 
 # Exit-code contract (review P2-3): 2 = gate DID NOT RUN. Resolve the platform
 # env first (cache or network); an unresolvable platform is an infra failure,

@@ -7,7 +7,7 @@
 # so the merge-EXECUTION delegation below is recorded here as prose — which
 # is the platform constitution's prescribed mechanism ("recorded in
 # graph.yaml and revocable"). When the platform pin gains the nodes.github
-# binding field, add github: ["Nigthwatch-eng"] to founder so warden mine
+# binding field, add github: ["NightWatchEng"] to founder so warden mine
 # can bind real merge events to this node.
 version: 1
 nodes:
