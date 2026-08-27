@@ -1,6 +1,14 @@
 # shortfall's declared agent organization (agentops graph layer).
 # Render: .warden/bin/warden graph render · validate: graph validate.
 # Session-driven deliver pipeline; no unattended night loop (yet).
+#
+# Known validator limit (reviewed at enrollment, accepted): graph validate
+# enforces that merge AUTHORITY is human but cannot inspect boundaries text,
+# so the merge-EXECUTION delegation below is recorded here as prose — which
+# is the platform constitution's prescribed mechanism ("recorded in
+# graph.yaml and revocable"). When the platform pin gains the nodes.github
+# binding field, add github: ["Nigthwatch-eng"] to founder so warden mine
+# can bind real merge events to this node.
 version: 1
 nodes:
   builder:

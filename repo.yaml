@@ -29,7 +29,8 @@ risk_tiers:
   - {glob: "biz/**",       tier: HIGH, reason: "money representation and the PII guard — every dollar figure flows through these types"}
   - {glob: "engine/**",    tier: HIGH, reason: "the numbers Finance reads: de-dup, deferred vs lost, ranges; realized and estimate never merged"}
   - {glob: "emit/**",      tier: HIGH, reason: "cardinality protection and sampling-independent outcome emission are library guarantees"}
-  - {glob: ".github/**",   tier: MEDIUM, reason: "CI is the enforcement layer"}
+  - {glob: ".github/**",   tier: HIGH, reason: "CI wiring is enforcement surface — a weakened workflow weakens every gate"}
+  - {glob: ".githooks/**", tier: HIGH, reason: "local gate hooks; policy names them gate surface"}
   - {glob: "registry/**",  tier: MEDIUM}
   - {glob: "query/**",     tier: MEDIUM}
   - {glob: "propagate/**", tier: MEDIUM}
@@ -37,8 +38,11 @@ risk_tiers:
   - {glob: "**",           tier: LOW}
 
 protected_paths:
-  - {path: ".warden/rules/", reason: "gate config; edits change rules_version and need review"}
-  - {path: "LICENSE",        reason: "Apache-2.0 decided at bootstrap; changing later is painful and a founder call"}
+  - {path: ".warden/rules/",     reason: "gate config; edits change rules_version and need review"}
+  - {path: ".warden/bin/warden", reason: "the executable gate entrypoint — the one gate file that runs as shell; pin bumps only, in lockstep with platform.pin"}
+  - {path: "repo.yaml",          reason: "the policy source of truth; edits are policy PRs, never side effects"}
+  - {path: "graph.yaml",         reason: "who judges, who gates, who merges — including the recorded merge-execution delegation"}
+  - {path: "LICENSE",            reason: "Apache-2.0 decided at bootstrap; changing later is painful and a founder call"}
 
 # Deterministic gates. Commands live here, not in CI YAML or code.
 verify:

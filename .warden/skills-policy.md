@@ -16,8 +16,10 @@ The per-project contract the AgentOps skill pack reads (platform
 - **Merge execution is delegated.** By explicit founder instruction
   (2026-08-27, recorded in `graph.yaml`, revocable there), the session agent
   may merge its own PRs — but only when everything is green: verify scopes
-  pass, `warden review --base origin/main --no-comment` exits 0, and the
-  pre-PR attestation is CLEAN. Anything red or ambiguous: do not merge,
+  pass, `.warden/bin/warden review --base origin/main --no-comment` exits 0,
+  and the pre-PR attestation is CLEAN. Always the pinned shim
+  (`.warden/bin/warden`), never a PATH-resolved `warden` — the pin backstop
+  compares version strings, not code. Anything red or ambiguous: do not merge,
   report instead. Merge authority itself remains the founder's.
 - Never eligible for autonomous work: flipping the repo public (M9 prepares
   it; the flip is the founder's), changing LICENSE, weakening any rule,
@@ -52,7 +54,7 @@ Money-correctness focus, applied to every review:
 - plan-gauntlet: none.
 - review-crew: none; the pre-pr-review chain (code-reviewer, then
   cross-examiner as sole arbiter) is the review organization.
-- memory: `warden memory ingest` after each merge to main.
+- memory: `.warden/bin/warden memory ingest` after each merge to main.
 
 ## Build disciplines
 
@@ -72,7 +74,7 @@ Money-correctness focus, applied to every review:
 
 - PR bodies carry: the tracked item id, what was built, verification output
   summary, every review finding with its disposition, and
-  `warden attest show`.
+  `.warden/bin/warden attest show`.
 - Commits: conventional `type: summary (bead-id)`.
 - Merge (delegated, see Autonomy scope): squash, delete branch, close the
-  bead, then `warden memory ingest` on main.
+  bead, then `.warden/bin/warden memory ingest` on main.
