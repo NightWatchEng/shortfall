@@ -164,12 +164,14 @@ func TestSegmentsAndAmounts(t *testing.T) {
 func TestConfigValidation(t *testing.T) {
 	mustPanic := func(name string, cfg Config) {
 		t.Helper()
-		defer func() {
-			if recover() == nil {
-				t.Errorf("%s: expected panic, got none", name)
-			}
-		}()
-		Run(cfg)
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("expected panic, got none")
+				}
+			}()
+			Run(cfg)
+		})
 	}
 	base := Config{Seed: 1, Start: mon, End: mon.Add(time.Hour)}
 

@@ -109,9 +109,11 @@ func TestDecodeRejections(t *testing.T) {
 		"oversize decode":            "1|" + strings.Repeat("a", 600),
 	}
 	for name, s := range cases {
-		if _, err := DecodeVC(s); err == nil {
-			t.Errorf("%s: decode accepted %q", name, s)
-		}
+		t.Run(name, func(t *testing.T) {
+			if _, err := DecodeVC(s); err == nil {
+				t.Errorf("decode accepted %q", s)
+			}
+		})
 	}
 }
 
@@ -256,6 +258,7 @@ func randomVC(rng *rand.Rand) ValueContext {
 // TestRoundTripMillionIterations is the ADR-0003 acceptance bar: 1M
 // seeded random round trips, byte-exact equality. Deterministic seed so a
 // failure reproduces; -short runs a 50k slice for quick local loops.
+// ADR-0007 exception: property loop — the case generator is the point.
 func TestRoundTripMillionIterations(t *testing.T) {
 	n := 1_000_000
 	if testing.Short() {

@@ -62,6 +62,14 @@ Dry-run rehearsal: run the `release` workflow manually (workflow_dispatch)
 — it builds a snapshot and uploads `dist/` as an artifact without tagging
 or publishing.
 
+## Tests
+
+Table-driven, per ADR-0007 (founder mandate): named cases, `t.Run`
+subtests, one uniform assertion body. Declared exceptions only — fuzz
+targets, property loops, golden fences, end-to-end scenario tests,
+benchmarks. Rejection tables assert the error names the offending field,
+not merely that an error occurred. The pre-PR review flags departures.
+
 ## Design decisions
 
 Irreversible decisions live in `docs/adr/`. Code that contradicts an

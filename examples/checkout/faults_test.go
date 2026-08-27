@@ -169,17 +169,17 @@ func TestFaultValidation(t *testing.T) {
 		{Kind: "gremlins", From: mon, To: mon.Add(time.Minute)},                            // unknown kind
 		{Kind: FaultAPI5xx, Rate: 0.5, From: mon.Add(time.Minute), To: mon},                // inverted window
 	}
-	for i, f := range cases {
-		cfg := base
-		cfg.Faults = []FaultSpec{f}
-		func() {
+	for _, f := range cases {
+		t.Run(string(f.Kind)+"/"+string(f.Queue), func(t *testing.T) {
+			cfg := base
+			cfg.Faults = []FaultSpec{f}
 			defer func() {
 				if recover() == nil {
-					t.Errorf("case %d (%+v): expected panic", i, f)
+					t.Errorf("%+v: expected panic", f)
 				}
 			}()
 			Run(cfg)
-		}()
+		})
 	}
 }
 
@@ -249,9 +249,11 @@ faults:
 `,
 	}
 	for name, doc := range cases {
-		if _, err := ParseScenario([]byte(doc)); err == nil {
-			t.Errorf("%s: expected error, got none", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseScenario([]byte(doc)); err == nil {
+				t.Error("expected error, got none")
+			}
+		})
 	}
 }
 
@@ -360,9 +362,11 @@ func TestGoldenBlockRejections(t *testing.T) {
 		"unaligned to":   mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T10:59:30Z\n  capture_sla: 30m\n"),
 	}
 	for name, doc := range cases {
-		if _, err := ParseScenario([]byte(doc)); err == nil {
-			t.Errorf("%s: expected error, got none", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseScenario([]byte(doc)); err == nil {
+				t.Error("expected error, got none")
+			}
+		})
 	}
 	ok := mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T11:00:00Z\n  capture_sla: 30m\n")
 	sc, err := ParseScenario([]byte(ok))

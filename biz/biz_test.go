@@ -1,6 +1,7 @@
 package biz
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -47,9 +48,11 @@ func TestMoneyString(t *testing.T) {
 		{Money{Amount: 5, Currency: "USD", Exponent: 2}, "USD 0.05"},
 	}
 	for _, c := range cases {
-		if got := c.m.String(); got != c.want {
-			t.Errorf("%+v.String() = %q, want %q", c.m, got, c.want)
-		}
+		t.Run(c.want, func(t *testing.T) {
+			if got := c.m.String(); got != c.want {
+				t.Errorf("%+v.String() = %q, want %q", c.m, got, c.want)
+			}
+		})
 	}
 }
 
@@ -76,32 +79,47 @@ func TestParseMinor(t *testing.T) {
 		{"14900.0", 0, 0, false}, // JPY has no decimals
 	}
 	for _, c := range cases {
-		got, err := ParseMinor(c.s, c.exp)
-		if c.ok && (err != nil || got != c.want) {
-			t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
-		}
-		if !c.ok && err == nil {
-			t.Errorf("ParseMinor(%q, %d) = %d, want error", c.s, c.exp, got)
-		}
+		t.Run(fmt.Sprintf("%q@%d", c.s, c.exp), func(t *testing.T) {
+			got, err := ParseMinor(c.s, c.exp)
+			if c.ok && (err != nil || got != c.want) {
+				t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
+			}
+			if !c.ok && err == nil {
+				t.Errorf("ParseMinor(%q, %d) = %d, want error", c.s, c.exp, got)
+			}
+		})
 	}
 }
 
 func TestEnums(t *testing.T) {
-	for _, k := range []Kind{KindGMV, KindNetRevenue, KindFee, KindTakeRate} {
-		if !k.Valid() {
-			t.Errorf("kind %q should be valid", k)
-		}
+	kinds := []struct {
+		k    Kind
+		want bool
+	}{
+		{KindGMV, true}, {KindNetRevenue, true}, {KindFee, true}, {KindTakeRate, true},
+		{Kind("revenue"), false}, {Kind(""), false},
 	}
-	if Kind("revenue").Valid() {
-		t.Error("undeclared kind accepted")
+	for _, c := range kinds {
+		t.Run("kind "+string(c.k), func(t *testing.T) {
+			if c.k.Valid() != c.want {
+				t.Errorf("Kind(%q).Valid() = %v, want %v", c.k, !c.want, c.want)
+			}
+		})
 	}
-	for _, r := range []Result{ResultSuccess, ResultFailed, ResultDeferred, ResultAbandoned, ResultUnknown} {
-		if !r.Valid() {
-			t.Errorf("result %q should be valid", r)
-		}
+	results := []struct {
+		r    Result
+		want bool
+	}{
+		{ResultSuccess, true}, {ResultFailed, true}, {ResultDeferred, true},
+		{ResultAbandoned, true}, {ResultUnknown, true},
+		{Result("maybe"), false}, {Result(""), false},
 	}
-	if Result("maybe").Valid() {
-		t.Error("undeclared result accepted")
+	for _, c := range results {
+		t.Run("result "+string(c.r), func(t *testing.T) {
+			if c.r.Valid() != c.want {
+				t.Errorf("Result(%q).Valid() = %v, want %v", c.r, !c.want, c.want)
+			}
+		})
 	}
 }
 
@@ -310,18 +328,22 @@ func TestPANBoundariesAndSubSegments(t *testing.T) {
 		"x-9-4111111111111111", // PAN hidden behind one dash-joined stray digit
 	}
 	for _, v := range reject {
-		vc := validVC()
-		vc.CustomerID = v
-		if err := vc.Validate(); err == nil {
-			t.Errorf("PAN shape accepted: %q", v)
-		}
+		t.Run(v, func(t *testing.T) {
+			vc := validVC()
+			vc.CustomerID = v
+			if err := vc.Validate(); err == nil {
+				t.Errorf("PAN shape accepted: %q", v)
+			}
+		})
 	}
 	// One unbroken over-length run must NOT fire on a Luhn-valid substring.
-	vc := validVC()
-	vc.CustomerID = "12345678901234567890"
-	if err := vc.Validate(); err != nil {
-		t.Errorf("20-digit unbroken id rejected: %v", err)
-	}
+	t.Run("unbroken 20-digit id passes", func(t *testing.T) {
+		vc := validVC()
+		vc.CustomerID = "12345678901234567890"
+		if err := vc.Validate(); err != nil {
+			t.Errorf("20-digit unbroken id rejected: %v", err)
+		}
+	})
 }
 
 func TestIBANCaseAndBoundaryHardening(t *testing.T) {
@@ -331,18 +353,22 @@ func TestIBANCaseAndBoundaryHardening(t *testing.T) {
 		"de89370400440532013000",  // lowercase must not hide it
 	}
 	for _, v := range reject {
-		vc := validVC()
-		vc.EntityID = v
-		if err := vc.Validate(); err == nil {
-			t.Errorf("IBAN shape accepted: %q", v)
-		}
+		t.Run(v, func(t *testing.T) {
+			vc := validVC()
+			vc.EntityID = v
+			if err := vc.Validate(); err == nil {
+				t.Errorf("IBAN shape accepted: %q", v)
+			}
+		})
 	}
 	// Shape match with a FAILING mod-97 checksum is an id, not an IBAN.
-	vc := validVC()
-	vc.EntityID = "DE00370400440532013001"
-	if err := vc.Validate(); err != nil {
-		t.Errorf("mod-97-invalid shape rejected: %v", err)
-	}
+	t.Run("mod-97-invalid shape passes", func(t *testing.T) {
+		vc := validVC()
+		vc.EntityID = "DE00370400440532013001"
+		if err := vc.Validate(); err != nil {
+			t.Errorf("mod-97-invalid shape rejected: %v", err)
+		}
+	})
 }
 
 func TestParseMinorOverflowGuards(t *testing.T) {
@@ -359,13 +385,15 @@ func TestParseMinorOverflowGuards(t *testing.T) {
 		{"99999999999999999999999", 2, 0, false},
 	}
 	for _, c := range cases {
-		got, err := ParseMinor(c.s, c.exp)
-		if c.ok && (err != nil || got != c.want) {
-			t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
-		}
-		if !c.ok && err == nil {
-			t.Errorf("ParseMinor(%q, %d) = %d, want overflow error", c.s, c.exp, got)
-		}
+		t.Run(fmt.Sprintf("%q@%d", c.s, c.exp), func(t *testing.T) {
+			got, err := ParseMinor(c.s, c.exp)
+			if c.ok && (err != nil || got != c.want) {
+				t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
+			}
+			if !c.ok && err == nil {
+				t.Errorf("ParseMinor(%q, %d) = %d, want overflow error", c.s, c.exp, got)
+			}
+		})
 	}
 }
 
@@ -374,14 +402,19 @@ func TestMoneyStringIsTotal(t *testing.T) {
 		t.Errorf("MaxInt64 render = %q", got)
 	}
 	// Invalid receivers render marked, never panic, never garbage signs.
-	for _, m := range []Money{
-		{Amount: 1, Currency: "USD", Exponent: 64},
-		{Amount: -105, Currency: "USD", Exponent: 2},
-		{Amount: 1, Currency: "usd", Exponent: 2},
-	} {
-		got := m.String()
-		if !strings.Contains(got, "INVALID") {
-			t.Errorf("invalid money %+v rendered %q, want marked INVALID form", m, got)
-		}
+	invalid := []struct {
+		name string
+		m    Money
+	}{
+		{"pow-wrapping exponent", Money{Amount: 1, Currency: "USD", Exponent: 64}},
+		{"negative amount", Money{Amount: -105, Currency: "USD", Exponent: 2}},
+		{"lowercase currency", Money{Amount: 1, Currency: "usd", Exponent: 2}},
+	}
+	for _, c := range invalid {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.m.String(); !strings.Contains(got, "INVALID") {
+				t.Errorf("invalid money %+v rendered %q, want marked INVALID form", c.m, got)
+			}
+		})
 	}
 }

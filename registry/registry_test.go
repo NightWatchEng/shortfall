@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -73,14 +74,20 @@ func TestParseSample(t *testing.T) {
 func TestEstimator(t *testing.T) {
 	r := mustParse(t)
 	f, _ := r.Flow("invoice.pay")
-	if got, ok := f.EstimateMinor("enterprise"); !ok || got != 91000 {
-		t.Fatalf("enterprise estimate %d %v", got, ok)
+	cases := []struct {
+		name, segment string
+		want          int64
+	}{
+		{"declared segment", "enterprise", 91000},
+		{"undeclared segment falls back to default", "unknown-segment", 18750},
+		{"empty segment falls back to default", "", 18750},
 	}
-	if got, ok := f.EstimateMinor("unknown-segment"); !ok || got != 18750 {
-		t.Fatalf("default estimate %d %v", got, ok)
-	}
-	if got, ok := f.EstimateMinor(""); !ok || got != 18750 {
-		t.Fatalf("empty-segment estimate %d %v", got, ok)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got, ok := f.EstimateMinor(c.segment); !ok || got != c.want {
+				t.Errorf("EstimateMinor(%q) = %d, %v; want %d", c.segment, got, ok, c.want)
+			}
+		})
 	}
 }
 
@@ -107,13 +114,15 @@ func TestISODurations(t *testing.T) {
 		{"PT-5M", 0, false},
 	}
 	for _, c := range cases {
-		got, err := ParseISODuration(c.s)
-		if c.ok && (err != nil || got != c.want) {
-			t.Errorf("ParseISODuration(%q) = %v, %v; want %v", c.s, got, err, c.want)
-		}
-		if !c.ok && err == nil {
-			t.Errorf("ParseISODuration(%q) accepted, want error", c.s)
-		}
+		t.Run(fmt.Sprintf("%q", c.s), func(t *testing.T) {
+			got, err := ParseISODuration(c.s)
+			if c.ok && (err != nil || got != c.want) {
+				t.Errorf("ParseISODuration(%q) = %v, %v; want %v", c.s, got, err, c.want)
+			}
+			if !c.ok && err == nil {
+				t.Errorf("ParseISODuration(%q) accepted, want error", c.s)
+			}
+		})
 	}
 }
 
@@ -181,9 +190,11 @@ func TestPropagationAllowlist(t *testing.T) {
 		{"", false},
 	}
 	for _, c := range cases {
-		if got := r.Propagation.HostAllowed(c.host); got != c.ok {
-			t.Errorf("HostAllowed(%q) = %v, want %v", c.host, got, c.ok)
-		}
+		t.Run(fmt.Sprintf("%q", c.host), func(t *testing.T) {
+			if got := r.Propagation.HostAllowed(c.host); got != c.ok {
+				t.Errorf("HostAllowed(%q) = %v, want %v", c.host, got, c.ok)
+			}
+		})
 	}
 }
 
