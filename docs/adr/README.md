@@ -13,3 +13,4 @@ that rewrites history.
 | [0005](0005-inflight-age-buckets.md) | Fixed in-flight age buckets (lt1m … gt2h) | accepted |
 | [0006](0006-baseline-v0.md) | Baseline v0: hour-of-week robust median + MAD interval; ML only behind the interface | accepted |
 | [0007](0007-table-driven-tests.md) | Table-driven tests (named cases + t.Run) are the repo standard; declared exceptions only | accepted |
+| [0008](0008-docs-tell-the-truth.md) | Documentation tells the truth: honest tense, enforced-means-enforced, same-PR updates | accepted |

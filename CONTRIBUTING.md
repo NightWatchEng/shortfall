@@ -71,12 +71,20 @@ benchmarks. Where the error contract matters (the registry's actionable
 messages), rejection tables assert the error names the offending field —
 not merely that an error occurred. The pre-PR review flags departures.
 
+## Documentation accuracy
+
+ADR-0008 (founder mandate): docs tell the truth. Honest tense (planned
+machinery names its landing milestone), enforced-means-enforced, every
+reference resolves, and one standard never has two disagreeing wordings.
+**Definition of Done:** a PR that changes behavior, architecture, or a
+contract updates the affected README section, usage doc, AND diagram in
+the same PR. The docs-accuracy review rule flags departures.
+
 ## Architecture diagrams
 
 `docs/architecture/` holds the C4 model and money-path sequences as
-Mermaid, rendering natively on github.com. **Definition of Done:** a PR
-that changes the architecture (new component, moved boundary, new signal
-path) updates the affected diagram in the same PR. No GitHub Pages on
+Mermaid, rendering natively on github.com. Diagram updates ride the
+changing PR per ADR-0008 clause 4. No GitHub Pages on
 this repo — depending on plan it is unavailable or publicly served for a
 private repo; either way it stays off.
 

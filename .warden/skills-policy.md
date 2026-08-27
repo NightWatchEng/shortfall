@@ -47,6 +47,9 @@ Money-correctness focus, applied to every review:
    without incrementing a visible counter is a defect.
 7. Realized and estimated value never merged into one number by any
    renderer or consumer.
+8. Documentation accuracy (ADR-0008): honest tense, enforced means
+   enforced, references resolve, docs updated in the same PR as the
+   behavior they describe.
 
 ## Integrations
 
