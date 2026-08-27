@@ -27,6 +27,9 @@ package prometheus
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -59,6 +62,14 @@ type Exporter struct {
 
 	registerer prometheus.Registerer
 	gatherer   prometheus.Gatherer
+
+	// mu guards inflightAt: the last At applied to each biz_inflight_value
+	// series. The gauge is a LEVEL, so a stale sample arriving after a fresh
+	// one (overlapping flushes deliver batches out of order — emit's
+	// contract) must not overwrite the fresh level. Counters need no such
+	// guard: Add commutes, so arrival order is irrelevant.
+	mu         sync.Mutex
+	inflightAt map[string]time.Time
 }
 
 var _ emit.Exporter = (*Exporter)(nil)
@@ -111,6 +122,7 @@ func New(opts ...func(*Options)) (*Exporter, error) {
 		}, droppedLabels),
 		registerer: o.registerer,
 		gatherer:   o.gatherer,
+		inflightAt: map[string]time.Time{},
 	}
 
 	for _, c := range e.collectors() {
@@ -163,12 +175,30 @@ func (e *Exporter) ExportMetrics(_ context.Context, batch []emit.MetricPoint) er
 				return err
 			}
 		case "biz_inflight_value":
-			e.inflightValue.WithLabelValues(orderedValues(p.Labels, inflightLabels)...).Set(float64(p.Value))
+			e.setInflight(p)
 		default:
 			return fmt.Errorf("prometheus: unknown metric family %q", p.Name)
 		}
 	}
 	return nil
+}
+
+// setInflight sets the gauge to the point's level, but only if the point is
+// at least as recent as the last one applied to that series — a stale
+// sample from an out-of-order flush must not overwrite a fresher level
+// (emit's order-by-At contract; Prometheus text carries no per-sample time,
+// so the exporter enforces the ordering the wire format cannot). Equal
+// timestamps apply (last of a tie wins, harmlessly).
+func (e *Exporter) setInflight(p emit.MetricPoint) {
+	vals := orderedValues(p.Labels, inflightLabels)
+	key := strings.Join(vals, "\x00")
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if last, ok := e.inflightAt[key]; ok && p.At.Before(last) {
+		return // stale: a fresher level is already published
+	}
+	e.inflightValue.WithLabelValues(vals...).Set(float64(p.Value))
+	e.inflightAt[key] = p.At
 }
 
 func addCounter(vec *prometheus.CounterVec, labels []string, p emit.MetricPoint) error {

@@ -125,6 +125,64 @@ func TestExportMetricsMapping(t *testing.T) {
 	}
 }
 
+// TestInflightGaugeHonorsAtOrdering pins the fix for the confirmed
+// out-of-order gauge bug: biz_inflight_value is a LEVEL, and a stale sample
+// (older At) arriving after a fresh one — which overlapping flushes can
+// deliver, per emit's order-by-At contract — must NOT overwrite the fresh
+// level. Counters are immune (Add commutes) and are not retested here.
+func TestInflightGaugeHonorsAtOrdering(t *testing.T) {
+	older := at
+	newer := at.Add(time.Minute)
+	cases := []struct {
+		name   string
+		values []struct {
+			v  int64
+			at time.Time
+		}
+		want float64
+	}{
+		{
+			name: "in-order keeps the latest",
+			values: []struct {
+				v  int64
+				at time.Time
+			}{{5568661, older}, {6000000, newer}},
+			want: 6000000,
+		},
+		{
+			name: "out-of-order ignores the stale sample",
+			values: []struct {
+				v  int64
+				at time.Time
+			}{{6000000, newer}, {5568661, older}},
+			want: 6000000,
+		},
+		{
+			name: "equal timestamps take the last",
+			values: []struct {
+				v  int64
+				at time.Time
+			}{{5568661, older}, {5568000, older}},
+			want: 5568000,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e, g := newExp(t)
+			for _, s := range c.values {
+				if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{
+					{Name: "biz_inflight_value", Labels: inflightLbls(), Value: s.v, At: s.at},
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := sampleValue(t, g, "biz_inflight_value"); got != c.want {
+				t.Fatalf("gauge = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 func TestCapabilitiesMetricsOnly(t *testing.T) {
 	e, _ := newExp(t)
 	c := e.Capabilities()
