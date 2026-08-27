@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "fdff141b063e783d9efaeae76c165c4388af1e08",
+  "base_sha": "df8156512f211adebb4d350dbb3cea82c0116a0b",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-27T22:04:14+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified delta-counter semantics against emit/emit.go, ADR-0004 label safety, golden consistency, conformance-change legitimacy"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude), separate context \u2014 confirmed reachability of the gauge-ordering finding through the overlapping-flush path in emitter.go/inflight.go"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-27T22:04:14+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "fdff141b063e783d9efaeae76c165c4388af1e08",
+      "base_sha": "df8156512f211adebb4d350dbb3cea82c0116a0b",
+      "rule_id": "unmapped:gauge-ignores-at-ordering",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/prometheus/prometheus.go",
+      "line": 166,
+      "severity": "LOW",
+      "finding": "biz_inflight_value (a level gauge) was Set in arrival order, ignoring p.At. emit's contract (emitter.go) says overlapping flushes may deliver batches out of order and consumers must order by At. A stale same-series sample arriving after a fresher one could overwrite the fresh level until the next publish. Reachable via background-ticker Flush racing a caller Flush; OTLP is immune because it stamps Time:p.At per datapoint, Prometheus text has no per-sample time.",
+      "evidence": "e.inflightValue.WithLabelValues(orderedValues(p.Labels, inflightLabels)...).Set(float64(p.Value))",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "setInflight now records the last At applied per (flow,stage,age_bucket,currency) series under a mutex and drops any sample older than the one already published (equal At applies). Counters are untouched (Add commutes). Regression test TestInflightGaugeHonorsAtOrdering covers in-order, out-of-order, and equal-At cases; race-tested with -race.",
+      "id": "88c42bfb02faea8b"
+    }
+  ]
+}
