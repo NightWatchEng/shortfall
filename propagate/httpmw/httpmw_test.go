@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"go.opentelemetry.io/otel/baggage"
@@ -288,5 +289,137 @@ flows:
 	_ = resp.Body.Close()
 	if !worker.ok || worker.vc.EntityID != "inv_777" {
 		t.Fatalf("worker did not receive the ValueContext: ok=%v vc=%+v", worker.ok, worker.vc)
+	}
+}
+
+// TestEgressFenceFailsClosed is the regression for the two confirmed HIGH
+// bypasses: a malformed neighbour or a second header line must never let
+// biz.vc reach a disallowed host.
+func TestEgressFenceFailsClosed(t *testing.T) {
+	valid := encodedVC(t)
+	cases := []struct {
+		name    string
+		lines   []string // baggage field lines (Header.Add each)
+		host    string
+		wantVC  bool
+		wantFor []string // foreign members that must survive
+	}{
+		{"trailing comma to disallowed host", []string{"biz.vc=" + valid + ","}, "https://api.stripe.com/v1", false, nil},
+		{"malformed neighbour to disallowed host", []string{"biz.vc=" + valid + ",bad member"}, "https://api.stripe.com/v1", false, nil},
+		{"biz.vc on a second header line to disallowed host", []string{"tenant=acme", "biz.vc=" + valid}, "https://api.stripe.com/v1", false, []string{"tenant"}},
+		{"malformed neighbour to ALLOWED host still delivers biz.vc", []string{"biz.vc=" + valid + ",bad member"}, "https://api.example.com/pay", true, nil},
+		{"second-line foreign member preserved on rewrite", []string{"biz.vc=" + valid, "tenant=acme"}, "https://api.stripe.com/v1", false, []string{"tenant"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rec := &headerRecorder{}
+			tr := NewTransport(testRegistry(t), rec)
+			req, err := http.NewRequest(http.MethodPost, c.host, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, l := range c.lines {
+				req.Header.Add("baggage", l)
+			}
+			if _, err := tr.RoundTrip(req); err != nil {
+				t.Fatal(err)
+			}
+			// Inspect EVERY outbound baggage line, not just the first.
+			outLines := rec.got.Header.Values("baggage")
+			hasVC := false
+			foreign := map[string]bool{}
+			for _, l := range outLines {
+				if bag, err := baggage.Parse(l); err == nil {
+					for _, m := range bag.Members() {
+						if m.Key() == "biz.vc" {
+							hasVC = true
+						} else {
+							foreign[m.Key()] = true
+						}
+					}
+				}
+			}
+			// Belt and suspenders: no raw substring of the encoded vc may
+			// survive toward a disallowed host, even unparsed.
+			if !c.wantVC {
+				for _, l := range outLines {
+					if strings.Contains(l, "inv_777") || strings.Contains(l, "h:c9") {
+						t.Fatalf("biz.vc bytes leaked to %s: %q", c.host, l)
+					}
+				}
+			}
+			if hasVC != c.wantVC {
+				t.Fatalf("biz.vc present=%v, want %v (lines %v)", hasVC, c.wantVC, outLines)
+			}
+			for _, m := range c.wantFor {
+				if !foreign[m] {
+					t.Fatalf("foreign member %q lost: %v", m, outLines)
+				}
+			}
+		})
+	}
+}
+
+func TestInboundValidVCSurvivesMalformedNeighbour(t *testing.T) {
+	// Regression: a valid wire biz.vc plus a malformed neighbour must win
+	// over the ingress hook, not be dropped-then-restamped.
+	hook := func(r *http.Request) (biz.ValueContext, bool) {
+		vc := vcFixture()
+		vc.EntityID = "inv_STAMPED"
+		return vc, true
+	}
+	h := &captureHandler{}
+	mw := Middleware(testRegistry(t), WithIngress(hook))(h)
+	req := httptest.NewRequest(http.MethodPost, "/pay", nil)
+	req.Header.Add("baggage", "biz.vc="+encodedVC(t)+",bad member")
+	mw.ServeHTTP(httptest.NewRecorder(), req)
+	if !h.ok || h.vc.EntityID != "inv_777" {
+		t.Fatalf("valid wire biz.vc was not preserved: ok=%v entity=%q", h.ok, h.vc.EntityID)
+	}
+}
+
+func TestRedirectAcrossTrustBoundaryStrips(t *testing.T) {
+	// An allowed host that redirects to a disallowed host: the fence runs
+	// per hop, so the second hop must not carry biz.vc.
+	var secondHopBaggage []string
+	disallowed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secondHopBaggage = r.Header.Values("baggage")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer disallowed.Close()
+	allowed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, disallowed.URL+"/leak", http.StatusFound)
+	}))
+	defer allowed.Close()
+
+	// Registry allows only the FIRST server's host.
+	allowedHost := strings.Split(strings.TrimPrefix(allowed.URL, "http://"), ":")[0]
+	disallowedHost := strings.Split(strings.TrimPrefix(disallowed.URL, "http://"), ":")[0]
+	if allowedHost == disallowedHost {
+		t.Skip("both httptest servers share a host; cannot exercise cross-boundary redirect")
+	}
+	regYAML := "version: 1\nsegments: [smb]\npropagation:\n  allow_hosts: [\"" + allowedHost + "\"]\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    stages:\n      - { name: auth, signals: [\"http:POST /pay\"] }\n    baseline: { seasonality: hour_of_week, lookback_weeks: 8 }\n    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n    reconcile: { source: \"sql:ledger.payments\" }\n"
+	reg, err := registry.Parse([]byte(regYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: NewTransport(&reg, http.DefaultTransport)}
+	ctx, err := biz.WithValueContext(context.Background(), vcFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, allowed.URL+"/pay", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	for _, l := range secondHopBaggage {
+		if strings.Contains(l, "biz.vc") || strings.Contains(l, "inv_777") {
+			t.Fatalf("biz.vc followed the redirect to a disallowed host: %q", secondHopBaggage)
+		}
 	}
 }

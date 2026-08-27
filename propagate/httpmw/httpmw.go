@@ -5,10 +5,18 @@
 // attach flow, entity, and amount so every downstream failure already
 // carries value context.
 //
-// The Transport is also the egress FENCE, not just an injector: toward a
-// host outside the allowlist it strips a biz.vc member that a
-// globally-installed generic Baggage propagator may have added — amounts
-// and customer hashes leave your estate only on purpose.
+// The Transport is the egress FENCE, not just an injector. It fails
+// CLOSED: toward a host outside the allowlist it removes the biz.vc
+// member — even one a globally-installed generic Baggage propagator
+// added, even when the surrounding header is otherwise malformed —
+// rewriting the header from the recovered members rather than forwarding
+// unknown bytes onward. Amounts and customer hashes leave your estate
+// only on purpose.
+//
+// Host shapes: allowlist entries are lowercase DNS names or dotted IPv4
+// literals. IPv6 literals and non-punycode IDNs are always OUTSIDE the
+// fence (they cannot be allowlisted), so biz.vc is never injected toward
+// them and always stripped.
 package httpmw
 
 import (
@@ -23,6 +31,49 @@ import (
 )
 
 const baggageHeader = "baggage"
+
+// recoverMembers parses EVERY baggage field line (HTTP allows more than
+// one) and returns the valid members by key. otel's Parse skips invalid
+// members and returns the valid ones ALONGSIDE an error, so a malformed
+// neighbour never hides a valid biz.vc — the fence works on what was
+// recoverable, and a genuinely unparsable value simply yields no member
+// for that key rather than being waved through. hadError reports whether
+// anything was dropped, for logging.
+func recoverMembers(h http.Header) (members map[string]baggage.Member, hadError bool) {
+	members = map[string]baggage.Member{}
+	for _, line := range h.Values(baggageHeader) {
+		if line == "" {
+			continue
+		}
+		bag, err := baggage.Parse(line)
+		if err != nil {
+			hadError = true
+		}
+		for _, m := range bag.Members() {
+			members[m.Key()] = m
+		}
+	}
+	return members, hadError
+}
+
+// writeMembers replaces ALL baggage field lines with a single canonical
+// one built from members (or deletes the header when none remain).
+func writeMembers(h http.Header, members map[string]baggage.Member) error {
+	if len(members) == 0 {
+		h.Del(baggageHeader)
+		return nil
+	}
+	list := make([]baggage.Member, 0, len(members))
+	for _, m := range members {
+		list = append(list, m)
+	}
+	bag, err := baggage.New(list...)
+	if err != nil {
+		return err
+	}
+	h.Set(baggageHeader, bag.String())
+	return nil
+}
 
 // IngressFunc recognizes a flow on an incoming request and builds its
 // ValueContext. Return false when the request is not a flow entry point.
@@ -43,26 +94,34 @@ func WithIngress(f IngressFunc) MWOption { return func(c *mwConfig) { c.ingress 
 func WithMWLogger(l *slog.Logger) MWOption { return func(c *mwConfig) { c.logger = l } }
 
 // Middleware returns server middleware that makes biz.FromContext work
-// downstream. Precedence: a valid biz.vc member on the wire wins; absent
-// that, the ingress hook (validated — a hook emitting PII or nonsense is
-// rejected loudly, the request itself always proceeds); corrupt wire
-// context is logged and dropped, never mistaken for absent.
+// downstream. Precedence: a valid biz.vc member on the wire wins — even
+// if a neighbouring member was malformed (the valid one is recovered).
+// Absent a valid wire context, the ingress hook stamps (its output is
+// validated — a hook emitting PII or nonsense is rejected loudly, the
+// request itself always proceeds). Corrupt/absent are logged distinctly.
 func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) http.Handler {
 	cfg := mwConfig{logger: slog.Default()}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	_ = reg // reserved: the estimator hook (next milestone step) reads flow estimators
+	_ = reg // reserved for the estimator hook (the sibling M3 step)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			if header := r.Header.Get(baggageHeader); header != "" {
-				if bag, err := baggage.Parse(header); err == nil {
+			members, hadErr := recoverMembers(r.Header)
+			if hadErr {
+				cfg.logger.Warn("httpmw: malformed member(s) in inbound baggage dropped; valid members kept")
+			}
+			if len(members) > 0 {
+				list := make([]baggage.Member, 0, len(members))
+				for _, m := range members {
+					list = append(list, m)
+				}
+				if bag, err := baggage.New(list...); err == nil {
 					ctx = baggage.ContextWithBaggage(ctx, bag)
-				} else {
-					cfg.logger.Warn("httpmw: unparsable baggage header dropped", "error", err)
 				}
 			}
+
 			if _, ok, decErr := biz.FromContext(ctx); !ok {
 				if decErr != nil {
 					cfg.logger.Warn("httpmw: corrupt biz.vc on the wire — dropped loudly", "error", decErr)
@@ -84,7 +143,9 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 	}
 }
 
-// Transport is the client-side fence. It implements http.RoundTripper.
+// Transport is the client-side egress fence. It implements
+// http.RoundTripper and is invoked once per redirect hop, so a redirect
+// from an allowed host to a disallowed one is fenced at the second hop.
 type Transport struct {
 	reg    *registry.Registry
 	base   http.RoundTripper
@@ -112,66 +173,51 @@ func NewTransport(reg *registry.Registry, base http.RoundTripper, opts ...Transp
 	return t
 }
 
-// RoundTrip clones the request (net/http forbids mutating the original)
-// and reconciles the outbound baggage header:
-//   - host allowed: the ctx's ValueContext is injected as biz.vc
-//     (replacing any stale member already on the header);
-//   - host NOT allowed: any biz.vc member is STRIPPED — including one a
-//     global Baggage propagator added — and foreign members pass through
-//     untouched either way.
+// RoundTrip fences the outbound baggage header. It ALWAYS rebuilds the
+// header from the recovered members (never forwards unknown bytes),
+// cloning the request first (net/http forbids mutating the original):
+//   - host allowed: inject the ctx's ValueContext as biz.vc, replacing
+//     any stale member;
+//   - host NOT allowed: remove biz.vc — including one a global propagator
+//     added or one hidden behind a malformed neighbour;
+//   - foreign members pass through in every case.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	host := strings.ToLower(req.URL.Hostname())
 	allowed := t.reg.Propagation.HostAllowed(host)
 
-	members := map[string]baggage.Member{}
-	if header := req.Header.Get(baggageHeader); header != "" {
-		if bag, err := baggage.Parse(header); err == nil {
-			for _, m := range bag.Members() {
-				members[m.Key()] = m
-			}
-		} else {
-			t.logger.Warn("httpmw: unparsable outbound baggage header left untouched", "error", err)
-			return t.base.RoundTrip(req)
-		}
+	members, hadErr := recoverMembers(req.Header)
+	if hadErr {
+		t.logger.Warn("httpmw: malformed member(s) in outbound baggage dropped", "host", host)
 	}
 
-	changed := false
+	_, hadBizVC := members[biz.MemberKey]
+
 	if allowed {
-		if vc, ok, _ := biz.FromContext(req.Context()); ok {
-			enc, err := biz.EncodeVC(vc)
-			if err != nil {
+		if vc, ok, decErr := biz.FromContext(req.Context()); ok {
+			if enc, err := biz.EncodeVC(vc); err != nil {
 				t.logger.Warn("httpmw: ValueContext not encodable at egress — not injected", "error", err)
-			} else if m, err := baggage.NewMemberRaw(biz.MemberKey, enc); err == nil {
+			} else if m, err := baggage.NewMemberRaw(biz.MemberKey, enc); err != nil {
+				t.logger.Warn("httpmw: biz.vc member not constructible at egress — not injected", "error", err)
+			} else {
 				members[biz.MemberKey] = m
-				changed = true
 			}
+		} else if decErr != nil {
+			t.logger.Warn("httpmw: corrupt biz.vc in egress context — not injected", "error", decErr)
 		}
-	}
-	if !allowed {
-		if _, present := members[biz.MemberKey]; present {
-			delete(members, biz.MemberKey)
-			changed = true
-			t.logger.Warn("httpmw: biz.vc stripped at egress — host is outside the propagation allowlist", "host", host)
-		}
-	}
-	if !changed {
-		return t.base.RoundTrip(req)
+	} else if hadBizVC {
+		delete(members, biz.MemberKey)
+		t.logger.Warn("httpmw: biz.vc stripped at egress — host is outside the propagation allowlist", "host", host)
 	}
 
+	// Always rebuild from the recovered members onto a clone: the
+	// original header's raw bytes never reach the wire, so a malformed
+	// or multi-line header can never smuggle biz.vc past the fence.
 	clone := req.Clone(req.Context())
-	list := make([]baggage.Member, 0, len(members))
-	for _, m := range members {
-		list = append(list, m)
-	}
-	if len(list) == 0 {
+	if err := writeMembers(clone.Header, members); err != nil {
+		// Fail CLOSED: if we cannot express a safe header, send none
+		// rather than forward a possibly-leaky original.
+		t.logger.Warn("httpmw: could not rebuild outbound baggage; sending no baggage header", "error", err)
 		clone.Header.Del(baggageHeader)
-	} else {
-		bag, err := baggage.New(list...)
-		if err != nil {
-			t.logger.Warn("httpmw: rebuilding outbound baggage failed; header left untouched", "error", err)
-			return t.base.RoundTrip(req)
-		}
-		clone.Header.Set(baggageHeader, bag.String())
 	}
 	return t.base.RoundTrip(clone)
 }
