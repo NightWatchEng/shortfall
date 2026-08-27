@@ -653,7 +653,7 @@ func BenchmarkRecordAccept(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer em.Close(context.Background())
+	defer func() { _ = em.Close(context.Background()) }()
 	ctxs := make([]context.Context, 4096)
 	for i := range ctxs {
 		vc := emitterVC()
@@ -691,7 +691,7 @@ func BenchmarkRecordSuppressed(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer em.Close(context.Background())
+	defer func() { _ = em.Close(context.Background()) }()
 	ctx, err := biz.WithValueContext(context.Background(), emitterVC())
 	if err != nil {
 		b.Fatal(err)
