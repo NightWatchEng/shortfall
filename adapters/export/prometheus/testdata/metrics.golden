@@ -1,0 +1,13 @@
+# HELP biz_inflight_value In-flight (deferred) business value by flow/stage/age_bucket (minor currency units).
+# TYPE biz_inflight_value gauge
+biz_inflight_value{age_bucket="5m-30m",currency="USD",flow="invoice.pay",stage="capture"} 6e+06
+# HELP biz_provider_calls_total Cumulative count of downstream provider calls by provider/op/outcome.
+# TYPE biz_provider_calls_total counter
+biz_provider_calls_total{op="capture",outcome="failed",provider="stripe"} 2
+# HELP biz_txn_total Cumulative count of transactions by flow/stage/outcome.
+# TYPE biz_txn_total counter
+biz_txn_total{currency="USD",flow="invoice.pay",outcome="failed",segment="smb",stage="capture"} 3
+# HELP biz_value_total Cumulative realized business value by flow/stage/outcome (minor currency units; estimates excluded).
+# TYPE biz_value_total counter
+biz_value_total{currency="EUR",flow="invoice.pay",kind="fee",outcome="failed",segment="smb",stage="capture"} 5000
+biz_value_total{currency="USD",flow="invoice.pay",kind="fee",outcome="failed",segment="smb",stage="capture"} 15000
