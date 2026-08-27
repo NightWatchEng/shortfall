@@ -1,0 +1,16 @@
+# The API-locus incident: 35% 5xx plus latency abandonment through the
+# morning peak on day two. Realized-leg (failures) and unrealized-leg
+# (abandonment) golden source.
+name: api-5xx
+seed: 901
+start: 2026-08-24T00:00:00Z
+end: 2026-08-26T00:00:00Z
+faults:
+  - kind: api-5xx
+    rate: 0.35
+    from: 2026-08-25T09:10:00Z
+    to: 2026-08-25T10:05:00Z
+  - kind: api-latency
+    rate: 0.15
+    from: 2026-08-25T09:10:00Z
+    to: 2026-08-25T10:05:00Z

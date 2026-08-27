@@ -1,14 +1,20 @@
 // Package checkout is the synthetic reference system: a three-stage
 // payment lifecycle (auth, capture, settle) with seeded traffic on an
-// hour-of-week curve and an in-memory ledger that serves as ground truth
-// for the engine.
+// hour-of-week curve, fault-injection knobs for the three degradation
+// loci, and an in-memory ledger that serves as ground truth for the
+// engine.
 //
-// Modeling honesty: there are no service or queue objects here. The
-// capture and settle stages are FIXED per-transaction pipeline delays
-// standing in for queue latency — load-independent by design in this
-// baseline. Contention, stalls, and failures arrive with the
-// fault-injection knobs (the next build step); do not design engine
-// expectations against queueing behavior this baseline does not have.
+// Modeling: capture and settle are capacity-limited FIFO stages — each has
+// a per-minute worker capacity and a fixed service delay. With the default
+// ample capacity the baseline behaves like a fixed pipeline; a
+// queue-consumer-stall fault sets capacity to zero for its window, so a
+// real backlog forms and drains at the stage's capacity afterwards. The
+// api faults reject (5xx) or lose (latency abandonment) arrivals; an
+// upstream blackout suppresses arrivals entirely, with an optional
+// recovered fraction re-arriving after the outage. The ledger is
+// omniscient ground truth: it records abandoned transactions and
+// suppressed demand that real telemetry could never see — that asymmetry
+// is exactly what the engine's evidence labels are about.
 //
 // The simulation is discrete-event on a virtual clock (minute resolution,
 // single-threaded): determinism under a seed is structural, not a property
@@ -24,6 +30,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"sort"
 	"time"
 )
 
@@ -31,12 +38,13 @@ import (
 type State string
 
 const (
-	StateCreated  State = "created"        // arrived, auth not yet attempted
-	StateAuthed   State = "authed"         // auth ok, inside the capture pipeline delay
-	StateCaptured State = "captured"       // capture ok, inside the settle pipeline delay
-	StateSettled  State = "settled"        // terminal success
-	StateAuthFail State = "failed_auth"    // terminal: rejected at the api
-	StateCapFail  State = "failed_capture" // terminal: capture-worker rejected
+	StateCreated   State = "created"        // arrived, auth not yet attempted
+	StateAuthed    State = "authed"         // auth ok, inside the capture stage
+	StateCaptured  State = "captured"       // capture ok, inside the settle stage
+	StateSettled   State = "settled"        // terminal success
+	StateAuthFail  State = "failed_auth"    // terminal: rejected at the api (5xx)
+	StateAbandoned State = "abandoned"      // terminal: user gave up on api latency; telemetry never saw it
+	StateCapFail   State = "failed_capture" // terminal: capture-worker rejected
 )
 
 // Segment mirrors the two customer segments the proposal's registry
@@ -63,12 +71,24 @@ type Txn struct {
 	SettledAt  time.Time
 
 	State State
+
+	// Recovered marks demand that re-arrived after an upstream blackout.
+	Recovered bool
 }
 
 // Ledger is the ground truth: every synthetic transaction ever created,
-// in creation order.
+// in creation order — including abandoned ones telemetry never saw.
 type Ledger struct {
 	Txns []Txn
+}
+
+// SuppressedMinute records upstream-blackout demand that never entered:
+// Count arrivals that would have happened at Minute. Only the ground
+// truth can know this; the engine's counterfactual leg is judged against
+// it.
+type SuppressedMinute struct {
+	Minute time.Time
+	Count  int
 }
 
 // Explicit-zero sentinels. The zero value of each tuning knob means "use
@@ -99,17 +119,26 @@ type Config struct {
 	// Customers is the size of the synthetic customer pool (default 3000).
 	Customers int
 
-	// Service times (defaults: capture 2 min, settle 5 min). Every
-	// transaction spends this long in the queue stage before its worker
-	// completes it — a simple, fully deterministic pipeline delay.
+	// Stage service delays (defaults: capture 2 min, settle 5 min).
 	CaptureDelayMin int
 	SettleDelayMin  int
+
+	// Stage worker capacities in transactions per minute (default 20 —
+	// comfortably above the default curve's 6/min peak, so the baseline
+	// has no contention). A consumer-stall fault forces 0 for its window.
+	CaptureCapacityPerMin int
+	SettleCapacityPerMin  int
+
+	// Faults active during the run. Each is validated; see FaultSpec.
+	Faults []FaultSpec
 }
 
-// Result of a run: the ground-truth ledger plus the effective config.
+// Result of a run: the ground-truth ledger, suppressed-demand record, and
+// the effective config.
 type Result struct {
-	Ledger Ledger
-	Config Config
+	Ledger     Ledger
+	Suppressed []SuppressedMinute
+	Config     Config
 }
 
 // maxRatePerMinute bounds curve rates: far above any realistic synthetic
@@ -140,6 +169,13 @@ func (c *Config) applyDefaults() {
 	}
 	c.CaptureDelayMin = delayKnob("CaptureDelayMin", c.CaptureDelayMin, 2)
 	c.SettleDelayMin = delayKnob("SettleDelayMin", c.SettleDelayMin, 5)
+	c.CaptureCapacityPerMin = capacityKnob("CaptureCapacityPerMin", c.CaptureCapacityPerMin)
+	c.SettleCapacityPerMin = capacityKnob("SettleCapacityPerMin", c.SettleCapacityPerMin)
+	for _, f := range c.Faults {
+		if err := f.Validate(); err != nil {
+			panic("checkout: " + err.Error())
+		}
+	}
 }
 
 func delayKnob(name string, v, def int) int {
@@ -154,6 +190,79 @@ func delayKnob(name string, v, def int) int {
 	return v
 }
 
+func capacityKnob(name string, v int) int {
+	switch {
+	case v == 0:
+		return 20
+	case v < 0:
+		panic(fmt.Sprintf("checkout: %s = %d invalid — scenario config error", name, v))
+	}
+	return v
+}
+
+// stage is a capacity-limited FIFO worker pool: at most capacity service
+// starts per minute, zero during a stall window, each service taking
+// delay minutes. Eligibility arrives in non-decreasing order (arrival
+// order for capture; capture completions for settle), so a single cursor
+// suffices and scheduling stays O(total minutes scanned).
+type stage struct {
+	delay    time.Duration
+	capacity int
+	stalls   []FaultSpec
+
+	cursor time.Time // earliest minute that may still have a free slot
+	used   int       // slots consumed at cursor
+}
+
+func newStage(delayMin, capacity int, queue Queue, faults []FaultSpec) *stage {
+	s := &stage{
+		delay:    time.Duration(delayMin) * time.Minute,
+		capacity: capacity,
+	}
+	for _, f := range faults {
+		if f.Kind == FaultConsumerStall && f.Queue == queue {
+			s.stalls = append(s.stalls, f)
+		}
+	}
+	// Kept sorted by From so the freeze extension below can absorb
+	// cascading overlaps in one forward pass.
+	sort.Slice(s.stalls, func(i, j int) bool { return s.stalls[i].From.Before(s.stalls[j].From) })
+	return s
+}
+
+func (s *stage) stalled(t time.Time) bool {
+	for _, f := range s.stalls {
+		if f.active(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// schedule returns the completion time for a transaction becoming
+// eligible at the given minute. Stall semantics: no service STARTS during
+// a stall, and in-progress work FREEZES — a service interval that a stall
+// interrupts resumes after it, so nothing ever completes inside a stall
+// window.
+func (s *stage) schedule(eligible time.Time) time.Time {
+	if s.cursor.Before(eligible) {
+		s.cursor = eligible
+		s.used = 0
+	}
+	for s.stalled(s.cursor) || s.used >= s.capacity {
+		s.cursor = s.cursor.Add(time.Minute)
+		s.used = 0
+	}
+	s.used++
+	completion := s.cursor.Add(s.delay)
+	for _, f := range s.stalls {
+		if s.cursor.Before(f.From) && completion.After(f.From) {
+			completion = completion.Add(f.To.Sub(f.From))
+		}
+	}
+	return completion
+}
+
 // Run executes the simulation and returns the ground-truth ledger.
 // Identical Config (including Seed) yields a byte-identical ledger on the
 // same toolchain and architecture — see the package doc for why golden
@@ -166,37 +275,98 @@ func Run(cfg Config) Result {
 	start := cfg.Start.Truncate(time.Minute)
 	end := cfg.End.Truncate(time.Minute)
 
-	var ledger Ledger
+	capture := newStage(cfg.CaptureDelayMin, cfg.CaptureCapacityPerMin, QueueCapture, cfg.Faults)
+	settle := newStage(cfg.SettleDelayMin, cfg.SettleCapacityPerMin, QueueSettle, cfg.Faults)
+
+	var (
+		ledger     Ledger
+		suppressed []SuppressedMinute
+		rearrive   = map[int64]int{} // minute unix -> recovered arrivals due
+	)
+
 	n := 0
+	process := func(t time.Time, recovered bool) {
+		n++
+		txn := newTxn(rng, cfg, n, t)
+		txn.Recovered = recovered
+
+		// api faults, in locus order: latency abandonment (the user gives
+		// up before the request lands), then 5xx rejection.
+		for _, f := range cfg.Faults {
+			if !f.active(t) {
+				continue
+			}
+			switch f.Kind {
+			case FaultAPILatency:
+				if rng.Float64() < f.Rate {
+					txn.State = StateAbandoned
+				}
+			case FaultAPI5xx:
+				if txn.State != StateAbandoned && rng.Float64() < f.Rate {
+					txn.State = StateAuthFail
+				}
+			}
+		}
+		if txn.State == StateAbandoned || txn.State == StateAuthFail {
+			ledger.Txns = append(ledger.Txns, txn)
+			return
+		}
+
+		txn.AuthedAt = t
+		txn.State = StateAuthed
+
+		capAt := capture.schedule(t)
+		if capAt.Before(end) {
+			txn.CapturedAt = capAt
+			txn.State = StateCaptured
+			setAt := settle.schedule(capAt)
+			if setAt.Before(end) {
+				txn.SettledAt = setAt
+				txn.State = StateSettled
+			}
+		}
+		ledger.Txns = append(ledger.Txns, txn)
+	}
+
 	for t := start; t.Before(end); t = t.Add(time.Minute) {
 		rate := cfg.Curve[hourOfWeek(t)]
 		arrivals := poisson(rng, rate)
-		for i := 0; i < arrivals; i++ {
-			n++
-			txn := newTxn(rng, cfg, n, t)
 
-			// auth at the api: instantaneous in the fault-free baseline.
-			txn.AuthedAt = t
-			txn.State = StateAuthed
-
-			// capture-worker completes after the pipeline delay, then
-			// settle-worker after its own — unless the window ends first,
-			// in which case the transaction is left in flight at the
-			// state it truthfully reached.
-			capAt := t.Add(time.Duration(cfg.CaptureDelayMin) * time.Minute)
-			if capAt.Before(end) {
-				txn.CapturedAt = capAt
-				txn.State = StateCaptured
-				setAt := capAt.Add(time.Duration(cfg.SettleDelayMin) * time.Minute)
-				if setAt.Before(end) {
-					txn.SettledAt = setAt
-					txn.State = StateSettled
+		// Upstream blackout: demand never enters. A recovered fraction
+		// re-arrives after the outage, spread uniformly over the recovery
+		// window.
+		blocked := 0
+		for _, f := range cfg.Faults {
+			if f.Kind != FaultBlackout || !f.active(t) {
+				continue
+			}
+			blocked = arrivals
+			for i := 0; i < arrivals; i++ {
+				if rng.Float64() < f.RecoveredFraction {
+					offset := time.Duration(rng.Int64N(int64(f.RecoveryWithin))).Truncate(time.Minute)
+					at := f.To.Add(offset).Truncate(time.Minute)
+					if at.Before(end) {
+						rearrive[at.Unix()]++
+					}
 				}
 			}
-			ledger.Txns = append(ledger.Txns, txn)
+			break // one blackout at a time is the honest model
 		}
+		if blocked > 0 {
+			suppressed = append(suppressed, SuppressedMinute{Minute: t, Count: blocked})
+		} else {
+			for i := 0; i < arrivals; i++ {
+				process(t, false)
+			}
+		}
+
+		for i := 0; i < rearrive[t.Unix()]; i++ {
+			process(t, true)
+		}
+		delete(rearrive, t.Unix())
 	}
-	return Result{Ledger: ledger, Config: cfg}
+
+	return Result{Ledger: ledger, Suppressed: suppressed, Config: cfg}
 }
 
 func newTxn(rng *rand.Rand, cfg Config, n int, t time.Time) Txn {
@@ -227,8 +397,9 @@ func hourOfWeek(t time.Time) int {
 }
 
 // poisson draws a Poisson-distributed arrival count via Knuth's method —
-// exact for the small per-minute rates the curve produces, and fully
-// deterministic under the run's rng.
+// exact for the small per-minute rates the curve allows (maxRatePerMinute
+// keeps exp(-lambda) far from underflow), and fully deterministic under
+// the run's rng.
 func poisson(rng *rand.Rand, lambda float64) int {
 	if lambda <= 0 {
 		return 0
