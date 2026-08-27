@@ -7,9 +7,11 @@ package kafka
 
 import "github.com/NightWatchEng/shortfall/propagate"
 
-// Header mirrors a Kafka record header (key + raw bytes). It intentionally
-// matches the field shape every Kafka client uses, so conversion is a
-// field copy.
+// Header mirrors a Kafka record header (key + raw bytes). kafka-go,
+// segmentio, and confluent-kafka-go use {Key string, Value []byte}
+// exactly (a field copy); sarama's RecordHeader.Key is []byte, so a
+// sarama caller does string(h.Key) on the way in. No client library is
+// imported either way.
 type Header struct {
 	Key   string
 	Value []byte
@@ -39,18 +41,31 @@ func (c Carrier) Get(key string) string {
 	return ""
 }
 
-// Set replaces the header with key, or appends it.
-func (c Carrier) Set(key, value string) {
+// Set makes key CANONICAL: the first matching header takes the value and
+// every later duplicate (Kafka permits them) is removed, so a consumer
+// reads one unambiguous value regardless of its client's dup semantics.
+// Returns false on a nil backing pointer so Inject fails loudly.
+func (c Carrier) Set(key, value string) bool {
 	if c.Headers == nil {
-		return
+		return false
 	}
-	for i := range *c.Headers {
-		if (*c.Headers)[i].Key == key {
-			(*c.Headers)[i].Value = []byte(value)
-			return
+	set := false
+	out := (*c.Headers)[:0]
+	for _, h := range *c.Headers {
+		if h.Key == key {
+			if set {
+				continue // drop later duplicate
+			}
+			h.Value = []byte(value)
+			set = true
 		}
+		out = append(out, h)
 	}
-	*c.Headers = append(*c.Headers, Header{Key: key, Value: []byte(value)})
+	if !set {
+		out = append(out, Header{Key: key, Value: []byte(value)})
+	}
+	*c.Headers = out
+	return true
 }
 
 // Keys lists the header keys in order.

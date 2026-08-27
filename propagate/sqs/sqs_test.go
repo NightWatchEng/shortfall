@@ -49,7 +49,9 @@ func TestSQSCases(t *testing.T) {
 
 func TestSQSNilSafe(t *testing.T) {
 	c := NewCarrier(nil)
-	c.Set("k", "v")
+	if c.Set("k", "v") {
+		t.Fatal("Set on a nil carrier must report false")
+	}
 	if c.Get("k") != "" {
 		t.Fatal("nil map carrier should be inert on set")
 	}

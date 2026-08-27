@@ -20,8 +20,8 @@ func carrierVC() biz.ValueContext {
 // mapCarrier is a trivial in-test Carrier for exercising Inject/Extract.
 type mapCarrier map[string]string
 
-func (m mapCarrier) Get(k string) string { return m[k] }
-func (m mapCarrier) Set(k, v string)     { m[k] = v }
+func (m mapCarrier) Get(k string) string  { return m[k] }
+func (m mapCarrier) Set(k, v string) bool { m[k] = v; return true }
 func (m mapCarrier) Keys() []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -82,5 +82,18 @@ func TestInjectRejectsOversize(t *testing.T) {
 	}
 	if err := Inject(c, vc); err == nil {
 		t.Fatal("oversize ValueContext should fail to inject (cap is the codec's)")
+	}
+}
+
+// nilCarrier models a carrier whose backing store cannot hold a write.
+type nilCarrier struct{}
+
+func (nilCarrier) Get(string) string       { return "" }
+func (nilCarrier) Set(string, string) bool { return false }
+func (nilCarrier) Keys() []string          { return nil }
+
+func TestInjectFailsLoudlyWhenSetCannotWrite(t *testing.T) {
+	if err := Inject(nilCarrier{}, carrierVC()); err == nil {
+		t.Fatal("Inject over an unwritable carrier must return an error — silent propagation loss is forbidden")
 	}
 }

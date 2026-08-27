@@ -30,12 +30,15 @@ func (c Carrier) Get(key string) string {
 	}
 }
 
-// Set stores value as a string. No-op on a nil table — allocate first.
-func (c Carrier) Set(key, value string) {
+// Set stores value as a string and returns true; on a nil table it
+// writes nothing and returns false so Inject fails loudly (allocate the
+// table before injecting).
+func (c Carrier) Set(key, value string) bool {
 	if c.Table == nil {
-		return
+		return false
 	}
 	c.Table[key] = value
+	return true
 }
 
 // Keys lists the table keys.
