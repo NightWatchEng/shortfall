@@ -54,17 +54,31 @@ func TestTrafficFollowsCurve(t *testing.T) {
 	}
 
 	curve := DefaultCurve()
-	// Expected arrivals for an hour = rate/min * 60.
-	for _, h := range []int{10 /* Mon 10:00 peak */, 2 /* Mon 02:00 trough */} {
-		want := curve[h] * 60
-		got := float64(hourly[h])
-		// 40% tolerance: a single hour of Poisson arrivals is noisy, but a
-		// peak/trough mix-up is 10x and cannot hide in it.
-		if got < want*0.6 || got > want*1.4 {
-			t.Errorf("hour %d: got %.0f arrivals, want ~%.0f (curve rate %.2f/min)", h, got, want, curve[h])
+	// Aggregate bands so the assertion is seed-robust, not tuned to one
+	// lucky seed: a single trough hour is Poisson(~24) and ±40% is only
+	// ~2σ (a seed sweep showed ~4.5% of seeds outside it). Summing the
+	// deep-night hours across all five weekdays gives a mean of several
+	// hundred, where ±25% is many σ.
+	sumBand := func(hours []int, name string) {
+		var want, got float64
+		for _, h := range hours {
+			want += curve[h] * 60
+			got += float64(hourly[h])
+		}
+		if got < want*0.75 || got > want*1.25 {
+			t.Errorf("%s: got %.0f arrivals, want ~%.0f", name, got, want)
 		}
 	}
-	// The ordering peak > trough must hold regardless of tolerance.
+	var trough, peak []int
+	for day := 0; day < 5; day++ {
+		for h := 0; h < 4; h++ {
+			trough = append(trough, day*24+h)
+		}
+		peak = append(peak, day*24+10)
+	}
+	sumBand(trough, "weekday night trough (00-04)")
+	sumBand(peak, "weekday 10:00 peak")
+	// The ordering peak > trough must hold hour-for-hour regardless.
 	if hourly[10] <= hourly[2] {
 		t.Errorf("peak hour (%d txns) not busier than trough hour (%d txns)", hourly[10], hourly[2])
 	}
@@ -138,9 +152,60 @@ func TestSegmentsAndAmounts(t *testing.T) {
 		}
 	}
 	total := smb + ent
+	if total == 0 {
+		t.Fatal("run produced no transactions — fraction check would pass vacuously on NaN")
+	}
 	frac := float64(ent) / float64(total)
 	if frac < 0.05 || frac > 0.2 {
 		t.Fatalf("enterprise fraction %f outside [0.05, 0.2] (%d of %d)", frac, ent, total)
+	}
+}
+
+func TestConfigValidation(t *testing.T) {
+	mustPanic := func(name string, cfg Config) {
+		t.Helper()
+		defer func() {
+			if recover() == nil {
+				t.Errorf("%s: expected panic, got none", name)
+			}
+		}()
+		Run(cfg)
+	}
+	base := Config{Seed: 1, Start: mon, End: mon.Add(time.Hour)}
+
+	neg := base
+	neg.CaptureDelayMin = -3
+	mustPanic("negative delay", neg)
+
+	badFrac := base
+	badFrac.EnterpriseFraction = 1.5
+	mustPanic("fraction > 1", badFrac)
+
+	hot := base
+	curve := DefaultCurve()
+	curve[10] = 1000 // would silently underflow the Knuth sampler
+	hot.Curve = &curve
+	mustPanic("curve rate beyond the sampler's honest range", hot)
+
+	// Sentinels express literal zeros instead of being coerced to defaults.
+	zero := base
+	zero.EnterpriseFraction = NoEnterprise
+	zero.CaptureDelayMin = InstantStage
+	zero.SettleDelayMin = InstantStage
+	res := Run(zero)
+	if len(res.Ledger.Txns) == 0 {
+		t.Fatal("sentinel run produced no transactions")
+	}
+	for _, txn := range res.Ledger.Txns {
+		if txn.Segment == SegmentEnterprise {
+			t.Fatalf("NoEnterprise run produced an enterprise txn: %+v", txn)
+		}
+		if txn.State != StateSettled {
+			t.Fatalf("InstantStage run left %s in state %s", txn.ID, txn.State)
+		}
+		if !txn.SettledAt.Equal(txn.CreatedAt) {
+			t.Fatalf("InstantStage txn %s settled at %v, created %v", txn.ID, txn.SettledAt, txn.CreatedAt)
+		}
 	}
 }
 
