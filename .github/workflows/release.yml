@@ -1,0 +1,39 @@
+# Release: goreleaser ships cmd/shortfall binaries on v* tags.
+# Dry-run: workflow_dispatch runs a snapshot build (no tag, no publish) —
+# the release-tooling acceptance evidence and a rehearsal before any tag.
+# Library consumers are unaffected: modules are consumed by git tag via
+# `go get`; this workflow only adds CLI binaries + checksums to the release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}   # snapshot dry-run
+
+permissions:
+  contents: write   # create the GitHub release + upload assets
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          fetch-depth: 0   # goreleaser reads full history for the changelog
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: stable
+          cache: true
+      - name: goreleaser (release on tag, snapshot on dispatch)
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
+        with:
+          version: v2.18.0
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --snapshot --clean' || 'release --clean' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: upload snapshot artifacts (dry-run evidence)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: snapshot-dist
+          path: dist/

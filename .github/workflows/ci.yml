@@ -130,6 +130,19 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  pr-title:
+    name: pr title lint
+    # Squash-merge uses the PR title as the commit header on main, so the
+    # title is where the commit convention is actually enforced. The local
+    # .githooks/commit-msg hook is a convenience; this is the fence.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      PR_TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - run: ./scripts/commit-lint.sh "$PR_TITLE"
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest

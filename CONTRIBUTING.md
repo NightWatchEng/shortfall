@@ -35,8 +35,29 @@ in-flight bucketing, engine `Compute`, baseline fit) carry Go benchmarks.
 
 ## Commits
 
-Conventional commits: `type: summary (tracked-item-id)` — the id lives in
-the commit header and the PR body, never in code comments.
+Conventional commits: `type: summary (tracked-item-id)`, or
+`type: summary (no-bead: reason)` when no tracked item applies — the id
+lives in the commit header and the PR body, never in code comments. Types:
+feat, fix, docs, chore, test, refactor, perf, ci, build, revert. Header cap:
+100 bytes (bytes, not characters, so macOS and CI agree).
+
+Enforcement: PR titles are linted in CI (`pr title lint`) because squash
+merge turns the title into the commit header on main. Install the matching
+local hook once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+## Releases
+
+Tags drive everything. `v*` tags trigger the `release` workflow: goreleaser
+builds `cmd/shortfall` binaries (linux/darwin × amd64/arm64) with checksums
+and a changelog, attached to the GitHub release; pre-1.0 tags are marked
+pre-release automatically. Library consumers just `go get` the tag. Dry-run
+rehearsal: run the `release` workflow manually (workflow_dispatch) — it
+builds a snapshot and uploads `dist/` as an artifact without tagging or
+publishing.
 
 ## Design decisions
 

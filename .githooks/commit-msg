@@ -1,0 +1,8 @@
+#!/bin/sh
+# Local commit-message gate: same linter CI applies to the PR title (the
+# squash-merge header). Install once per clone:
+#   git config core.hooksPath .githooks
+# NOTE: any tool that later sets core.hooksPath elsewhere silently disables
+# this — `warden explain` reports the local-gate state; check it after
+# installing hook-managing tools.
+exec "$(dirname "$0")/../scripts/commit-lint.sh" -f "$1"
