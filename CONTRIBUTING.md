@@ -71,6 +71,15 @@ benchmarks. Where the error contract matters (the registry's actionable
 messages), rejection tables assert the error names the offending field —
 not merely that an error occurred. The pre-PR review flags departures.
 
+## Architecture diagrams
+
+`docs/architecture/` holds the C4 model and money-path sequences as
+Mermaid, rendering natively on github.com. **Definition of Done:** a PR
+that changes the architecture (new component, moved boundary, new signal
+path) updates the affected diagram in the same PR. No GitHub Pages on
+this repo — depending on plan it is unavailable or publicly served for a
+private repo; either way it stays off.
+
 ## Design decisions
 
 Irreversible decisions live in `docs/adr/`. Code that contradicts an

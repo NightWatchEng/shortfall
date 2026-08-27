@@ -79,6 +79,12 @@ testkit/      scenario runner and exporter conformance suite
 docs/adr/     one ADR per design decision
 ```
 
+## Architecture
+
+C4 diagrams and the three money-path sequences live in
+[docs/architecture](docs/architecture/README.md), rendered natively by
+GitHub. Decisions live in [docs/adr](docs/adr/README.md).
+
 ## Status
 
 Pre-release, under active construction. Nothing here is stable yet.
