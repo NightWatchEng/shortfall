@@ -1,0 +1,13 @@
+# The upstream-locus incident: traffic never enters for 40 minutes; 60%
+# of the demand returns within two hours. Counterfactual-leg golden
+# source — no correlation id can ever exist for the suppressed arrivals.
+name: upstream-blackout
+seed: 407
+start: 2026-08-24T00:00:00Z
+end: 2026-08-26T00:00:00Z
+faults:
+  - kind: upstream-blackout
+    from: 2026-08-25T11:20:00Z
+    to: 2026-08-25T12:00:00Z
+    recovered_fraction: 0.6
+    recovery_within: 2h

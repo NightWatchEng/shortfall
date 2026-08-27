@@ -1,0 +1,11 @@
+# The canonical queue-locus incident: capture consumers stall 14:02-14:47
+# on day two, backlog forms and drains. Deferred-leg golden source.
+name: queue-stall
+seed: 1302
+start: 2026-08-24T00:00:00Z
+end: 2026-08-26T00:00:00Z
+faults:
+  - kind: queue-consumer-stall
+    queue: capture
+    from: 2026-08-25T14:02:00Z
+    to: 2026-08-25T14:47:00Z
