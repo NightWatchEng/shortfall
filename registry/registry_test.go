@@ -322,3 +322,19 @@ func TestFlowNames(t *testing.T) {
 		t.Fatalf("FlowNames() = %v", names)
 	}
 }
+
+func TestEstimatorExponent(t *testing.T) {
+	f, _ := mustParse(t).Flow("invoice.pay")
+	t.Run("defaults to 2 when omitted", func(t *testing.T) {
+		m, ok := f.EstimateMoney("enterprise", "USD")
+		if !ok || m.Exponent != 2 || m.Amount != 91000 || m.Currency != "USD" {
+			t.Fatalf("EstimateMoney = %+v ok=%v", m, ok)
+		}
+	})
+	t.Run("bad exponent rejected", func(t *testing.T) {
+		bad := strings.Replace(sampleYAML, "default_minor: 18750", "default_minor: 18750, exponent: 9", 1)
+		if _, err := Parse([]byte(bad)); err == nil {
+			t.Fatal("estimator exponent 9 must be rejected")
+		}
+	})
+}

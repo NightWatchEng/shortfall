@@ -77,6 +77,12 @@ func writeMembers(h http.Header, members map[string]baggage.Member) error {
 
 // IngressFunc recognizes a flow on an incoming request and builds its
 // ValueContext. Return false when the request is not a flow entry point.
+//
+// Entry-point estimation: when the amount is not knowable at ingress,
+// set Estimated=true and leave Money.Amount 0 (keep a valid Currency);
+// the middleware fills the registry estimator's value at its declared
+// exponent. A KNOWN amount — including a genuine 0 — must have
+// Estimated=false; it is never overwritten.
 type IngressFunc func(*http.Request) (biz.ValueContext, bool)
 
 // MWOption configures Middleware.
@@ -143,25 +149,25 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 	}
 }
 
-// estimate fills an ingress stamp's UNKNOWN amount from the registry's
-// entry-point estimator (proposal 4.2): when the hook knows the flow,
-// segment, and currency but not the amount (e.g. GET /cart leaves Amount
-// 0), the registry's default or by-segment value is stamped with
-// Estimated=true so the engine reports it as estimate, never realized. A
-// known amount, an already-estimated context, or a flow without an
-// estimator is returned unchanged. Currency and exponent stay as the
-// hook set them — the estimator supplies minor units only.
+// estimate fills an ingress stamp's amount from the registry's entry-point
+// estimator. It is OPT-IN and never touches a known amount: a hook that
+// cannot determine the amount (e.g. GET /cart) signals so by setting
+// Estimated=true and leaving Money.Amount 0; estimate then fills the
+// default or by-segment value at the estimator's declared exponent (a
+// genuine, KNOWN $0 has Estimated=false and is never overwritten — the
+// free-checkout that must not become $187.50). The stamp's currency is
+// kept; a flow with no estimator or the wrong signal is returned
+// unchanged.
 func estimate(reg *registry.Registry, vc biz.ValueContext) biz.ValueContext {
-	if vc.Money.Amount != 0 || vc.Estimated || reg == nil {
+	if !vc.Estimated || vc.Money.Amount != 0 || reg == nil {
 		return vc
 	}
 	f, ok := reg.Flow(vc.Flow)
 	if !ok {
 		return vc
 	}
-	if est, ok := f.EstimateMinor(vc.Segment); ok {
-		vc.Money.Amount = est
-		vc.Estimated = true
+	if m, ok := f.EstimateMoney(vc.Segment, vc.Money.Currency); ok {
+		vc.Money = m
 	}
 	return vc
 }

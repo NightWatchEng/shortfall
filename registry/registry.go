@@ -90,9 +90,11 @@ type SLA struct {
 
 // Estimator supplies amounts when ingress does not know them; the emit
 // layer stamps Estimated=true so the engine never reports them as
-// realized.
+// realized. Amounts are minor units at Exponent (default 2) — declare it
+// to match your flow's currencies (a JPY flow wants Exponent 0).
 type Estimator struct {
 	DefaultMinor int64
+	Exponent     int8
 	BySegment    map[string]int64
 }
 
@@ -133,7 +135,7 @@ func (r Registry) Flow(name string) (Flow, bool) {
 		out.SLA[k] = v
 	}
 	if f.Estimator != nil {
-		est := Estimator{DefaultMinor: f.Estimator.DefaultMinor, BySegment: make(map[string]int64, len(f.Estimator.BySegment))}
+		est := Estimator{DefaultMinor: f.Estimator.DefaultMinor, Exponent: f.Estimator.Exponent, BySegment: make(map[string]int64, len(f.Estimator.BySegment))}
 		for k, v := range f.Estimator.BySegment {
 			est.BySegment[k] = v
 		}
@@ -174,6 +176,18 @@ func (f Flow) EstimateMinor(segment string) (int64, bool) {
 		return v, true
 	}
 	return f.Estimator.DefaultMinor, true
+}
+
+// EstimateMoney returns the estimated Money for a segment in the given
+// currency, at the estimator's declared exponent — so an estimate is
+// never applied under a mismatched exponent (a JPY/0 stamp cannot inherit
+// a USD/2 estimator's 100x error).
+func (f Flow) EstimateMoney(segment, currency string) (biz.Money, bool) {
+	amt, ok := f.EstimateMinor(segment)
+	if !ok {
+		return biz.Money{}, false
+	}
+	return biz.Money{Amount: amt, Currency: currency, Exponent: f.Estimator.Exponent}, true
 }
 
 // HostAllowed reports whether biz.vc may be injected toward host.
@@ -265,6 +279,7 @@ type slaDoc struct {
 
 type estimatorDoc struct {
 	DefaultMinor int64            `yaml:"default_minor"`
+	Exponent     *int8            `yaml:"exponent,omitempty"`
 	BySegment    map[string]int64 `yaml:"by_segment,omitempty"`
 }
 
@@ -439,7 +454,14 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 				return fail("estimator by_segment[%s] %d must be positive minor units", seg, v)
 			}
 		}
-		f.Estimator = &Estimator{DefaultMinor: fd.Estimator.DefaultMinor, BySegment: fd.Estimator.BySegment}
+		exponent := int8(2)
+		if fd.Estimator.Exponent != nil {
+			exponent = *fd.Estimator.Exponent
+			if exponent < 0 || exponent > 4 {
+				return fail("estimator exponent %d outside [0, 4]", exponent)
+			}
+		}
+		f.Estimator = &Estimator{DefaultMinor: fd.Estimator.DefaultMinor, Exponent: exponent, BySegment: fd.Estimator.BySegment}
 	}
 	if fd.Baseline.Seasonality != "hour_of_week" {
 		return fail("baseline seasonality %q is not supported (hour_of_week)", fd.Baseline.Seasonality)
