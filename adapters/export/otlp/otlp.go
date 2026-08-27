@@ -15,6 +15,7 @@ package otlp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	logexp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
@@ -57,7 +58,14 @@ func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
 		emitCtx := ctx
 		if o.TraceID != "" {
 			if tid, err := oteltrace.TraceIDFromHex(o.TraceID); err == nil {
-				sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{TraceID: tid})
+				// TraceID only: an outcome references a transaction's trace,
+				// not a specific span, so SpanID stays zero. The Sampled flag
+				// is set so backends that gate log-to-trace correlation on it
+				// still link the event (an unset flag reads as "unsampled").
+				sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+					TraceID:    tid,
+					TraceFlags: oteltrace.FlagsSampled,
+				})
 				emitCtx = oteltrace.ContextWithSpanContext(ctx, sc)
 			}
 		}
@@ -109,9 +117,13 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 		_ = m.Shutdown(ctx)
 		return nil, fmt.Errorf("otlp: log exporter: %w", err)
 	}
-	// Unlimited attributes: an outcome carries ~12 biz.* fields and the
-	// SDK's default limit would silently drop them (a real sdk/log
-	// footgun, ADR-0002's experimental-dependency risk realized here).
+	// No attribute cap: WithAttributeCountLimit(-1) disables the limit
+	// entirely, so every biz.* field survives regardless of how many an
+	// outcome grows to carry. The SDK's default (128) clears today's ~12
+	// comfortably, but that is a silent cliff — a directly built
+	// sdklog.Record has a limit of 0 and drops everything — so per ADR-0002
+	// (this experimental dependency is fenced HERE) we pin the safe value
+	// rather than lean on a default that could change under us.
 	provider := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(l)),
 		sdklog.WithAttributeCountLimit(-1),
@@ -120,8 +132,8 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 	return &Exporter{metrics: m, logs: sink}, nil
 }
 
-// newWith wires arbitrary pushers — the seam the conformance/unit tests
-// drive with in-memory collectors.
+// newWith wires arbitrary pushers — the seam the unit tests drive with
+// in-memory collectors (and the M4.2 conformance suite once it lands).
 func newWith(m metricPusher, l eventSink) *Exporter {
 	return &Exporter{metrics: m, logs: l}
 }
@@ -149,12 +161,12 @@ func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error 
 	return e.logs.emit(ctx, batch)
 }
 
-// Shutdown flushes and closes both exporters, returning the first error.
+// Shutdown flushes and closes both exporters. Both always run — a failure
+// on one leg must not skip the other — and both errors are joined, since a
+// log-leg flush failure can mean dropped outcome data and must not be
+// masked by a metric-leg error.
 func (e *Exporter) Shutdown(ctx context.Context) error {
 	mErr := e.metrics.Shutdown(ctx)
 	lErr := e.logs.Shutdown(ctx)
-	if mErr != nil {
-		return mErr
-	}
-	return lErr
+	return errors.Join(mErr, lErr)
 }

@@ -19,6 +19,7 @@ var at = time.Date(2026, 8, 27, 14, 32, 0, 0, time.UTC)
 type fakeMetric struct {
 	got      *metricdata.ResourceMetrics
 	fail     bool
+	shutErr  error
 	shutdown bool
 }
 
@@ -29,11 +30,12 @@ func (f *fakeMetric) Export(_ context.Context, rm *metricdata.ResourceMetrics) e
 	f.got = rm
 	return nil
 }
-func (f *fakeMetric) Shutdown(context.Context) error { f.shutdown = true; return nil }
+func (f *fakeMetric) Shutdown(context.Context) error { f.shutdown = true; return f.shutErr }
 
 type fakeLog struct {
 	got      []biz.Outcome
 	fail     bool
+	shutErr  error
 	shutdown bool
 }
 
@@ -44,7 +46,7 @@ func (f *fakeLog) emit(_ context.Context, batch []biz.Outcome) error {
 	f.got = append(f.got, batch...)
 	return nil
 }
-func (f *fakeLog) Shutdown(context.Context) error { f.shutdown = true; return nil }
+func (f *fakeLog) Shutdown(context.Context) error { f.shutdown = true; return f.shutErr }
 
 func vc() biz.ValueContext {
 	return biz.ValueContext{
@@ -188,5 +190,44 @@ func TestExporterSurfacesFailuresAndShutdown(t *testing.T) {
 	}
 	if !fm.shutdown || !fl.shutdown {
 		t.Fatal("Shutdown must close both exporters")
+	}
+}
+
+// A shutdown failure on either leg must surface, and when both legs fail
+// neither error may be masked — a swallowed log-leg flush error can hide
+// dropped outcome data.
+func TestShutdownJoinsBothErrors(t *testing.T) {
+	mFail := errors.New("metric backend down")
+	lFail := errors.New("log backend down")
+	cases := []struct {
+		name       string
+		fm         *fakeMetric
+		fl         *fakeLog
+		wantMetric bool
+		wantEvent  bool
+		wantCloseM bool
+		wantCloseL bool
+	}{
+		{"both fail", &fakeMetric{shutErr: mFail}, &fakeLog{shutErr: lFail}, true, true, true, true},
+		{"metric only", &fakeMetric{shutErr: mFail}, &fakeLog{}, true, false, true, true},
+		{"event only", &fakeMetric{}, &fakeLog{shutErr: lFail}, false, true, true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newWith(c.fm, c.fl)
+			err := e.Shutdown(context.Background())
+			if err == nil {
+				t.Fatal("Shutdown must surface a leg failure")
+			}
+			if errors.Is(err, mFail) != c.wantMetric {
+				t.Fatalf("metric error surfaced=%v, want %v (err=%v)", errors.Is(err, mFail), c.wantMetric, err)
+			}
+			if errors.Is(err, lFail) != c.wantEvent {
+				t.Fatalf("event error surfaced=%v, want %v (err=%v)", errors.Is(err, lFail), c.wantEvent, err)
+			}
+			if c.fm.shutdown != c.wantCloseM || c.fl.shutdown != c.wantCloseL {
+				t.Fatal("both legs must be closed even when one fails")
+			}
+		})
 	}
 }
