@@ -18,8 +18,12 @@ cannot afford.
 - **Expected count** for a given hour = robust median of the same
   hour-of-week over the registry's lookback (default 8 weeks), with
   holidays excluded per the registry's holiday calendar.
-- **Interval** = MAD-based (median absolute deviation, scaled), reported
-  always; the unrealized leg is a range or it is nothing.
+- **Interval** = expected ± **2 × 1.4826 × MAD** (median absolute
+  deviation of the same hour-of-week samples; 1.4826 is the normal
+  consistency factor, 2 gives an ≈95% band under normality). Both constants
+  are part of the contract — two conforming implementations must produce
+  the same range. Reported always; the unrealized leg is a range or it is
+  nothing.
 - **Recovery** = the registry's `recovered_fraction` applied linearly
   within the `within` window (usage-loss-curve prior art, telecom).
 - The whole thing sits behind a `Baseline` interface. A smarter
@@ -37,5 +41,8 @@ cannot afford.
 - Known blind spots, accepted for v0: trend growth within the lookback,
   holiday-of-year effects, and flows younger than the lookback (the report
   flags a retention gap rather than degrading silently).
-- Accuracy target from the build plan: <5% error outside incident windows
-  on the synthetic harness curve — measured in M7 before the leg ships.
+- Accuracy target, self-contained here: **median absolute percentage error
+  < 5%** of hourly expected vs actual stage-entry counts, computed over all
+  non-incident, non-holiday hours of a 4-week synthetic evaluation window
+  on the harness's known traffic curve — measured in M7 before the leg
+  ships.

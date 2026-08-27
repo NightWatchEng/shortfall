@@ -25,9 +25,29 @@ API has been stable for some time; the SDK has not reached 1.0.
   `adapters/export/otlp`** (a nested module), never imported by core
   packages. If the pre-1.0 sdk/log API shifts, the churn is contained in one
   adapter and cannot ripple through `emit` or `engine`.
-- The fallback path is a `log/slog` handler emitting the same JSON event
-  shape (proposal 4.4) for shops without OTLP; any log pipeline that can
-  ship JSON lines becomes an event sink.
+- The **canonical event shape** is defined here, not by external reference —
+  both transports emit exactly these fields (JSON on the slog path,
+  equivalent attributes on the OTLP path):
+
+  ```json
+  { "event":"biz.outcome", "flow":"invoice.pay", "stage":"capture",
+    "outcome":"failed", "entity_id":"inv_8Ka…", "customer_id":"h:3f9…",
+    "amount_minor":14900, "currency":"USD", "kind":"fee", "est":false,
+    "deadline":"2026-08-27T14:32:00Z", "trace_id":"…", "source":"stripe:webhook" }
+  ```
+
+  The fallback path is a `log/slog` handler emitting this shape for shops
+  without OTLP; any log pipeline that can ship JSON lines becomes an event
+  sink. A conformance test in `testkit` asserts both transports produce the
+  same fields from the same Outcome.
+- **Export failure semantics** (review charter item 6 made contract):
+  `Record` never blocks the business request path. Events buffer in a
+  bounded in-memory queue (default 10k, configurable); on overflow, encode
+  failure, or terminal export failure the event is **dropped and
+  `biz_dropped_events_total{reason}` increments** (`reason` ∈ `overflow`,
+  `encode`, `export`). A silent drop is a defect; a visible drop is a
+  coverage-ratio conversation. The nightly reconciliation leg exists to
+  catch exactly the residue this counter admits to.
 - `emit` speaks only the `Exporter` interface; transport choice is
   configuration, not code.
 

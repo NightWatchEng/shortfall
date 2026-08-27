@@ -24,9 +24,9 @@ Five fixed buckets, identical for every flow and every deployment:
 | `30m-2h` | typical SLA breach territory |
 | `gt2h` | almost certainly converting to loss |
 
-- Bucket boundaries align with typical payment-SLA breakpoints (the sample
-  registry's capture SLA is PT30M) and are chosen for pager legibility, not
-  statistical elegance.
+- Bucket boundaries align with typical payment-SLA breakpoints — e.g. a
+  30-minute capture SLA, the shape the M2 reference registry will use —
+  and are chosen for pager legibility, not statistical elegance.
 - SLA evaluation itself uses the **exact** per-message deadline from the
   registry — buckets are for the gauge and the pager, never for breach
   math.
