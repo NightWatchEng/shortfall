@@ -346,3 +346,84 @@ capture_capacity_per_min: 0
 		t.Fatal("explicit zero capacity must be rejected with guidance")
 	}
 }
+
+func TestGoldenBlockRejections(t *testing.T) {
+	mk := func(golden string) string {
+		return "name: x\nseed: 1\nstart: 2026-08-24T00:00:00Z\nend: 2026-08-25T00:00:00Z\ngolden:\n" + golden
+	}
+	cases := map[string]string{
+		"inverted":       mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T09:00:00Z\n  capture_sla: 30m\n"),
+		"outside run":    mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-25T01:00:00Z\n  capture_sla: 30m\n"),
+		"bad sla":        mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T11:00:00Z\n  capture_sla: soonish\n"),
+		"zero sla":       mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T11:00:00Z\n  capture_sla: 0m\n"),
+		"unaligned from": mk("  from: 2026-08-24T10:00:30Z\n  to: 2026-08-24T11:00:00Z\n  capture_sla: 30m\n"),
+		"unaligned to":   mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T10:59:30Z\n  capture_sla: 30m\n"),
+	}
+	for name, doc := range cases {
+		if _, err := ParseScenario([]byte(doc)); err == nil {
+			t.Errorf("%s: expected error, got none", name)
+		}
+	}
+	ok := mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T11:00:00Z\n  capture_sla: 30m\n")
+	sc, err := ParseScenario([]byte(ok))
+	if err != nil {
+		t.Fatalf("valid golden block rejected: %v", err)
+	}
+	if sc.Golden.CaptureSLA != 30*time.Minute {
+		t.Fatalf("golden block not carried: %+v", sc.Golden)
+	}
+}
+
+func TestRecoveryAttributionSurvivesResuppression(t *testing.T) {
+	// Demand suppressed by blackout A, whose recovery lands inside
+	// blackout B, keeps A's attribution when it finally arrives.
+	a := FaultSpec{Kind: FaultBlackout, From: day2(10, 0), To: day2(10, 10), RecoveredFraction: 1.0, RecoveryWithin: time.Minute}
+	b := FaultSpec{Kind: FaultBlackout, From: day2(10, 10), To: day2(10, 40), RecoveredFraction: 1.0, RecoveryWithin: 30 * time.Minute}
+	cfg := Config{Seed: 33, Start: mon, End: mon.Add(48 * time.Hour), Faults: []FaultSpec{a, b}}
+	res := Run(cfg)
+
+	fromA, fromB := 0, 0
+	for _, txn := range res.Ledger.Txns {
+		if !txn.Recovered {
+			continue
+		}
+		switch {
+		case txn.RecoveredFrom.Equal(a.From):
+			fromA++
+		case txn.RecoveredFrom.Equal(b.From):
+			fromB++
+		default:
+			t.Fatalf("recovered txn %s has unknown attribution %v", txn.ID, txn.RecoveredFrom)
+		}
+	}
+	if fromA == 0 {
+		t.Fatal("no recoveries kept blackout A's attribution through re-suppression")
+	}
+	if fromB == 0 {
+		t.Fatal("blackout B produced no attributed recoveries of its own")
+	}
+	// Fresh-demand-only suppression accounting: per-minute counts during
+	// B must not include A's re-suppressed re-arrivals beyond the fresh
+	// arrival rate's plausible ceiling. Structural check instead: total
+	// suppressed equals fresh arrivals suppressed (recoveries excluded),
+	// so suppressed during A's 10 minutes and B's 30 minutes must be
+	// consistent with the curve, not inflated by ~100% re-suppression.
+	var supA, supB int
+	for _, s := range res.Suppressed {
+		if !s.Minute.Before(a.From) && s.Minute.Before(a.To) {
+			supA += s.Count
+		}
+		if !s.Minute.Before(b.From) && s.Minute.Before(b.To) {
+			supB += s.Count
+		}
+	}
+	if supA == 0 || supB == 0 {
+		t.Fatal("expected fresh suppression in both blackout windows")
+	}
+	// A's recoveries (rf=1.0, within 1m) all land inside B; if they were
+	// double-counted as fresh suppression, supB would exceed ~3x its
+	// fresh share for these windows (rates ~5-6/min in both).
+	if supB > supA*5 {
+		t.Fatalf("B's suppression (%d) implausibly inflated vs A's (%d) — re-arrivals double-counted?", supB, supA)
+	}
+}

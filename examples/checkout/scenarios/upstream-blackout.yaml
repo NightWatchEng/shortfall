@@ -11,3 +11,7 @@ faults:
     to: 2026-08-25T12:00:00Z
     recovered_fraction: 0.6
     recovery_within: 2h
+golden:
+  from: 2026-08-25T11:20:00Z
+  to: 2026-08-25T12:00:00Z
+  capture_sla: 30m
