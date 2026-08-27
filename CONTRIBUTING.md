@@ -28,8 +28,9 @@ in-flight bucketing, engine `Compute`, baseline fit) carry Go benchmarks.
   statistics, local precision runs want the Go defaults).
 - CI's advisory `benchmarks` job compares PR vs main with `benchstat` and
   writes the delta to the job summary. It reports "0 benchmarks" honestly
-  until the first one lands. A regression on a hot path needs a stated
-  reason in the PR body; the job ratchets toward required as baselines
+  until the first one lands. A regression on a hot path should carry a
+  stated reason in the PR body — a review convention, not a mechanical
+  gate, since the job is advisory; it ratchets toward required as baselines
   stabilize.
 
 ## Commits

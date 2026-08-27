@@ -93,16 +93,38 @@ jobs:
           ./scripts/ci-bench.sh run /tmp/bench-base.txt
           rc=$?
           set -e
-          # New benchmarks with no baseline on main: nothing to compare yet.
-          [ "$rc" = 3 ] && : > /tmp/bench-base.txt
           git checkout -f -
+          # rc 3 = base has no benchmarks yet (new benchmarks in this PR):
+          # compare against an empty baseline. Anything else non-zero is a
+          # real failure and MUST fail this step — a swallowed rc here would
+          # publish garbage as a "main vs PR" comparison.
+          if [ "$rc" = 3 ]; then
+            : > /tmp/bench-base.txt
+          elif [ "$rc" != 0 ]; then
+            echo "baseline bench failed (rc=$rc)"; exit "$rc"
+          fi
       - name: benchstat delta -> job summary
         if: steps.head.outputs.none != 'true'
         run: |
+          CNT="$(./scripts/ci-bench.sh count)"
+          set +e
           go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260825160852-19be9d8e6c70 \
-            /tmp/bench-base.txt /tmp/bench-head.txt | tee /tmp/benchstat.txt || true
+            /tmp/bench-base.txt /tmp/bench-head.txt > /tmp/benchstat.txt 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" != 0 ]; then
+            # An honest failure beats a heading over an empty block that
+            # reads as "no delta".
+            {
+              echo "### benchstat FAILED (rc=$rc) — no comparison available"
+              echo '```'
+              cat /tmp/benchstat.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$rc"
+          fi
           {
-            echo "### benchstat: main vs PR"
+            echo "### benchstat: main vs PR ($CNT benchmarks)"
             echo '```'
             cat /tmp/benchstat.txt
             echo '```'
