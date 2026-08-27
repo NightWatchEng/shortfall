@@ -55,16 +55,28 @@ type Result struct {
 
 var baseTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
-// sampleMetrics builds a fixed batch of metric points across the counter
-// and gauge families, each stamped with its own time.
+// sampleMetrics builds a fixed batch of metric points, each on a DISTINCT
+// series (a unique currency label per point), stamped with its own time.
+//
+// Distinct series is load-bearing: an AGGREGATING backend (Prometheus,
+// StatsD, a remote-write buffer) collapses points that share a label set
+// into one series, so feeding n identical-label points would leave one
+// series and make "delivered == n" untestable. n distinct series in must
+// mean n series out — that invariant holds for a preserving exporter (OTLP,
+// n data points) and an aggregating one alike, and a dropped point shows up
+// as a missing series either way.
 func sampleMetrics(n int) []emit.MetricPoint {
+	currencies := []string{"USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "SEK", "NZD", "NOK", "DKK", "SGD"}
 	out := make([]emit.MetricPoint, 0, n)
 	for i := 0; i < n; i++ {
 		out = append(out, emit.MetricPoint{
-			Name:   "biz_value_total",
-			Labels: map[string]string{"flow": "invoice.pay", "stage": "capture"},
-			Value:  int64(100 + i),
-			At:     baseTime.Add(time.Duration(i) * time.Second),
+			Name: "biz_value_total",
+			Labels: map[string]string{
+				"flow": "invoice.pay", "stage": "capture", "outcome": "failed",
+				"currency": currencies[i%len(currencies)], "kind": "fee", "segment": "smb",
+			},
+			Value: int64(100 + i),
+			At:    baseTime.Add(time.Duration(i) * time.Second),
 		})
 	}
 	return out
