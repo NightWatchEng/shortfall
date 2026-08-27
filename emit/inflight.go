@@ -1,6 +1,7 @@
 package emit
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
@@ -8,9 +9,9 @@ import (
 )
 
 // AgeBucketFor maps a message age onto the fixed ADR-0005 buckets.
-// Boundaries are half-open on the left: exactly 1m is 1m-5m, exactly 2h
-// is gt2h. Negative ages (producer/consumer clock skew) clamp to the
-// youngest bucket — skew must never invent old backlog.
+// Intervals are left-closed, right-open — [1m, 5m): exactly 1m is 1m-5m,
+// exactly 2h is gt2h. Negative ages (producer/consumer clock skew) clamp
+// to the youngest bucket — skew must never invent old backlog.
 func AgeBucketFor(age time.Duration) string {
 	switch {
 	case age < time.Minute:
@@ -35,17 +36,29 @@ func AgeBucketFor(age time.Duration) string {
 // Age semantics: measured from the FIRST enqueue timestamp — a retry
 // re-Track of the same id never makes the backlog look younger.
 type InFlightTracker struct {
-	em    Emitter
-	clock func() time.Time
+	em     Emitter
+	clock  func() time.Time
+	logger *slog.Logger
 
 	mu    sync.Mutex
 	items map[inflightKey]inflightItem
 	// combos we have published non-zero values for and must zero once
 	// when they empty, so a stalled dashboard never shows stale levels.
-	live     map[comboKey]struct{}
-	maxItems int
-	overflow int64
+	live map[comboKey]struct{}
+	// canonical exponent per currency, pinned on first sight: a second
+	// exponent for the same currency would silently flap one gauge
+	// series between incomparable sums (a confirmed finding).
+	exponents map[string]int8
+	maxItems  int
+	overflow  int64 // Track CALLS the bound rejected (retries count each)
+	rejected  int64 // Track calls rejected for invalid/mismatched money
 
+	// publishMu serializes snapshot AND emission: without it an older
+	// snapshot can be emitted after a newer one and win under the
+	// order-by-At contract (a confirmed finding).
+	publishMu sync.Mutex
+
+	started  bool
 	stop     chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
@@ -72,38 +85,72 @@ func WithTrackerClock(now func() time.Time) TrackerOption {
 }
 
 // WithTrackerMaxItems bounds the tracked set (default 1<<20). Beyond the
-// bound, Track calls are dropped and counted — the published value is
-// then an UNDERSTATEMENT and Overflowed() says by how many messages.
+// bound, Track calls are dropped, logged, and counted — the published
+// value is then an UNDERSTATEMENT and Overflowed() reports the rejected
+// Track CALLS (a retried message counts once per attempt). Values below
+// 1 are replaced by the default, loudly. Memory note: Go maps retain
+// their high-water bucket memory, so this bound is also the worst-case
+// resident footprint after an incident-sized backlog drains.
 func WithTrackerMaxItems(n int) TrackerOption {
 	return func(t *InFlightTracker) { t.maxItems = n }
+}
+
+// WithTrackerLogger sets the warning logger for rejected and overflowed
+// tracks (default slog.Default) — drops are loud here like everywhere
+// else in this package.
+func WithTrackerLogger(l *slog.Logger) TrackerOption {
+	return func(t *InFlightTracker) { t.logger = l }
 }
 
 // NewInFlightTracker builds a tracker publishing through em.
 func NewInFlightTracker(em Emitter, opts ...TrackerOption) *InFlightTracker {
 	t := &InFlightTracker{
-		em:       em,
-		clock:    time.Now,
-		items:    map[inflightKey]inflightItem{},
-		live:     map[comboKey]struct{}{},
-		maxItems: 1 << 20,
-		stop:     make(chan struct{}),
+		em:        em,
+		clock:     time.Now,
+		logger:    slog.Default(),
+		items:     map[inflightKey]inflightItem{},
+		live:      map[comboKey]struct{}{},
+		exponents: map[string]int8{},
+		maxItems:  1 << 20,
+		stop:      make(chan struct{}),
 	}
 	for _, o := range opts {
 		o(t)
+	}
+	if t.maxItems < 1 {
+		t.logger.Warn("emit: tracker max items below 1; using the default", "requested", t.maxItems)
+		t.maxItems = 1 << 20
 	}
 	return t
 }
 
 // Track records a message entering a stage. Re-tracking an id keeps the
-// ORIGINAL enqueue time (retries do not rejuvenate backlog) and updates
+// OLDEST enqueue time seen (retries never rejuvenate backlog; an earlier
+// timestamp on a retrack is adopted as better information) and updates
 // the money (amounts should not change; last write wins if they do).
+// Rejections are loud: invalid money and a currency re-tracked under a
+// different exponent are logged and counted (Rejected()).
 func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueuedAt time.Time) {
-	if money.Validate() != nil {
-		return // the emitter would reject it too; nothing to track
+	if err := money.Validate(); err != nil {
+		t.logger.Warn("emit: tracker rejected invalid money — dropped and counted", "error", err)
+		t.mu.Lock()
+		t.rejected++
+		t.mu.Unlock()
+		return
 	}
 	k := inflightKey{flow, stage, id}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if pinned, ok := t.exponents[money.Currency]; ok {
+		if pinned != money.Exponent {
+			t.rejected++
+			t.logger.Warn("emit: tracker rejected mismatched currency exponent — one series must never flap between incomparable sums",
+				"currency", money.Currency, "pinned", pinned, "got", money.Exponent)
+			return
+		}
+	} else {
+		t.exponents[money.Currency] = money.Exponent
+	}
 	if prev, ok := t.items[k]; ok {
 		if prev.enqueuedAt.Before(enqueuedAt) {
 			enqueuedAt = prev.enqueuedAt
@@ -126,7 +173,7 @@ func (t *InFlightTracker) Done(flow, stage, id string) {
 	t.mu.Unlock()
 }
 
-// Overflowed returns how many Track calls the bound rejected since the
+// Overflowed returns how many Track CALLS the bound rejected since the
 // tracker was built: nonzero means the published gauge UNDERSTATES the
 // true in-flight value.
 func (t *InFlightTracker) Overflowed() int64 {
@@ -135,12 +182,26 @@ func (t *InFlightTracker) Overflowed() int64 {
 	return t.overflow
 }
 
+// Rejected returns how many Track calls were refused for invalid money
+// or a mismatched currency exponent.
+func (t *InFlightTracker) Rejected() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.rejected
+}
+
 // Publish computes the current per-(flow, stage, bucket, currency) sums
 // and pushes every bucket of every live combo — including zeroes, so a
 // bucket that empties reads 0 instead of holding its last level. A combo
 // with no items is zeroed one final time and then retired from
 // publishing (no forever-zero churn).
 func (t *InFlightTracker) Publish() {
+	// One publisher at a time, snapshot through emission: overlapping
+	// publishers could otherwise emit an older snapshot with newer At
+	// stamps, and the stale level would win under order-by-At.
+	t.publishMu.Lock()
+	defer t.publishMu.Unlock()
+
 	now := t.clock()
 
 	type comboBuckets map[string]int64 // bucket -> minor units
@@ -172,11 +233,14 @@ func (t *InFlightTracker) Publish() {
 	for _, ck := range toRetire {
 		delete(t.live, ck)
 	}
-	if t.overflow > 0 {
-		// Understated value is only acceptable when visible.
-		t.overflowWarnLocked()
-	}
+	overflowed := t.overflow
 	t.mu.Unlock()
+	if overflowed > 0 {
+		// Understated value is only acceptable when visible: say so on
+		// every publish cycle while the condition persists.
+		t.logger.Warn("emit: tracker over capacity — published in-flight value is an UNDERSTATEMENT",
+			"rejected_track_calls", overflowed)
+	}
 
 	for _, ck := range toPublish {
 		cb := sums[ck] // nil for retiring combos: every bucket zero
@@ -189,14 +253,22 @@ func (t *InFlightTracker) Publish() {
 	}
 }
 
-func (t *InFlightTracker) overflowWarnLocked() {
-	// The emitter owns logging policy; the tracker's contract is the
-	// Overflowed() accessor. This hook exists so a future logger option
-	// has one place to land; today the counter is the interface.
-}
-
-// Start runs Publish on the given cadence until Close.
+// Start runs Publish on the given cadence until Close. A non-positive
+// interval is refused loudly (no silent no-op ticker, no goroutine
+// panic), and a second Start is a no-op — one publish loop per tracker.
 func (t *InFlightTracker) Start(interval time.Duration) {
+	if interval <= 0 {
+		t.logger.Warn("emit: tracker Start refused non-positive interval — call Publish yourself or pass a real cadence", "interval", interval)
+		return
+	}
+	t.mu.Lock()
+	if t.started {
+		t.mu.Unlock()
+		t.logger.Warn("emit: tracker Start called twice; keeping the first loop")
+		return
+	}
+	t.started = true
+	t.mu.Unlock()
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()

@@ -272,3 +272,107 @@ func TestTrackerPreservesCurrencyExponent(t *testing.T) {
 	}
 	t.Fatal("JPY gauge not published")
 }
+
+func TestTrackerRejectionsAreLoud(t *testing.T) {
+	tr, _, _, clk := newTrackerHarness(t)
+	cases := []struct {
+		name  string
+		money biz.Money
+	}{
+		{"invalid money", biz.Money{Amount: -5, Currency: "USD", Exponent: 2}},
+		{"mismatched exponent", biz.Money{Amount: 100, Currency: "USD", Exponent: 0}},
+	}
+	tr.Track("invoice.pay", "capture", "pin", usd(1), clk.now) // pins USD at exponent 2
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			before := tr.Rejected()
+			tr.Track("invoice.pay", "capture", "x-"+c.name, c.money, clk.now)
+			if tr.Rejected() != before+1 {
+				t.Fatalf("rejection not counted for %s", c.name)
+			}
+		})
+	}
+}
+
+func TestTrackerRetireThenReappear(t *testing.T) {
+	tr, em, exp, clk := newTrackerHarness(t)
+	tr.Track("invoice.pay", "capture", "m1", usd(100), clk.now)
+	tr.Publish()
+	tr.Done("invoice.pay", "capture", "m1")
+	tr.Publish() // zero + retire
+	exp.mu.Lock()
+	exp.metrics = nil
+	exp.mu.Unlock()
+	tr.Track("invoice.pay", "capture", "m2", usd(700), clk.now)
+	tr.Publish()
+	got := gaugeTotals(t, exp, em)
+	if got["invoice.pay|capture|"+AgeLt1m+"|USD"] != 700 {
+		t.Fatalf("retired combo did not resume publishing: %v", got)
+	}
+}
+
+func TestTrackerCurrencyChangeRetiresOldCombo(t *testing.T) {
+	tr, em, exp, clk := newTrackerHarness(t)
+	tr.Track("invoice.pay", "capture", "m1", usd(100), clk.now)
+	tr.Publish()
+	// The message is re-tracked under a different currency (caller data
+	// fix): the USD combo must zero out, JPY must appear.
+	tr.Track("invoice.pay", "capture", "m1", biz.Money{Amount: 9000, Currency: "JPY", Exponent: 0}, clk.now)
+	tr.Publish()
+	got := gaugeTotals(t, exp, em)
+	if got["invoice.pay|capture|"+AgeLt1m+"|USD"] != 0 {
+		t.Fatalf("vacated USD combo not zeroed: %v", got)
+	}
+	if got["invoice.pay|capture|"+AgeLt1m+"|JPY"] != 9000 {
+		t.Fatalf("JPY combo missing: %v", got)
+	}
+}
+
+func TestTrackerStartCloseLifecycle(t *testing.T) {
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp, WithFlushInterval(2*time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+	tr := NewInFlightTracker(em)
+	tr.Start(0)                    // refused loudly, must not panic or spin
+	tr.Start(2 * time.Millisecond) // real loop
+	tr.Start(2 * time.Millisecond) // second Start: no-op
+	tr.Track("invoice.pay", "capture", "m1", usd(123), time.Now())
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		metrics, _ := exp.snapshot()
+		for _, p := range metrics {
+			if p.Name == "biz_inflight_value" && p.Value == 123 {
+				tr.Close()
+				tr.Close() // idempotent
+				return
+			}
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("publish loop never delivered")
+}
+
+func TestTrackerMaxItemsFloor(t *testing.T) {
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp, WithFlushInterval(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+	cases := []struct {
+		name string
+		n    int
+	}{{"zero", 0}, {"negative", -5}}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tr := NewInFlightTracker(em, WithTrackerMaxItems(c.n))
+			tr.Track("invoice.pay", "capture", "m1", usd(1), time.Now())
+			if tr.Overflowed() != 0 {
+				t.Fatal("a nonsense bound silently disabled tracking — must fall back to the default loudly")
+			}
+		})
+	}
+}
