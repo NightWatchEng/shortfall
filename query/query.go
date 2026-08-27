@@ -1,8 +1,9 @@
 // Package query defines the only questions the engine may ask a backend:
-// sum, count, group-by, and time range over metrics, and filter plus
-// group-by over events. Query adapters translate this AST; nothing
-// vendor-specific crosses it. If an engine change appears to need a new
-// Querier method, that is a design smell to raise, not a method to add.
+// sum, count, group-by, and time range over metrics, and filter, group-by,
+// order and distinct-count over events. Query adapters translate this
+// AST; nothing vendor-specific crosses it. If an engine change appears to
+// need a new Querier method, that is a design smell to raise, not a
+// method to add.
 //
 // FROZEN SURFACE (v0.1.0).
 package query
@@ -29,6 +30,17 @@ type TimeRange struct {
 
 // Query asks for an aggregated metric over a range. Filters and GroupBy
 // name ADR-0004 labels only.
+//
+// Temporal semantics every adapter MUST implement identically — two
+// conforming adapters returning different numbers for the same Query is
+// cross-backend drift in the numbers Finance reads:
+//   - Counter families: each returned Point is the INCREASE within its
+//     step interval (PromQL: sum(increase(m[step]))); never a cumulative
+//     sample.
+//   - Gauge families: each Point is the last observed level at its step
+//     boundary.
+//   - Step == 0 means one bucket spanning the whole Range (a single
+//     Point per series).
 type Query struct {
 	Metric  string
 	Agg     Agg
@@ -38,11 +50,45 @@ type Query struct {
 	Step    time.Duration
 }
 
-// EventQuery asks for grouped outcome events.
+// EventAgg selects what an event query computes.
+type EventAgg string
+
+const (
+	// EventAggGroups returns one EventGroup per distinct key (the
+	// default, zero value).
+	EventAggGroups EventAgg = ""
+	// EventAggDistinctCount returns a single EventGroup whose Count is
+	// the number of distinct GroupBy key combinations — the customers
+	// leg's distinct count without an unbounded fetch (SQL
+	// COUNT(DISTINCT), CW Insights count_distinct, SPL dc()).
+	EventAggDistinctCount EventAgg = "distinct_count"
+)
+
+// EventOrder fixes which groups a Limit keeps. Limit without an order
+// would mean a DIFFERENT arbitrary N per backend.
+type EventOrder string
+
+const (
+	// OrderNone: no ordering contract; Limit MUST be 0.
+	OrderNone EventOrder = ""
+	// OrderSumDesc: groups ordered by SumMinor descending (top accounts
+	// by value).
+	OrderSumDesc EventOrder = "sum_desc"
+	// OrderCountDesc: groups ordered by Count descending.
+	OrderCountDesc EventOrder = "count_desc"
+)
+
+// EventQuery asks for grouped outcome events. Money invariant: when Agg
+// is EventAggGroups and sums will be read, "currency" MUST be in GroupBy
+// or pinned by Filters — adapters MUST reject a sum that would cross
+// currencies (ADR-0001 forbids silent normalization, and five adapter
+// authors deciding independently is how it would happen).
 type EventQuery struct {
 	Filters map[string]string
 	GroupBy []string
 	Range   TimeRange
+	Agg     EventAgg
+	OrderBy EventOrder
 	Limit   int
 }
 
@@ -64,25 +110,37 @@ type SeriesSlice struct {
 type Series []SeriesSlice
 
 // EventGroup is one group of outcome events: the group key, how many, and
-// their exact minor-unit sum.
+// their exact minor-unit sum. SumMinor is meaningful only under the
+// EventQuery currency invariant above.
 type EventGroup struct {
 	Key      map[string]string
 	Count    int64
 	SumMinor int64
 }
 
-// EventGroups is an event query result.
+// EventGroups is an event query result, in the EventQuery's OrderBy
+// order (unspecified order when OrderNone).
 type EventGroups []EventGroup
 
-// Caps mirrors emit.Caps on the read side.
+// Caps declares what a backend can honestly serve. Metrics and events
+// are independent capabilities (Loki-style log stores serve events but
+// no metric TSDB; Prometheus serves metrics but no events), and their
+// retentions routinely differ — the baseline leg reads
+// MetricHistoryWeeks, the customers leg reads EventHistoryWeeks.
+// emit.Caps is the write-side mirror of this shape — amend BOTH together
+// (a parity test in each package pins the tie).
 type Caps struct {
-	Events       bool
-	HistoryWeeks int
+	Metrics            bool
+	Events             bool
+	MetricHistoryWeeks int
+	EventHistoryWeeks  int
 }
 
-// ErrUnsupported is returned by QueryEvents on metrics-only backends. The
-// engine turns it into an honest NotAvailable, never a silent zero.
-var ErrUnsupported = errors.New("query: events are not supported by this backend")
+// ErrUnsupported is returned by EITHER verb a backend cannot serve:
+// QueryEvents on a metrics-only backend, QueryMetric on an events-only
+// one. The engine MUST turn it into an honest NotAvailable, never a
+// silent zero.
+var ErrUnsupported = errors.New("query: this signal kind is not supported by this backend")
 
 // Querier is the whole read boundary.
 type Querier interface {

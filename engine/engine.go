@@ -13,6 +13,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/NightWatchEng/shortfall/query"
 	"github.com/NightWatchEng/shortfall/registry"
@@ -20,7 +21,11 @@ import (
 
 // Scope narrows a report to part of the system, expressed as ADR-0004
 // label filters (e.g. {"stage": "capture"}) — never backend-specific
-// selectors.
+// selectors. DELIBERATE LIMIT, decided at the freeze: deployment axes
+// (region, cluster, environment) are NOT biz.* labels and cannot be
+// scoped here — a per-region deployment points Compute at that region's
+// Querier instead. Widening the label universe is an ADR-0004 amendment,
+// not a Scope key.
 type Scope map[string]string
 
 // Request is the whole question: which window, which slice, which flows.
@@ -51,10 +56,14 @@ type Leg struct {
 }
 
 // DeferredLeg is in-flight value at the window's snapshot instant, with
-// the age structure and SLA arithmetic the pager cares about.
+// the age structure and SLA arithmetic the pager cares about. Every
+// money map is per-currency: minor units are not summable across
+// currencies (ADR-0001), and the source gauge carries a currency label,
+// so collapsing it here would destroy information the report cannot
+// recover.
 type DeferredLeg struct {
 	Leg
-	ByAgeBucket        map[string]int64 // ADR-0005 buckets -> minor units
+	ByAgeBucket        map[string]map[string]int64 // ADR-0005 bucket -> currency -> minor units
 	SLABreaches        int64
 	OldestAgeMinutes   int64
 	ProjectedLostMinor map[string]int64 // per currency, per registry on_breach
@@ -96,15 +105,21 @@ type CoverageLeg struct {
 	Unavailable string   // reason, when no reconciliation has run
 }
 
-// Report is the four legs plus trust and a severity suggestion.
+// Report is the four legs plus trust, a severity suggestion, and the
+// provenance a postmortem needs: when it was computed and against which
+// co-signed registry — two reports for the same window that disagree
+// must be explainable.
 type Report struct {
-	Request    Request
-	Realized   Leg
-	Deferred   DeferredLeg
-	Unrealized EstLeg
-	Customers  CustomersLeg
-	Coverage   CoverageLeg
-	Severity   string
+	Request         Request
+	GeneratedAt     time.Time
+	RegistryVersion int
+	LibraryVersion  string
+	Realized        Leg
+	Deferred        DeferredLeg
+	Unrealized      EstLeg
+	Customers       CustomersLeg
+	Coverage        CoverageLeg
+	Severity        string
 }
 
 // ErrNotImplemented marks legs whose milestone has not landed. Compute
