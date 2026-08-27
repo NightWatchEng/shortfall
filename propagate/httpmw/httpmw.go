@@ -104,7 +104,6 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 	for _, o := range opts {
 		o(&cfg)
 	}
-	_ = reg // reserved for the estimator hook (the sibling M3 step)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -128,6 +127,7 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 				}
 				if cfg.ingress != nil {
 					if vc, stamp := cfg.ingress(r); stamp {
+						vc = estimate(reg, vc)
 						if err := vc.Validate(); err != nil {
 							cfg.logger.Warn("httpmw: ingress stamp rejected — the hook's output must satisfy the same fences as the wire", "error", err)
 						} else if stamped, err := biz.WithValueContext(ctx, vc); err != nil {
@@ -141,6 +141,29 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// estimate fills an ingress stamp's UNKNOWN amount from the registry's
+// entry-point estimator (proposal 4.2): when the hook knows the flow,
+// segment, and currency but not the amount (e.g. GET /cart leaves Amount
+// 0), the registry's default or by-segment value is stamped with
+// Estimated=true so the engine reports it as estimate, never realized. A
+// known amount, an already-estimated context, or a flow without an
+// estimator is returned unchanged. Currency and exponent stay as the
+// hook set them — the estimator supplies minor units only.
+func estimate(reg *registry.Registry, vc biz.ValueContext) biz.ValueContext {
+	if vc.Money.Amount != 0 || vc.Estimated || reg == nil {
+		return vc
+	}
+	f, ok := reg.Flow(vc.Flow)
+	if !ok {
+		return vc
+	}
+	if est, ok := f.EstimateMinor(vc.Segment); ok {
+		vc.Money.Amount = est
+		vc.Estimated = true
+	}
+	return vc
 }
 
 // Transport is the client-side egress fence. It implements

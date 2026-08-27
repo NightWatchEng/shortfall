@@ -423,3 +423,79 @@ func TestRedirectAcrossTrustBoundaryStrips(t *testing.T) {
 		}
 	}
 }
+
+func TestIngressEstimatorStampsUnknownAmounts(t *testing.T) {
+	// The reference registry: default_minor 18750, by_segment smb 14200,
+	// enterprise 91000. A hook that knows the flow/segment/currency but
+	// not the amount (GET /cart) leaves Amount 0; the estimator fills it
+	// and marks it estimated so the engine never reports it as realized.
+	cases := []struct {
+		name       string
+		segment    string
+		flow       string
+		inAmount   int64
+		wantAmount int64
+		wantEst    bool
+	}{
+		{"unknown amount, known segment", "enterprise", "invoice.pay", 0, 91000, true},
+		{"unknown amount, default segment", "smb", "invoice.pay", 0, 14200, true},
+		{"unknown amount, segment absent from by_segment falls to default", "enterprise", "invoice.pay", 0, 91000, true},
+		{"known amount is left untouched", "smb", "invoice.pay", 500, 500, false},
+		{"unregistered flow: no estimator, amount stays 0", "smb", "mystery.flow", 0, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hook := func(r *http.Request) (biz.ValueContext, bool) {
+				return biz.ValueContext{
+					Flow:       c.flow,
+					EntityID:   "cart_1",
+					CustomerID: "h:c",
+					Segment:    c.segment,
+					Money:      biz.Money{Amount: c.inAmount, Currency: "USD", Exponent: 2},
+					Kind:       biz.KindFee,
+				}, true
+			}
+			h := &captureHandler{}
+			mw := Middleware(testRegistry(t), WithIngress(hook))(h)
+			req := httptest.NewRequest(http.MethodGet, "/cart", nil)
+			mw.ServeHTTP(httptest.NewRecorder(), req)
+
+			if c.wantAmount == 0 && c.flow == "mystery.flow" {
+				// unregistered flow with amount 0: Money.Validate accepts
+				// zero, so it still propagates — just not estimated.
+			}
+			if !h.ok {
+				t.Fatalf("stamp did not reach downstream")
+			}
+			if h.vc.Money.Amount != c.wantAmount {
+				t.Fatalf("amount = %d, want %d", h.vc.Money.Amount, c.wantAmount)
+			}
+			if h.vc.Estimated != c.wantEst {
+				t.Fatalf("estimated = %v, want %v", h.vc.Estimated, c.wantEst)
+			}
+		})
+	}
+}
+
+func TestEstimatorDoesNotOverrideWireContext(t *testing.T) {
+	// A valid biz.vc on the wire wins; the estimator only ever fires on
+	// the ingress-stamp path.
+	wire := vcFixture()
+	wire.Money.Amount = 0 // unknown on the wire, but present and valid
+	enc, err := biz.EncodeVC(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := func(r *http.Request) (biz.ValueContext, bool) {
+		t.Fatal("hook must not run when wire context is present")
+		return biz.ValueContext{}, false
+	}
+	h := &captureHandler{}
+	mw := Middleware(testRegistry(t), WithIngress(hook))(h)
+	req := httptest.NewRequest(http.MethodGet, "/cart", nil)
+	req.Header.Set("baggage", "biz.vc="+enc)
+	mw.ServeHTTP(httptest.NewRecorder(), req)
+	if !h.ok || h.vc.Money.Amount != 0 || h.vc.Estimated {
+		t.Fatalf("wire context was altered by the estimator: %+v", h.vc)
+	}
+}
