@@ -410,7 +410,7 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 			}
 		}
 		f.stageSet[sd.Name] = struct{}{}
-		f.Stages = append(f.Stages, Stage{Name: sd.Name, Signals: sd.Signals})
+		f.Stages = append(f.Stages, Stage(sd))
 	}
 	for stage, sd := range fd.SLA {
 		if !f.StageValid(stage) {
