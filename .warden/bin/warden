@@ -1,0 +1,23 @@
+#!/bin/sh
+# distill consumes the AgentOps platform, pinned to an IMMUTABLE commit SHA
+# (a tag can be force-moved; a full SHA cannot — review P2-2), which also
+# makes warm uv caches valid offline. repo.yaml's platform.pin carries the
+# semantic version; warden fails closed if they disagree.
+# Bump procedure: update PIN_SHA here AND platform.pin in repo.yaml together
+# (one PR; both files are HIGH-tier).
+PIN_SHA="9d1bee823edf1ea928e85fa08c01144e92df7db4"   # = v1.0.0
+FROM="git+ssh://git@github.com/Nigthwatch-eng/agentops@${PIN_SHA}"
+
+# Exit-code contract (review P2-3): 2 = gate DID NOT RUN. Resolve the platform
+# env first (cache or network); an unresolvable platform is an infra failure,
+# never a "blocking finding" (exit 1).
+# Retried once: a transient ssh/network hiccup must not be reported as a
+# missing platform — that turns a blip into a red gate people learn to ignore.
+if ! uvx --from "$FROM" warden --version >/dev/null 2>&1; then
+  sleep 2
+  if ! uvx --from "$FROM" warden --version >/dev/null 2>&1; then
+    echo "warden shim: cannot resolve the platform (network/ssh/cache) — gate DID NOT RUN" >&2
+    exit 2
+  fi
+fi
+exec uvx --from "$FROM" warden "$@"
