@@ -12,7 +12,9 @@
 package registry
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -22,7 +24,11 @@ import (
 	"github.com/NightWatchEng/shortfall/biz"
 )
 
-// Registry is the validated, immutable-after-load configuration.
+// Registry is the validated configuration. Treat it as immutable: the
+// fence-bearing collections are defensively copied at load, and Flow()
+// returns deep copies of a flow's maps and slices — but Go cannot forbid
+// a determined caller from mutating what it holds, so "immutable" is a
+// contract this package upholds on its side, not a compiler guarantee.
 type Registry struct {
 	Version     int
 	Segments    []string
@@ -39,8 +45,13 @@ type Propagation struct {
 
 // Flow is one business flow's contract.
 type Flow struct {
-	Name       string
-	Money      MoneySpec
+	Name  string
+	Money MoneySpec
+	// Currencies optionally declares the currencies this flow expects,
+	// bounding metric cardinality at review time (ADR-0004). EMPTY MEANS
+	// UNDECLARED: any valid currency is accepted at runtime and the
+	// worst-case cardinality bound falls back to observed traffic — it
+	// does not mean "no currencies".
 	Currencies []string
 	Stages     []Stage
 	SLA        map[string]SLA
@@ -104,10 +115,31 @@ type Reconcile struct {
 	Source string
 }
 
-// Flow returns a flow by name.
+// Flow returns a deep copy of a flow by name — callers can never mutate
+// the registry's fences through the returned value.
 func (r Registry) Flow(name string) (Flow, bool) {
 	f, ok := r.flows[name]
-	return f, ok
+	if !ok {
+		return Flow{}, false
+	}
+	out := f
+	out.Currencies = append([]string(nil), f.Currencies...)
+	out.Stages = make([]Stage, len(f.Stages))
+	for i, st := range f.Stages {
+		out.Stages[i] = Stage{Name: st.Name, Signals: append([]string(nil), st.Signals...)}
+	}
+	out.SLA = make(map[string]SLA, len(f.SLA))
+	for k, v := range f.SLA {
+		out.SLA[k] = v
+	}
+	if f.Estimator != nil {
+		est := Estimator{DefaultMinor: f.Estimator.DefaultMinor, BySegment: make(map[string]int64, len(f.Estimator.BySegment))}
+		for k, v := range f.Estimator.BySegment {
+			est.BySegment[k] = v
+		}
+		out.Estimator = &est
+	}
+	return out, true
 }
 
 // FlowNames returns the declared flow names (unordered).
@@ -147,9 +179,13 @@ func (f Flow) EstimateMinor(segment string) (int64, bool) {
 // HostAllowed reports whether biz.vc may be injected toward host.
 // Patterns: exact host, or "*.domain" matching any single-or-deeper
 // subdomain of domain (never domain itself, and never a suffix trick
-// like "evil-domain").
+// like "evil-domain"). Input contract: pass a bare hostname — no port,
+// no trailing dot (use url.URL.Hostname()); case is normalized here, but
+// a ported or dotted input is DENIED, not cleaned. An empty allowlist
+// denies everything: that is the deny-by-default the ADR mandates.
 func (p Propagation) HostAllowed(host string) bool {
-	if host == "" {
+	host = strings.ToLower(host)
+	if !validHostShape(host) {
 		return false
 	}
 	for _, pat := range p.AllowHosts {
@@ -164,6 +200,29 @@ func (p Propagation) HostAllowed(host string) bool {
 		}
 	}
 	return false
+}
+
+// validHostShape rejects anything that is not a bare lowercase DNS name:
+// empty labels ("x..y"), leading/trailing dots, ports, paths, whitespace.
+// Malformed hosts are denied, never cleaned — cleaning is how "evil.com."
+// sneaks past an allowlist.
+func validHostShape(host string) bool {
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			ok := c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-'
+			if !ok || ((c == '-') && (i == 0 || i == len(label)-1)) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // ---- wire form ----
@@ -247,15 +306,23 @@ func Parse(raw []byte) (Registry, error) {
 	if err := dec.Decode(&doc); err != nil {
 		return Registry{}, fmt.Errorf("parse: %w", err)
 	}
+	// A second document after '---' would otherwise be silently ignored —
+	// and a silently ignored document is a silently ignored typo.
+	var extra any
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return Registry{}, fmt.Errorf("parse: registry must be a single YAML document (content found after ---)")
+	}
 	if doc.Version != 1 {
 		return Registry{}, fmt.Errorf("version %d is not supported (want 1)", doc.Version)
 	}
 
 	r := Registry{
 		Version:    doc.Version,
-		Segments:   doc.Segments,
 		flows:      map[string]Flow{},
 		segmentSet: map[string]struct{}{},
+	}
+	if len(doc.Segments) == 0 {
+		return Registry{}, fmt.Errorf("at least one segment must be declared — the enumeration is the metric-cardinality fence (ADR-0004)")
 	}
 	for _, s := range doc.Segments {
 		if err := token(s, 32); err != nil {
@@ -266,12 +333,21 @@ func Parse(raw []byte) (Registry, error) {
 		}
 		r.segmentSet[s] = struct{}{}
 	}
+	// Defensive copy: Segments is exported and must not alias the doc.
+	r.Segments = append([]string(nil), doc.Segments...)
+
+	// Allowlist patterns are the egress fence (ADR-0003): malformed ones
+	// must fail at load, not become near-allow-all ("*.") or silently
+	// dead (uppercase, whitespace) at match time.
+	hosts := make([]string, 0, len(doc.Propagation.AllowHosts))
 	for i, h := range doc.Propagation.AllowHosts {
-		if strings.TrimSpace(h) == "" {
-			return Registry{}, fmt.Errorf("propagation.allow_hosts[%d] is empty", i)
+		bare, _ := strings.CutPrefix(h, "*.")
+		if h == "*" || h == "*." || bare == "" || !validHostShape(bare) {
+			return Registry{}, fmt.Errorf("propagation.allow_hosts[%d] %q is not a bare lowercase DNS name or *.domain pattern", i, h)
 		}
+		hosts = append(hosts, h)
 	}
-	r.Propagation = Propagation{AllowHosts: doc.Propagation.AllowHosts}
+	r.Propagation = Propagation{AllowHosts: hosts}
 
 	if len(doc.Flows) == 0 {
 		return Registry{}, fmt.Errorf("no flows declared")
@@ -308,10 +384,15 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 		SLA:        map[string]SLA{},
 		stageSet:   map[string]struct{}{},
 	}
+	seenCur := map[string]struct{}{}
 	for _, c := range fd.Currencies {
 		if len(c) != 3 || strings.ToUpper(c) != c || strings.ContainsFunc(c, func(r rune) bool { return r < 'A' || r > 'Z' }) {
 			return fail("currencies entry %q is not an ISO 4217 code", c)
 		}
+		if _, dup := seenCur[c]; dup {
+			return fail("currencies entry %q declared twice", c)
+		}
+		seenCur[c] = struct{}{}
 	}
 	for i, sd := range fd.Stages {
 		if err := token(sd.Name, 32); err != nil {
@@ -375,7 +456,8 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 		return fail("recovery recovered_fraction %v outside [0, 1]", fd.Recovery.RecoveredFraction)
 	}
 	rec := Recovery{Model: fd.Recovery.Model, RecoveredFraction: fd.Recovery.RecoveredFraction}
-	if fd.Recovery.RecoveredFraction > 0 {
+	switch {
+	case fd.Recovery.RecoveredFraction > 0:
 		if fd.Recovery.Within == "" {
 			return fail("recovery recovered_fraction is set but within is missing")
 		}
@@ -384,6 +466,10 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 			return fail("recovery within: %v", err)
 		}
 		rec.Within = d
+	case fd.Recovery.Within != "":
+		// The iff holds in both directions: a within with no fraction is
+		// a typo, and typos fail loudly here.
+		return fail("recovery within %q is set but recovered_fraction is 0 — remove one or set both", fd.Recovery.Within)
 	}
 	f.Recovery = rec
 

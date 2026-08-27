@@ -196,3 +196,111 @@ func TestLoadFromFile(t *testing.T) {
 		t.Fatal("reference registry missing invoice.pay")
 	}
 }
+
+func TestDurationOverflowRejected(t *testing.T) {
+	cases := []struct {
+		name string
+		s    string
+	}{
+		{"positive wrap", "P213504D"}, // wrapped POSITIVE through int64 ns pre-fix
+		{"negative wrap", "P106752D"}, // wrapped negative (was caught by luck)
+		{"max int digits", "P2147483647D"},
+		{"just over ten years", "P3651D"},
+		{"huge hours", "PT87601H"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got, err := ParseISODuration(c.s); err == nil {
+				t.Fatalf("accepted as %v — overflow protection must be a bound, not luck", got)
+			}
+		})
+	}
+	if got, err := ParseISODuration("P3650D"); err != nil || got != 3650*24*time.Hour {
+		t.Fatalf("ten-year ceiling itself must parse: %v %v", got, err)
+	}
+}
+
+func TestParseRejectsExtraDocumentsAndBadFences(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{"multi-document", sampleYAML + "\n---\nversion: 999\nbogus: true\n", "single yaml document"},
+		{"nested unknown field", strings.Replace(sampleYAML, "kind: fee", "kind: fee, vibe: good", 1), "vibe"},
+		{"unsupported version", strings.Replace(sampleYAML, "version: 1", "version: 2", 1), "version"},
+		{"empty segments", strings.Replace(sampleYAML, "[smb, enterprise]", "[]", 1), "segment"},
+		{"within without fraction", strings.Replace(sampleYAML, "recovered_fraction: 0.6, within: PT2H", "recovered_fraction: 0, within: PT2H", 1), "recovered_fraction"},
+		{"garbage within with zero fraction", strings.Replace(sampleYAML, "recovered_fraction: 0.6, within: PT2H", "recovered_fraction: 0, within: banana", 1), "within"},
+		{"duplicate currency", strings.Replace(sampleYAML, "[USD, EUR]", "[USD, USD]", 1), "twice"},
+		{"allowlist bare star", strings.Replace(sampleYAML, `"api.example.com"`, `"*"`, 1), "allow_hosts"},
+		{"allowlist star dot", strings.Replace(sampleYAML, `"api.example.com"`, `"*."`, 1), "allow_hosts"},
+		{"allowlist uppercase", strings.Replace(sampleYAML, `"api.example.com"`, `"API.example.com"`, 1), "allow_hosts"},
+		{"allowlist whitespace", strings.Replace(sampleYAML, `"api.example.com"`, `" api.example.com"`, 1), "allow_hosts"},
+		{"allowlist trailing dot", strings.Replace(sampleYAML, `"api.example.com"`, `"api.example.com."`, 1), "allow_hosts"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse([]byte(c.yaml))
+			if err == nil {
+				t.Fatal("accepted")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(c.want)) {
+				t.Fatalf("error %q does not name %q", err, c.want)
+			}
+		})
+	}
+}
+
+func TestHostAllowedInputContract(t *testing.T) {
+	r := mustParse(t)
+	cases := []struct {
+		name, host string
+		ok         bool
+	}{
+		{"uppercase host normalized", "API.example.com", true},
+		{"uppercase wildcard match", "Payments.INTERNAL.example.com", true},
+		{"ported host denied not cleaned", "api.example.com:443", false},
+		{"trailing dot denied not cleaned", "api.example.com.", false},
+		{"empty label denied", "x..internal.example.com", false},
+		{"leading dot denied", ".internal.example.com", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := r.Propagation.HostAllowed(c.host); got != c.ok {
+				t.Fatalf("HostAllowed(%q) = %v, want %v", c.host, got, c.ok)
+			}
+		})
+	}
+}
+
+func TestFlowCopiesDoNotMutateTheRegistry(t *testing.T) {
+	r := mustParse(t)
+	f, _ := r.Flow("invoice.pay")
+	f.Estimator.BySegment["smb"] = -1
+	f.SLA["capture"] = SLA{Deadline: time.Minute, OnBreach: BreachAtRisk}
+	f.Stages[0].Signals[0] = "tampered"
+	f.Currencies[0] = "XXX"
+
+	fresh, _ := r.Flow("invoice.pay")
+	if got, _ := fresh.EstimateMinor("smb"); got != 14200 {
+		t.Fatalf("estimator mutated through a Flow copy: %d", got)
+	}
+	if fresh.SLA["capture"].Deadline != 30*time.Minute {
+		t.Fatal("SLA mutated through a Flow copy")
+	}
+	if fresh.Stages[0].Signals[0] == "tampered" {
+		t.Fatal("signals mutated through a Flow copy")
+	}
+	if fresh.Currencies[0] != "USD" {
+		t.Fatal("currencies mutated through a Flow copy")
+	}
+}
+
+func TestFlowNames(t *testing.T) {
+	r := mustParse(t)
+	names := r.FlowNames()
+	if len(names) != 1 || names[0] != "invoice.pay" {
+		t.Fatalf("FlowNames() = %v", names)
+	}
+}
