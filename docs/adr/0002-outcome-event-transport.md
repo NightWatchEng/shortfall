@@ -1,6 +1,6 @@
 # ADR-0002 — Outcome events ride the OTel Log SDK, with a log/slog fallback
 
-Status: proposed (ratify at the M2 interface freeze)
+Status: accepted (ratified at the M2 interface freeze, 2026-08-27)
 Date: 2026-08-27
 
 ## Context

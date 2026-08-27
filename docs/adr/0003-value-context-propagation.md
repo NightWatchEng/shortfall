@@ -1,6 +1,6 @@
 # ADR-0003 — ValueContext propagates as ONE versioned Baggage member: biz.vc
 
-Status: proposed (ratify at the M2 interface freeze)
+Status: accepted (ratified at the M2 interface freeze, 2026-08-27)
 Date: 2026-08-27
 
 ## Context
