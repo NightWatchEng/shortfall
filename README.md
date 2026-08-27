@@ -1,0 +1,93 @@
+# shortfall
+
+**What an incident cost, who it hit, and how sure you are.**
+
+A vendor-neutral Go library and reference engine for incident dollar impact.
+For any incident window and scope, shortfall answers with four numbers, each
+labelled by the kind of evidence behind it:
+
+| Leg | What it is | Evidence |
+|---|---|---|
+| **Realized loss** | Transactions that failed, summed, de-duplicated by entity | deterministic |
+| **Deferred value** | In-flight or backlogged value, by age, with SLA conversion to lost | deterministic |
+| **Unrealized loss** | Value that never happened, from a seasonal baseline — always a range | estimate |
+| **Customer impact** | Distinct entities, segments, top accounts | deterministic |
+
+plus a **coverage ratio** — telemetry sums reconciled against the ledger —
+because a number Finance cannot audit is a number Finance will not use.
+
+## The two questions
+
+"Dollar impact of an incident" conflates two different questions, which is why
+it feels unsolvable:
+
+- **Q1 — Attribution (deterministic).** Which specific transactions and
+  customers were affected, and what were they worth? Needs per-transaction
+  business context attached to the failing telemetry. Auditable. Required for
+  refunds, SLA credits, and calling the top-20 accounts.
+- **Q2 — Counterfactual (statistical).** How much value did not happen because
+  of the degradation? The lost transactions never existed, so no correlation
+  id will ever find them. Only a baseline forecast minus actuals can answer
+  it, with error bars.
+
+A tool that only does Q1 is silent for upstream outages. A tool that only does
+Q2 cannot tell you who to refund. shortfall does both and labels which is
+which.
+
+## How it works
+
+Four layers; only the top one knows your vendors:
+
+1. **Capture** — `biz.*` OpenTelemetry attributes, `ValueContext` propagation
+   (W3C Baggage over HTTP, headers over queues), and unsampled outcome events:
+   money accounting never depends on trace sampling.
+2. **Flow registry** — versioned YAML, co-signed by Finance once: what counts
+   as money, where the stages live, when deferred becomes lost, what an
+   unknown amount is worth, how much demand returns after recovery.
+3. **Export adapters** — OTLP by default; Prometheus, StatsD, CloudWatch EMF,
+   Splunk HEC, Datadog, Loki natively.
+4. **Impact engine** — query-time, over query adapters (PromQL, SQL, LogQL,
+   CloudWatch Insights, SPL). The engine only ever asks a backend for
+   sum, count, group-by, and time range — so nothing vendor-specific leaks
+   past the adapter boundary.
+
+Design invariants, enforced in review and by the library itself:
+
+- Money is `int64` minor units + currency + exponent. Never float.
+- Amounts and entity ids ride on **events only**; metrics carry sums with a
+  fixed, bounded label set. Cardinality protection is a library guarantee.
+- No PAN or PII ever appears in `biz.*` attributes (guarded, not promised).
+- Realized and estimated value are never merged into one headline number.
+
+## Layout
+
+One git repo, multiple Go modules: the core module has no heavy dependencies;
+every adapter under `adapters/` is a nested module, so depending on the
+Prometheus exporter never pulls a payments SDK into your build.
+
+```
+biz/          value types: Money, ValueContext, Outcome
+registry/     the YAML flow registry: schema, loader, validation
+emit/         stage transitions -> bounded metrics + outcome events
+propagate/    HTTP middleware and queue header carriers for ValueContext
+engine/       the four legs, baseline, report renderers
+query/        the query AST and Querier boundary
+cmd/shortfall CLI: validate, impact, reconcile, simulate
+adapters/     export, query, payment, incident — each its own module
+examples/     synthetic checkout app used as the ground-truth harness
+testkit/      scenario runner and exporter conformance suite
+docs/adr/     one ADR per design decision
+```
+
+## Status
+
+Pre-release, under active construction. Nothing here is stable yet.
+
+**Versioning policy:** v0.x — the public interfaces (`biz`, `registry`,
+`emit`, `engine`, `query`, `propagate/*`) may change between minor versions.
+v1.0.0 will be tagged only after those interfaces have survived two external
+adapters not written by the authors.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

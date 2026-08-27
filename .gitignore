@@ -1,0 +1,15 @@
+# Binaries and build output
+/shortfall
+dist/
+*.test
+*.out
+
+# Editor/OS noise
+.DS_Store
+.idea/
+.vscode/
+
+# Warden evidence (generated, uploaded as CI artifacts, never committed)
+.warden/out/
+.warden/memory/findings.jsonl
+.warden/memory/gate/

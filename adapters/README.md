@@ -1,0 +1,13 @@
+# adapters
+
+Every adapter lives in its own nested Go module (the otel-contrib pattern),
+so depending on one backend never pulls another backend's SDK into your
+build. Planned families:
+
+- `export/` — otlp, prometheus, statsd, cloudwatch, splunkhec, datadog, loki
+- `query/` — promql, logql, cwinsights, spl, sql
+- `payment/` — stripe (webhook receiver, wrapped client, reconciler)
+- `incident/` — slack, incidentio, rootly, firehydrant, pagerduty
+
+Each module implements interfaces from the core packages (`emit.Exporter`,
+`query.Querier`) and is added to `go.work` when it lands.
