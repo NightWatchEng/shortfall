@@ -14,6 +14,17 @@ import (
 type Scenario struct {
 	Name   string
 	Config Config
+	Golden GoldenWindow
+}
+
+// GoldenWindow declares the incident window a scenario's golden expected
+// values are computed over, and the capture SLA used for breach counting.
+// Explicit in the file — deriving it from fault windows would let a
+// scenario edit silently move the goalposts.
+type GoldenWindow struct {
+	From       time.Time
+	To         time.Time
+	CaptureSLA time.Duration
 }
 
 // scenarioDoc is the YAML wire form. Durations are strings ("45m", "2h")
@@ -35,6 +46,13 @@ type scenarioDoc struct {
 	SettleCapacityPerMin  *int `yaml:"settle_capacity_per_min,omitempty"`
 
 	Faults []faultDoc `yaml:"faults,omitempty"`
+	Golden *goldenDoc `yaml:"golden,omitempty"`
+}
+
+type goldenDoc struct {
+	From       time.Time `yaml:"from"`
+	To         time.Time `yaml:"to"`
+	CaptureSLA string    `yaml:"capture_sla"`
 }
 
 type faultDoc struct {
@@ -122,5 +140,19 @@ func ParseScenario(raw []byte) (Scenario, error) {
 		}
 		cfg.Faults = append(cfg.Faults, f)
 	}
-	return Scenario{Name: doc.Name, Config: cfg}, nil
+	sc := Scenario{Name: doc.Name, Config: cfg}
+	if doc.Golden != nil {
+		if !doc.Golden.From.Before(doc.Golden.To) {
+			return Scenario{}, fmt.Errorf("scenario %s: golden window [%v, %v) is empty or inverted", doc.Name, doc.Golden.From, doc.Golden.To)
+		}
+		if doc.Golden.From.Before(doc.Start) || doc.Golden.To.After(doc.End) {
+			return Scenario{}, fmt.Errorf("scenario %s: golden window outside the run window", doc.Name)
+		}
+		d, err := time.ParseDuration(doc.Golden.CaptureSLA)
+		if err != nil || d <= 0 {
+			return Scenario{}, fmt.Errorf("scenario %s: golden.capture_sla: %q invalid", doc.Name, doc.Golden.CaptureSLA)
+		}
+		sc.Golden = GoldenWindow{From: doc.Golden.From, To: doc.Golden.To, CaptureSLA: d}
+	}
+	return sc, nil
 }

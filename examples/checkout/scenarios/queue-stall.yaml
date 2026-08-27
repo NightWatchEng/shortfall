@@ -9,3 +9,7 @@ faults:
     queue: capture
     from: 2026-08-25T14:02:00Z
     to: 2026-08-25T14:47:00Z
+golden:
+  from: 2026-08-25T14:02:00Z
+  to: 2026-08-25T14:47:00Z
+  capture_sla: 30m

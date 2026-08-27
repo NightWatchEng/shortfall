@@ -1,0 +1,29 @@
+{
+  "scenario": "queue-stall",
+  "from": "2026-08-25T14:02:00Z",
+  "to": "2026-08-25T14:47:00Z",
+  "realized": {
+    "count": 0,
+    "value_minor": 0
+  },
+  "deferred": {
+    "count": 260,
+    "value_minor": 5568661,
+    "in_capture_count": 260,
+    "in_settle_count": 0,
+    "oldest_age_min": 46,
+    "capture_sla_breaches": 81
+  },
+  "unrealized": {
+    "abandoned_count": 0,
+    "abandoned_value_minor": 0,
+    "suppressed_count": 0,
+    "recovered_count": 0,
+    "net_lost_count": 0,
+    "net_lost_value_minor_est": 0,
+    "mean_amount_minor_for_est": 21879
+  },
+  "customers": {
+    "distinct": 252
+  }
+}

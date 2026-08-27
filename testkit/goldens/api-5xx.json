@@ -1,0 +1,29 @@
+{
+  "scenario": "api-5xx",
+  "from": "2026-08-25T09:10:00Z",
+  "to": "2026-08-25T10:05:00Z",
+  "realized": {
+    "count": 104,
+    "value_minor": 2195499
+  },
+  "deferred": {
+    "count": 26,
+    "value_minor": 680603,
+    "in_capture_count": 11,
+    "in_settle_count": 15,
+    "oldest_age_min": 4,
+    "capture_sla_breaches": 0
+  },
+  "unrealized": {
+    "abandoned_count": 57,
+    "abandoned_value_minor": 1477954,
+    "suppressed_count": 0,
+    "recovered_count": 0,
+    "net_lost_count": 0,
+    "net_lost_value_minor_est": 0,
+    "mean_amount_minor_for_est": 21879
+  },
+  "customers": {
+    "distinct": 127
+  }
+}
