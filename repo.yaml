@@ -31,6 +31,7 @@ risk_tiers:
   - {glob: "emit/**",      tier: HIGH, reason: "cardinality protection and sampling-independent outcome emission are library guarantees"}
   - {glob: ".github/**",   tier: HIGH, reason: "CI wiring is enforcement surface — a weakened workflow weakens every gate"}
   - {glob: ".githooks/**", tier: HIGH, reason: "local gate hooks; policy names them gate surface"}
+  - {glob: "scripts/**",   tier: HIGH, reason: "CI enforcement scripts — a weakened script weakens every check that calls it"}
   - {glob: "registry/**",  tier: MEDIUM}
   - {glob: "query/**",     tier: MEDIUM}
   - {glob: "propagate/**", tier: MEDIUM}

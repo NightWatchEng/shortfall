@@ -30,4 +30,8 @@ changelog:
 
 release:
   draft: false
-  prerelease: auto   # v0.x pre-1.0 tags are marked pre-release automatically
+  # `auto` marks a release pre-release ONLY when the tag carries a semver
+  # pre-release suffix (v0.3.0-rc1); a plain v0.2.0 publishes as a full
+  # release. Instability of v0.x is a semver-policy statement (README),
+  # not something this flag provides.
+  prerelease: auto
