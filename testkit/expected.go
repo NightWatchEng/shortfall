@@ -1,6 +1,7 @@
 // Package testkit runs harness scenarios against ground truth and turns a
 // simulation result into the expected impact numbers the engine is judged
-// against. It will also host the exporter conformance suite.
+// against. The exporter conformance suite every adapter must pass lives in
+// the testkit/conformance subpackage.
 //
 // Evidence discipline mirrors the library's: Realized and Deferred and the
 // abandonment leg are EXACT (the omniscient ledger knows every amount);

@@ -132,8 +132,8 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 	return &Exporter{metrics: m, logs: sink}, nil
 }
 
-// newWith wires arbitrary pushers — the seam the unit tests drive with
-// in-memory collectors (and the M4.2 conformance suite once it lands).
+// newWith wires arbitrary pushers — the seam the unit tests and the
+// testkit/conformance suite drive with in-memory collectors.
 func newWith(m metricPusher, l eventSink) *Exporter {
 	return &Exporter{metrics: m, logs: l}
 }
