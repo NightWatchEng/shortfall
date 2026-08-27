@@ -271,3 +271,78 @@ func TestCommittedScenariosAllLoadAndRun(t *testing.T) {
 		}
 	}
 }
+
+func TestOverlappingStallsFreezeByUnion(t *testing.T) {
+	// Two overlapping stall specs model overlapping causes; the outage is
+	// their union [14:00, 14:45), never double-counted. Reviewer
+	// counterexample: eligible 13:58, 5m delay — true completion 14:48
+	// (2 un-stalled minutes, freeze across the 45m union, 3 remaining).
+	f1 := FaultSpec{Kind: FaultConsumerStall, Queue: QueueCapture, From: day2(14, 0), To: day2(14, 30)}
+	f2 := FaultSpec{Kind: FaultConsumerStall, Queue: QueueCapture, From: day2(14, 15), To: day2(14, 45)}
+	st := newStage(5, 20, QueueCapture, []FaultSpec{f2, f1}) // order-independent
+	got := st.schedule(day2(13, 58))
+	if want := day2(14, 48); !got.Equal(want) {
+		t.Fatalf("overlapping stalls: completion %v, want %v", got, want)
+	}
+}
+
+func TestScheduleAssertsEligibilityOrder(t *testing.T) {
+	st := newStage(2, 20, QueueCapture, nil)
+	st.schedule(day2(10, 0))
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on regressing eligibility")
+		}
+	}()
+	st.schedule(day2(9, 0))
+}
+
+func TestRearrivalIntoLaterBlackoutIsSuppressed(t *testing.T) {
+	// Recovery from blackout one lands inside blackout two: it must be
+	// suppressed there (and rolled under blackout two's model), never
+	// processed as a Recovered arrival inside a blackout window.
+	b1 := FaultSpec{Kind: FaultBlackout, From: day2(10, 0), To: day2(10, 30), RecoveredFraction: 1.0, RecoveryWithin: 30 * time.Minute}
+	b2 := FaultSpec{Kind: FaultBlackout, From: day2(10, 30), To: day2(11, 30)}
+	cfg := Config{Seed: 21, Start: mon, End: mon.Add(48 * time.Hour), Faults: []FaultSpec{b1, b2}}
+	res := Run(cfg)
+	for _, txn := range res.Ledger.Txns {
+		for _, b := range []FaultSpec{b1, b2} {
+			if !txn.CreatedAt.Before(b.From) && txn.CreatedAt.Before(b.To) {
+				t.Fatalf("txn %s (recovered=%v) created at %v inside blackout [%v, %v)",
+					txn.ID, txn.Recovered, txn.CreatedAt, b.From, b.To)
+			}
+		}
+	}
+}
+
+func TestOverlappingBlackoutsRejected(t *testing.T) {
+	cfg := Config{Seed: 1, Start: mon, End: mon.Add(48 * time.Hour), Faults: []FaultSpec{
+		{Kind: FaultBlackout, From: day2(10, 0), To: day2(11, 0)},
+		{Kind: FaultBlackout, From: day2(10, 30), To: day2(11, 30)},
+	}}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on overlapping blackouts")
+		}
+	}()
+	Run(cfg)
+}
+
+func TestUnalignedFaultWindowRejected(t *testing.T) {
+	f := FaultSpec{Kind: FaultAPI5xx, Rate: 0.5, From: day2(14, 0).Add(30 * time.Second), To: day2(15, 0)}
+	if err := f.Validate(); err == nil {
+		t.Fatal("expected minute-alignment rejection")
+	}
+}
+
+func TestScenarioRejectsExplicitZeroCapacity(t *testing.T) {
+	doc := `name: x
+seed: 1
+start: 2026-08-24T00:00:00Z
+end: 2026-08-25T00:00:00Z
+capture_capacity_per_min: 0
+`
+	if _, err := ParseScenario([]byte(doc)); err == nil {
+		t.Fatal("explicit zero capacity must be rejected with guidance")
+	}
+}

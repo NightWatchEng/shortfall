@@ -126,6 +126,9 @@ type Config struct {
 	// Stage worker capacities in transactions per minute (default 20 —
 	// comfortably above the default curve's 6/min peak, so the baseline
 	// has no contention). A consumer-stall fault forces 0 for its window.
+	// There is deliberately NO literal-zero form: a consumer that is down
+	// is a queue-consumer-stall fault over the window, never a capacity
+	// of 0 (which would make the FIFO cursor spin forever).
 	CaptureCapacityPerMin int
 	SettleCapacityPerMin  int
 
@@ -176,6 +179,22 @@ func (c *Config) applyDefaults() {
 			panic("checkout: " + err.Error())
 		}
 	}
+	// Overlapping blackouts are rejected rather than resolved: each minute
+	// of a blackout is governed by exactly one recovery model, so "which
+	// spec wins" must never depend on slice order (confirmed finding).
+	var blackouts []FaultSpec
+	for _, f := range c.Faults {
+		if f.Kind == FaultBlackout {
+			blackouts = append(blackouts, f)
+		}
+	}
+	sort.Slice(blackouts, func(i, j int) bool { return blackouts[i].From.Before(blackouts[j].From) })
+	for i := 1; i < len(blackouts); i++ {
+		if blackouts[i].From.Before(blackouts[i-1].To) {
+			panic(fmt.Sprintf("checkout: blackout windows [%v,%v) and [%v,%v) overlap — one blackout governs any given minute",
+				blackouts[i-1].From, blackouts[i-1].To, blackouts[i].From, blackouts[i].To))
+		}
+	}
 }
 
 func delayKnob(name string, v, def int) int {
@@ -203,36 +222,59 @@ func capacityKnob(name string, v int) int {
 // stage is a capacity-limited FIFO worker pool: at most capacity service
 // starts per minute, zero during a stall window, each service taking
 // delay minutes. Eligibility arrives in non-decreasing order (arrival
-// order for capture; capture completions for settle), so a single cursor
-// suffices and scheduling stays O(total minutes scanned).
+// order for capture; capture completions for settle — the latter provably
+// non-decreasing given disjoint stall intervals, which newStage
+// guarantees by merging), so a single cursor suffices and scheduling
+// stays O(total minutes scanned). schedule ASSERTS the ordering
+// precondition rather than trusting it: the whole cursor design rests on
+// it, and a silent violation would misorder ground truth.
 type stage struct {
 	delay    time.Duration
 	capacity int
-	stalls   []FaultSpec
+	stalls   []interval // disjoint, sorted by start (merged in newStage)
 
-	cursor time.Time // earliest minute that may still have a free slot
-	used   int       // slots consumed at cursor
+	cursor       time.Time // earliest minute that may still have a free slot
+	used         int       // slots consumed at cursor
+	lastEligible time.Time
 }
 
+type interval struct{ from, to time.Time }
+
 func newStage(delayMin, capacity int, queue Queue, faults []FaultSpec) *stage {
+	if capacity < 1 {
+		panic(fmt.Sprintf("checkout: stage %s capacity %d < 1 — knob validation should have caught this", queue, capacity))
+	}
 	s := &stage{
 		delay:    time.Duration(delayMin) * time.Minute,
 		capacity: capacity,
 	}
+	var raw []interval
 	for _, f := range faults {
 		if f.Kind == FaultConsumerStall && f.Queue == queue {
-			s.stalls = append(s.stalls, f)
+			raw = append(raw, interval{f.From, f.To})
 		}
 	}
-	// Kept sorted by From so the freeze extension below can absorb
-	// cascading overlaps in one forward pass.
-	sort.Slice(s.stalls, func(i, j int) bool { return s.stalls[i].From.Before(s.stalls[j].From) })
+	// Merge into a disjoint sorted union: overlapping stall specs mean
+	// overlapping outage causes, and the outage is their union — counting
+	// an overlap twice would over-extend frozen work (a confirmed review
+	// finding). With disjoint intervals the forward extension pass below
+	// is exact.
+	sort.Slice(raw, func(i, j int) bool { return raw[i].from.Before(raw[j].from) })
+	for _, iv := range raw {
+		if n := len(s.stalls); n > 0 && !iv.from.After(s.stalls[n-1].to) {
+			if iv.to.After(s.stalls[n-1].to) {
+				s.stalls[n-1].to = iv.to
+			}
+			continue
+		}
+		s.stalls = append(s.stalls, iv)
+	}
 	return s
 }
 
 func (s *stage) stalled(t time.Time) bool {
-	for _, f := range s.stalls {
-		if f.active(t) {
+	for _, iv := range s.stalls {
+		if !t.Before(iv.from) && t.Before(iv.to) {
 			return true
 		}
 	}
@@ -242,9 +284,14 @@ func (s *stage) stalled(t time.Time) bool {
 // schedule returns the completion time for a transaction becoming
 // eligible at the given minute. Stall semantics: no service STARTS during
 // a stall, and in-progress work FREEZES — a service interval that a stall
-// interrupts resumes after it, so nothing ever completes inside a stall
-// window.
+// interrupts resumes after it, so nothing ever completes strictly inside
+// a stall window (completing exactly AT stall start is legitimate: the
+// service minutes were all un-stalled).
 func (s *stage) schedule(eligible time.Time) time.Time {
+	if eligible.Before(s.lastEligible) {
+		panic(fmt.Sprintf("checkout: stage eligibility went backwards (%v after %v) — the FIFO cursor model's precondition is broken", eligible, s.lastEligible))
+	}
+	s.lastEligible = eligible
 	if s.cursor.Before(eligible) {
 		s.cursor = eligible
 		s.used = 0
@@ -255,9 +302,12 @@ func (s *stage) schedule(eligible time.Time) time.Time {
 	}
 	s.used++
 	completion := s.cursor.Add(s.delay)
-	for _, f := range s.stalls {
-		if s.cursor.Before(f.From) && completion.After(f.From) {
-			completion = completion.Add(f.To.Sub(f.From))
+	// Disjoint + sorted, so one forward pass applies exact freeze/resume:
+	// each stall the (growing) service interval crosses pushes completion
+	// by that stall's full length.
+	for _, iv := range s.stalls {
+		if s.cursor.Before(iv.from) && completion.After(iv.from) {
+			completion = completion.Add(iv.to.Sub(iv.from))
 		}
 	}
 	return completion
@@ -328,42 +378,51 @@ func Run(cfg Config) Result {
 		ledger.Txns = append(ledger.Txns, txn)
 	}
 
+	// activeBlackout returns the single blackout governing minute t —
+	// applyDefaults rejects overlaps, so at most one exists.
+	activeBlackout := func(t time.Time) (FaultSpec, bool) {
+		for _, f := range cfg.Faults {
+			if f.Kind == FaultBlackout && f.active(t) {
+				return f, true
+			}
+		}
+		return FaultSpec{}, false
+	}
+
 	for t := start; t.Before(end); t = t.Add(time.Minute) {
 		rate := cfg.Curve[hourOfWeek(t)]
 		arrivals := poisson(rng, rate)
+		due := rearrive[t.Unix()]
+		delete(rearrive, t.Unix())
 
-		// Upstream blackout: demand never enters. A recovered fraction
-		// re-arrives after the outage, spread uniformly over the recovery
-		// window.
-		blocked := 0
-		for _, f := range cfg.Faults {
-			if f.Kind != FaultBlackout || !f.active(t) {
-				continue
-			}
-			blocked = arrivals
-			for i := 0; i < arrivals; i++ {
-				if rng.Float64() < f.RecoveredFraction {
-					offset := time.Duration(rng.Int64N(int64(f.RecoveryWithin))).Truncate(time.Minute)
-					at := f.To.Add(offset).Truncate(time.Minute)
-					if at.Before(end) {
-						rearrive[at.Unix()]++
+		// Upstream blackout: demand never enters — including recovered
+		// demand from an EARLIER blackout that happens to land inside
+		// this one (it gets suppressed and rolled again under this
+		// blackout's recovery model). A recovered fraction re-arrives
+		// after the outage, spread uniformly over the recovery window.
+		if f, ok := activeBlackout(t); ok {
+			total := arrivals + due
+			if total > 0 {
+				suppressed = append(suppressed, SuppressedMinute{Minute: t, Count: total})
+				for i := 0; i < total; i++ {
+					if rng.Float64() < f.RecoveredFraction {
+						offset := time.Duration(rng.Int64N(int64(f.RecoveryWithin))).Truncate(time.Minute)
+						at := f.To.Add(offset).Truncate(time.Minute)
+						if at.Before(end) {
+							rearrive[at.Unix()]++
+						}
 					}
 				}
 			}
-			break // one blackout at a time is the honest model
-		}
-		if blocked > 0 {
-			suppressed = append(suppressed, SuppressedMinute{Minute: t, Count: blocked})
-		} else {
-			for i := 0; i < arrivals; i++ {
-				process(t, false)
-			}
+			continue
 		}
 
-		for i := 0; i < rearrive[t.Unix()]; i++ {
+		for i := 0; i < arrivals; i++ {
+			process(t, false)
+		}
+		for i := 0; i < due; i++ {
 			process(t, true)
 		}
-		delete(rearrive, t.Unix())
 	}
 
 	return Result{Ledger: ledger, Suppressed: suppressed, Config: cfg}

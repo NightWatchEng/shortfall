@@ -34,7 +34,12 @@ type FaultSpec struct {
 	To   time.Time `yaml:"to"`
 
 	// Rate: api-5xx failure probability, or api-latency abandonment
-	// probability, in (0, 1].
+	// probability, in (0, 1]. Semantics when faults overlap: each active
+	// fault rolls INDEPENDENTLY per transaction, so two 0.5 faults
+	// compound to ~0.75 — overlapping specs model overlapping causes.
+	// Abandonment short-circuits the 5xx roll (an abandoned request never
+	// reached the api), which makes rng consumption outcome-dependent;
+	// deterministic under a seed either way.
 	Rate float64 `yaml:"rate,omitempty"`
 
 	// Queue: which stage a queue-consumer-stall halts.
@@ -52,6 +57,12 @@ type FaultSpec struct {
 func (f FaultSpec) Validate() error {
 	if !f.From.Before(f.To) {
 		return fmt.Errorf("fault %s: window [%v, %v) is empty or inverted", f.Kind, f.From, f.To)
+	}
+	// The simulation is a minute grid: off-grid boundaries would activate
+	// on rounded minutes while freeze math used exact sub-minute lengths,
+	// leaking off-grid timestamps into ground truth (confirmed finding).
+	if !f.From.Equal(f.From.Truncate(time.Minute)) || !f.To.Equal(f.To.Truncate(time.Minute)) {
+		return fmt.Errorf("fault %s: window [%v, %v) must be minute-aligned", f.Kind, f.From, f.To)
 	}
 	switch f.Kind {
 	case FaultAPI5xx, FaultAPILatency:

@@ -24,12 +24,15 @@ type scenarioDoc struct {
 	Start time.Time `yaml:"start"`
 	End   time.Time `yaml:"end"`
 
-	EnterpriseFraction    float64 `yaml:"enterprise_fraction,omitempty"`
-	Customers             int     `yaml:"customers,omitempty"`
-	CaptureDelayMin       int     `yaml:"capture_delay_min,omitempty"`
-	SettleDelayMin        int     `yaml:"settle_delay_min,omitempty"`
-	CaptureCapacityPerMin int     `yaml:"capture_capacity_per_min,omitempty"`
-	SettleCapacityPerMin  int     `yaml:"settle_capacity_per_min,omitempty"`
+	EnterpriseFraction float64 `yaml:"enterprise_fraction,omitempty"`
+	Customers          int     `yaml:"customers,omitempty"`
+	CaptureDelayMin    int     `yaml:"capture_delay_min,omitempty"`
+	SettleDelayMin     int     `yaml:"settle_delay_min,omitempty"`
+	// Capacities are pointers so an author's EXPLICIT 0 is distinguishable
+	// from absent — a literal 0 is rejected with guidance rather than
+	// silently meaning "default" (a confirmed zero-coercion finding).
+	CaptureCapacityPerMin *int `yaml:"capture_capacity_per_min,omitempty"`
+	SettleCapacityPerMin  *int `yaml:"settle_capacity_per_min,omitempty"`
 
 	Faults []faultDoc `yaml:"faults,omitempty"`
 }
@@ -71,15 +74,29 @@ func ParseScenario(raw []byte) (Scenario, error) {
 	}
 
 	cfg := Config{
-		Seed:                  doc.Seed,
-		Start:                 doc.Start,
-		End:                   doc.End,
-		EnterpriseFraction:    doc.EnterpriseFraction,
-		Customers:             doc.Customers,
-		CaptureDelayMin:       doc.CaptureDelayMin,
-		SettleDelayMin:        doc.SettleDelayMin,
-		CaptureCapacityPerMin: doc.CaptureCapacityPerMin,
-		SettleCapacityPerMin:  doc.SettleCapacityPerMin,
+		Seed:               doc.Seed,
+		Start:              doc.Start,
+		End:                doc.End,
+		EnterpriseFraction: doc.EnterpriseFraction,
+		Customers:          doc.Customers,
+		CaptureDelayMin:    doc.CaptureDelayMin,
+		SettleDelayMin:     doc.SettleDelayMin,
+	}
+	capKnob := func(field string, p *int) (int, error) {
+		if p == nil {
+			return 0, nil // absent: Run applies the default
+		}
+		if *p <= 0 {
+			return 0, fmt.Errorf("scenario %s: %s: %d is not expressible — a down consumer is a queue-consumer-stall fault over the window, not a capacity", doc.Name, field, *p)
+		}
+		return *p, nil
+	}
+	var err error
+	if cfg.CaptureCapacityPerMin, err = capKnob("capture_capacity_per_min", doc.CaptureCapacityPerMin); err != nil {
+		return Scenario{}, err
+	}
+	if cfg.SettleCapacityPerMin, err = capKnob("settle_capacity_per_min", doc.SettleCapacityPerMin); err != nil {
+		return Scenario{}, err
 	}
 	for i, fd := range doc.Faults {
 		f := FaultSpec{
