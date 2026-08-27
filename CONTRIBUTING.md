@@ -77,7 +77,8 @@ not merely that an error occurred. The pre-PR review flags departures.
 Mermaid, rendering natively on github.com. **Definition of Done:** a PR
 that changes the architecture (new component, moved boundary, new signal
 path) updates the affected diagram in the same PR. No GitHub Pages on
-this repo — Pages serves publicly even from private repos on this plan.
+this repo — depending on plan it is unavailable or publicly served for a
+private repo; either way it stays off.
 
 ## Design decisions
 

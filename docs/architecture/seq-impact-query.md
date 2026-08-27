@@ -3,6 +3,10 @@
 Query-time, not ingest-time: the engine asks any backend only the four
 verbs, so nothing vendor-specific leaks past the adapter.
 
+**Target design**: the frozen Querier/Report shapes are exact; the legs
+and the `impact` CLI verb land with the engine milestones — until then
+Compute refuses loudly rather than rendering zeros.
+
 ```mermaid
 sequenceDiagram
     autonumber

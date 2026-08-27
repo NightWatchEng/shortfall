@@ -15,7 +15,7 @@ sequenceDiagram
 
     U->>API: POST /pay
     Note over API: ingress stamping: first hop that recognizes<br/>the flow builds ValueContext<br/>(flow, entity, hashed customer, amount)
-    API->>API: ctx = WithValueContext(ctx, vc)
+    API->>API: ctx, err = WithValueContext(ctx, vc)<br/>(encode failures reject loudly: oversize, PII)
     API->>X: Record("auth", success)<br/>MetricPoints + Outcome (unsampled)
     API->>K: publish msg<br/>carrier copies ONE header: biz.vc
     Note over K: minutes pass; trace context may be<br/>re-rooted or dropped — biz.vc survives

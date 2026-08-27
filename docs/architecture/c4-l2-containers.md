@@ -4,32 +4,39 @@ Four layers; only the top one knows your vendors. The core emits two
 normalized signals and never touches a backend; adapters translate on the
 way out and back in.
 
+**Reading this diagram honestly:** solid boxes in `core` exist today
+(the v0.1.0 frozen surface — `emit`, `query`, `engine` are frozen
+contracts whose implementations land in M3/M6). Everything in
+`adapters/*` is a **planned family** (see `adapters/README.md`) landing
+per milestone, and the CLI serves `validate` today with the other verbs
+arriving with the engine.
+
 ```mermaid
 flowchart TB
     subgraph app["Instrumented service (your code)"]
-        MW["propagate/httpmw\nBaggage extract/inject + ingress stamping\n+ egress allowlist (ADR-0003)"]
-        CARRIERS["propagate/kafka|sqs|amqp\nCarrier interfaces, zero client deps"]
+        MW["propagate/httpmw<br/>Baggage extract/inject + ingress stamping<br/>+ egress allowlist (ADR-0003) — lands M3"]
+        CARRIERS["propagate/kafka | sqs | amqp<br/>Carrier interfaces, zero client deps — lands M3"]
     end
 
     subgraph core["shortfall core module (zero heavy deps)"]
-        BIZ["biz\nMoney (int64 minor) · ValueContext · Outcome\nPII guard · biz.vc codec"]
-        REG["registry\nflows · stages · SLAs · estimators\nsegments fence · allowlist fence"]
-        EMIT["emit\nRecord → MetricPoint + Outcome\nde-dup LRU · label enforcement\nin-flight tracker"]
-        QUERY["query\nthe 4-verb AST: sum/count/group-by/range\n+ event order & distinct-count"]
-        ENGINE["engine\nrealized · deferred · unrealized\ncustomers · coverage · severity"]
-        CLI["cmd/shortfall\nvalidate · impact · reconcile · simulate"]
+        BIZ["biz<br/>Money (int64 minor) · ValueContext · Outcome<br/>PII guard · biz.vc codec"]
+        REG["registry<br/>flows · stages · SLAs · estimators<br/>segments fence · allowlist fence"]
+        EMIT["emit (frozen contract; impl lands M3)<br/>Record → MetricPoint + Outcome<br/>in-flight tracker"]
+        QUERY["query (frozen contract)<br/>the 4-verb AST: sum/count/group-by/range<br/>+ event order & distinct-count"]
+        ENGINE["engine (frozen contract; legs land M6/M7)<br/>realized · deferred · unrealized<br/>customers · coverage · severity"]
+        CLI["cmd/shortfall<br/>validate (today)<br/>impact · reconcile · simulate (with the engine)"]
     end
 
-    subgraph adapters["adapters/* (each a nested Go module)"]
-        EXP["export/*\notlp (default) · prometheus · statsd\ncloudwatch EMF · splunkhec · datadog · loki"]
-        QAD["query/*\npromql · sql · logql · cwinsights · spl"]
-        PAY["payment/stripe\nwebhook receiver · wrapped client · reconciler"]
-        INC["incident/*\nslack /impact · incident.io · pagerduty ..."]
+    subgraph adapters["adapters/* — PLANNED families, each a nested Go module"]
+        EXP["export/*<br/>otlp (default) · prometheus · statsd<br/>cloudwatch EMF · splunkhec · datadog · loki"]
+        QAD["query/*<br/>promql · sql · logql · cwinsights · spl"]
+        PAY["payment/stripe<br/>webhook receiver · wrapped client · reconciler"]
+        INC["incident/*<br/>slack /impact · incident.io · pagerduty …"]
     end
 
-    subgraph verify["ground truth (never ships)"]
-        HARNESS["examples/checkout\nseeded simulation + omniscient ledger"]
-        TESTKIT["testkit\nexpected values · golden fixtures\nexporter conformance suite"]
+    subgraph verify["ground truth (exists today; never ships)"]
+        HARNESS["examples/checkout<br/>seeded simulation + omniscient ledger"]
+        TESTKIT["testkit<br/>expected values · golden fixtures<br/>exporter conformance suite (lands M4)"]
     end
 
     MW -->|ValueContext in ctx| EMIT

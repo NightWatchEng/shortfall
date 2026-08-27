@@ -1,37 +1,40 @@
 # C4 Level 3 — capture and engine components
 
-The paths money takes through the code. Left: one stage transition
-becoming signals. Right: one question becoming a report.
+The paths money takes through the code. **This is the TARGET design**:
+the shapes are the v0.1.0 frozen contracts, the internals are the plan of
+record for the emitter (M3) and engine legs (M6/M7) — the code refuses
+loudly (`engine.ErrNotImplemented`) until each lands.
 
 ```mermaid
 flowchart LR
-    subgraph capture["emit — one Record() call"]
-        CTX["ctx: biz.vc member\n(decoded ValueContext)"]
-        VAL["validate + PII guard\n(biz.CheckPII)"]
-        DEDUP["de-dup LRU\n(flow, entity, stage)"]
-        LABELS["label enforcement\nsegment ∈ registry enum\nflow/stage fallback: unregistered"]
-        MP["MetricPoint(s)\nbiz_value_total · biz_txn_total\ndelta @ observation time"]
-        OUT["biz.Outcome\nunsampled, trace-id linked"]
-        DROP["biz_dropped_events_total{reason}\nnever a silent drop"]
+    subgraph capture["emit — one Record() call (target design, lands M3)"]
+        CTX["ctx: biz.vc member<br/>(decoded ValueContext)"]
+        VAL["validate + PII guard<br/>(biz.CheckPII)"]
+        DEDUP["in-process de-dup<br/>bounded by (flow, entity, stage)"]
+        LABELS["label enforcement<br/>segment ∈ registry enum<br/>flow/stage fallback: unregistered"]
+        MP["MetricPoint(s)<br/>biz_value_total · biz_txn_total<br/>delta @ observation time"]
+        OUT["biz.Outcome<br/>unsampled, trace-id linked"]
+        DROP["biz_dropped_events_total{reason}<br/>never a silent drop"]
     end
     CTX --> VAL --> DEDUP --> LABELS
     LABELS --> MP
     LABELS --> OUT
-    VAL -->|invalid| DROP
+    VAL -->|rejected| DROP
 
-    subgraph engine["engine — one Compute() call"]
-        REQ["Request\nwindow · scope · flows"]
-        REAL["realized\nΣ failed, de-duped by entity\ndeadline passed"]
-        DEF["deferred\nin-flight by age bucket × currency\nSLA breaches → projected lost"]
-        UNREAL["unrealized\nbaseline − actual, × recovery\nALWAYS a range"]
-        CUST["customers\ndistinct · top-N by value\nor NotAvailable(reason)"]
-        COV["coverage\ntelemetry Σ vs ledger"]
-        REP["Report + provenance\nevidence tags per leg\nrealized NEVER summed with estimate"]
+    subgraph engine["engine — one Compute() call (frozen shapes; legs land M6/M7)"]
+        REQ["Request<br/>window · scope · flows"]
+        REAL["realized<br/>Σ failed, de-duped by entity<br/>(deterministic)"]
+        DEF["deferred<br/>in-flight by age bucket × currency<br/>SLA breaches → projected lost"]
+        UNREAL["unrealized<br/>baseline − actual, × recovery<br/>ALWAYS a range"]
+        CUST["customers<br/>distinct · top-N by value<br/>or NotAvailable(reason)"]
+        COV["coverage<br/>telemetry Σ vs ledger"]
+        REP["Report + provenance<br/>evidence tags per leg<br/>realized NEVER summed with estimate"]
     end
     REQ --> REAL & DEF & UNREAL & CUST & COV --> REP
 ```
 
-Evidence discipline, enforced by types: `Leg.Evidence` is
+Evidence discipline, enforced by the frozen types: `Leg.Evidence` is
 deterministic/estimate/trust; `EstLeg` has no single-number form — only
 Low/Mid/High per currency; a querier without events yields
-`NotAvailableReason`, never zeros.
+`NotAvailableReason`, never zeros. Deadline-breach money belongs to the
+DEFERRED leg's projected-lost, never to realized.

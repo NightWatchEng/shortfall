@@ -1,8 +1,11 @@
 # Architecture — diagrams as code
 
 C4 model plus the three money-path sequences, all Mermaid, rendering
-natively on github.com. The diagrams document the surface frozen at
-v0.1.0; ADRs 0001–0007 carry the decisions behind it.
+natively on github.com. Two kinds of truth here, marked per diagram: the
+FROZEN CONTRACT (the v0.1.0 type and interface surface, which exists) and
+the TARGET ARCHITECTURE (implementations landing per milestone M3–M7 —
+the code refuses loudly until each lands). ADRs 0001–0007 carry the
+decisions behind both.
 
 **Definition of Done rule:** a PR that changes the architecture updates
 the affected diagram in the same PR (see CONTRIBUTING).
@@ -17,7 +20,7 @@ the affected diagram in the same PR (see CONTRIBUTING).
 | [Sequence — impact query](seq-impact-query.md) | `shortfall impact` from question to four-leg report |
 
 Viewing: GitHub renders Mermaid in the private repo natively. Do NOT
-enable GitHub Pages here — on this plan Pages serves publicly even from a
-private repo. Wiki sync happens at go-public (the wiki product is not
-available on private personal repos on this plan; this directory is
-canonical either way).
+enable GitHub Pages here — depending on plan, Pages on a private repo is
+either unavailable or PUBLICLY served; there is no private option below
+Enterprise, so it stays off. This directory is canonical; wiki sync is a
+go-public task.

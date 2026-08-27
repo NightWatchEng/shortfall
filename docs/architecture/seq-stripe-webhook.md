@@ -4,6 +4,12 @@ Same signals, different capture point: metadata stamped at creation makes
 every webhook arrive pre-attributed; the wrapped client sees the failures
 webhooks never report.
 
+**Target design for the PLANNED payment adapter** (`adapters/payment/`,
+lands with the payment milestone). The semantics shown are already
+binding — they come from the accepted event-transport ADR and the frozen
+RecordConfig fields (Source, Err, At); the option helpers shown are the
+shapes those fields imply.
+
 ```mermaid
 sequenceDiagram
     autonumber
