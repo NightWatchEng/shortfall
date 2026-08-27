@@ -32,8 +32,13 @@ func (m Money) Validate() error {
 }
 
 // String renders the amount in major units for humans: "USD 149.00",
-// "JPY 14900". Pure integer formatting — no float ever touches it.
+// "JPY 14900". Pure integer formatting — no float ever touches it. Total
+// on any receiver: an invalid Money renders in a marked raw form instead
+// of panicking or printing garbage (a Stringer must never be the crash).
 func (m Money) String() string {
+	if m.Validate() != nil {
+		return fmt.Sprintf("%s INVALID(%d e%d)", m.Currency, m.Amount, m.Exponent)
+	}
 	if m.Exponent == 0 {
 		return fmt.Sprintf("%s %d", m.Currency, m.Amount)
 	}

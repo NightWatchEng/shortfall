@@ -143,11 +143,18 @@ type Outcome struct {
 	Stage   string
 	Result  Result
 	Source  string // e.g. "stripe:webhook", "httpmw"
-	TraceID string // link, when a trace exists; never load-bearing
-	Err     string
+	TraceID string // W3C trace id (32 lowercase hex) when a trace exists; never load-bearing
+	Err     string // short failure description; PII-guarded free text, max 512 bytes
 }
 
-// Validate rejects malformed outcomes.
+const maxErrLen = 512
+
+// Validate rejects malformed outcomes. Every string field is covered:
+// Stage by charset, Source by charset + the PII guard, Err (free text —
+// the field upstream error strings echo card numbers into) by length +
+// the PII guard, and TraceID by shape (32 lowercase hex admits no PII by
+// construction). The guarantee the docs make is the one the code
+// enforces.
 func (o Outcome) Validate() error {
 	if o.At.IsZero() {
 		return fmt.Errorf("biz: outcome time is zero")
@@ -157,6 +164,32 @@ func (o Outcome) Validate() error {
 	}
 	if !o.Result.Valid() {
 		return fmt.Errorf("biz: result %q is not declared", o.Result)
+	}
+	if o.Source != "" {
+		if err := idToken(o.Source, maxIDLen); err != nil {
+			return fmt.Errorf("biz: source: %w", err)
+		}
+		if err := CheckPII("source", o.Source); err != nil {
+			return err
+		}
+	}
+	if o.TraceID != "" {
+		if len(o.TraceID) != 32 {
+			return fmt.Errorf("biz: trace id must be 32 lowercase hex characters")
+		}
+		for _, r := range o.TraceID {
+			if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+				return fmt.Errorf("biz: trace id must be 32 lowercase hex characters")
+			}
+		}
+	}
+	if len(o.Err) > maxErrLen {
+		return fmt.Errorf("biz: err text %d bytes exceeds %d", len(o.Err), maxErrLen)
+	}
+	if o.Err != "" {
+		if err := CheckPII("err", o.Err); err != nil {
+			return err
+		}
 	}
 	return o.VC.Validate()
 }

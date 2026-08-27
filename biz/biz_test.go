@@ -251,3 +251,137 @@ func BenchmarkValueContextValidate(b *testing.B) {
 		}
 	}
 }
+
+func TestOutcomeFreeTextFieldsAreGuarded(t *testing.T) {
+	base := Outcome{
+		At:     time.Date(2026, 8, 27, 14, 32, 0, 0, time.UTC),
+		VC:     validVC(),
+		Stage:  "capture",
+		Result: ResultFailed,
+	}
+	cases := []struct {
+		name string
+		f    func(*Outcome)
+	}{
+		{"pan in err", func(o *Outcome) { o.Err = "card 4111111111111111 declined" }},
+		{"pan with spaces in err", func(o *Outcome) { o.Err = "card 4111 1111 1111 1111 declined" }},
+		{"email in err", func(o *Outcome) { o.Err = "declined for jane.doe@example.com" }},
+		{"email in source", func(o *Outcome) { o.Source = "jane.doe@example.com" }},
+		{"oversize err", func(o *Outcome) { o.Err = strings.Repeat("x", 513) }},
+		{"trace id wrong length", func(o *Outcome) { o.TraceID = "abc123" }},
+		{"trace id uppercase", func(o *Outcome) { o.TraceID = strings.Repeat("A", 32) }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			o := base
+			c.f(&o)
+			if err := o.Validate(); err == nil {
+				t.Fatal("want error, got none")
+			}
+		})
+	}
+	ok := base
+	ok.Err = "capture timeout after 30s"
+	ok.Source = "stripe:webhook"
+	ok.TraceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("benign free-text fields rejected: %v", err)
+	}
+}
+
+func TestCheckPIIExportedSurface(t *testing.T) {
+	// The exported guard is the reuse point for emit/registry free text:
+	// space-separated PANs are legal characters there, so the scanner's
+	// space branch must be live through this path.
+	if err := CheckPII("probe", "card 4111 1111 1111 1111 declined"); err == nil {
+		t.Fatal("space-separated PAN passed CheckPII")
+	} else if !strings.Contains(err.Error(), "card number") {
+		t.Fatalf("wrong rejection reason: %v", err)
+	}
+	if err := CheckPII("probe", "all clear here"); err != nil {
+		t.Fatalf("benign text rejected: %v", err)
+	}
+}
+
+func TestPANBoundariesAndSubSegments(t *testing.T) {
+	reject := []string{
+		"4000000000006",        // 13-digit boundary, Luhn-valid
+		"4000000000000000006",  // 19-digit boundary, Luhn-valid
+		"x-9-4111111111111111", // PAN hidden behind one dash-joined stray digit
+	}
+	for _, v := range reject {
+		vc := validVC()
+		vc.CustomerID = v
+		if err := vc.Validate(); err == nil {
+			t.Errorf("PAN shape accepted: %q", v)
+		}
+	}
+	// One unbroken over-length run must NOT fire on a Luhn-valid substring.
+	vc := validVC()
+	vc.CustomerID = "12345678901234567890"
+	if err := vc.Validate(); err != nil {
+		t.Errorf("20-digit unbroken id rejected: %v", err)
+	}
+}
+
+func TestIBANCaseAndBoundaryHardening(t *testing.T) {
+	reject := []string{
+		"DE89370400440532013000",
+		"xDE89370400440532013000", // abutting letter must not hide it
+		"de89370400440532013000",  // lowercase must not hide it
+	}
+	for _, v := range reject {
+		vc := validVC()
+		vc.EntityID = v
+		if err := vc.Validate(); err == nil {
+			t.Errorf("IBAN shape accepted: %q", v)
+		}
+	}
+	// Shape match with a FAILING mod-97 checksum is an id, not an IBAN.
+	vc := validVC()
+	vc.EntityID = "DE00370400440532013001"
+	if err := vc.Validate(); err != nil {
+		t.Errorf("mod-97-invalid shape rejected: %v", err)
+	}
+}
+
+func TestParseMinorOverflowGuards(t *testing.T) {
+	cases := []struct {
+		s    string
+		exp  int8
+		want int64
+		ok   bool
+	}{
+		{"9223372036854775807", 0, 9223372036854775807, true},
+		{"9223372036854775808", 0, 0, false},
+		{"92233720368547758.07", 2, 9223372036854775807, true},
+		{"92233720368547758.08", 2, 0, false},
+		{"99999999999999999999999", 2, 0, false},
+	}
+	for _, c := range cases {
+		got, err := ParseMinor(c.s, c.exp)
+		if c.ok && (err != nil || got != c.want) {
+			t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
+		}
+		if !c.ok && err == nil {
+			t.Errorf("ParseMinor(%q, %d) = %d, want overflow error", c.s, c.exp, got)
+		}
+	}
+}
+
+func TestMoneyStringIsTotal(t *testing.T) {
+	if got := (Money{Amount: 9223372036854775807, Currency: "USD", Exponent: 2}).String(); got != "USD 92233720368547758.07" {
+		t.Errorf("MaxInt64 render = %q", got)
+	}
+	// Invalid receivers render marked, never panic, never garbage signs.
+	for _, m := range []Money{
+		{Amount: 1, Currency: "USD", Exponent: 64},
+		{Amount: -105, Currency: "USD", Exponent: 2},
+		{Amount: 1, Currency: "usd", Exponent: 2},
+	} {
+		got := m.String()
+		if !strings.Contains(got, "INVALID") {
+			t.Errorf("invalid money %+v rendered %q, want marked INVALID form", m, got)
+		}
+	}
+}
