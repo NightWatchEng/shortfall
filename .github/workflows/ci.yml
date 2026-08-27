@@ -52,6 +52,62 @@ jobs:
       - name: golangci-lint (all modules)
         run: ./scripts/ci-go.sh lint
 
+  bench:
+    name: benchmarks (advisory)
+    # Compares PR benchmarks against main with benchstat and writes the
+    # delta into the job summary. ADVISORY: not in the required-check set
+    # until hot-path baselines stabilize (ratchet: it may become required,
+    # never quietly leave). BENCH_TIME/COUNT keep CI cheap; local runs use
+    # the defaults for real precision.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: stable
+          cache: true
+      - name: bench PR head
+        id: head
+        run: |
+          set +e
+          ./scripts/ci-bench.sh run /tmp/bench-head.txt
+          rc=$?
+          set -e
+          if [ "$rc" = 3 ]; then
+            echo "none=true" >> "$GITHUB_OUTPUT"
+            echo "### Benchmarks: none exist yet" >> "$GITHUB_STEP_SUMMARY"
+            echo "This job reports honestly: 0 benchmarks found. It starts comparing the moment the first one lands (M2: Baggage codec)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [ "$rc" = 0 ] || exit "$rc"
+      - name: bench main baseline
+        if: steps.head.outputs.none != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git checkout "origin/${BASE_REF}"
+          set +e
+          ./scripts/ci-bench.sh run /tmp/bench-base.txt
+          rc=$?
+          set -e
+          # New benchmarks with no baseline on main: nothing to compare yet.
+          [ "$rc" = 3 ] && : > /tmp/bench-base.txt
+          git checkout -f -
+      - name: benchstat delta -> job summary
+        if: steps.head.outputs.none != 'true'
+        run: |
+          go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260825160852-19be9d8e6c70 \
+            /tmp/bench-base.txt /tmp/bench-head.txt | tee /tmp/benchstat.txt || true
+          {
+            echo "### benchstat: main vs PR"
+            echo '```'
+            cat /tmp/benchstat.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
