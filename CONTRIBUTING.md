@@ -74,8 +74,9 @@ not merely that an error occurred. The pre-PR review flags departures.
 ## Documentation accuracy
 
 ADR-0008 (founder mandate): docs tell the truth. Honest tense (planned
-machinery names its landing milestone), enforced-means-enforced, every
-reference resolves, and one standard never has two disagreeing wordings.
+machinery names its landing milestone or is marked TARGET design),
+enforced-means-enforced, every reference resolves, and one standard never
+has two disagreeing wordings.
 **Definition of Done:** a PR that changes behavior, architecture, or a
 contract updates the affected README section, usage doc, AND diagram in
 the same PR. The docs-accuracy review rule flags departures.
@@ -92,4 +93,7 @@ private repo; either way it stays off.
 
 Irreversible decisions live in `docs/adr/`. Code that contradicts an
 accepted ADR is a bug in one of the two; fix the mismatch, never paper over
-it. ADR amendments are their own PRs.
+it. ADR amendments are their own PRs — with one carve-out: a
+reconciliation an incoming ADR explicitly mandates may ride that ADR's
+PR, with a dated amendment note stating what changed and what the text
+said before.

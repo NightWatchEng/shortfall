@@ -46,9 +46,9 @@ API has been stable for some time; the SDK has not reached 1.0.
   failure, overflow, encode failure, or terminal export failure the event
   is **dropped and `biz_dropped_events_total{reason}` increments**
   (`reason` ∈ `invalid`, `overflow`, `encode`, `export`). *(Amended
-  2026-08-27 under ADR-0008: `invalid` added — the emit contract already
-  said invalid outcomes drop and count, and the enum had drifted from
-  it.)* A silent drop is a defect; a visible drop is a
+  2026-08-27 under ADR-0008: `invalid` added; the enum previously read
+  `overflow`, `encode`, `export` — the emit contract already said invalid
+  outcomes drop and count, and the enum had drifted from it.)* A silent drop is a defect; a visible drop is a
   coverage-ratio conversation. The nightly reconciliation leg exists to
   catch exactly the residue this counter admits to.
 - `emit` speaks only the `Exporter` interface; transport choice is

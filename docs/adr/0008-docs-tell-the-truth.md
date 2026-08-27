@@ -41,7 +41,8 @@ bodies — MUST satisfy:
 ## Enforcement
 
 - The `docs-accuracy` review rule (engine: claude) applies to every
-  Markdown file and to Go doc comments; the pre-PR review flags
+  Markdown file (excepting the committed review-memory shards under
+  `.warden/memory/`) and to Go doc comments; the pre-PR review flags
   violations. It declares `covers: [docs-drift, enforcement-claim-drift]`
   so the corpus routes those recurring classes to it.
 - The review charter carries the check so every review applies it even

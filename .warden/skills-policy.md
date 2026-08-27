@@ -49,7 +49,8 @@ Money-correctness focus, applied to every review:
    renderer or consumer.
 8. Documentation accuracy (ADR-0008): honest tense, enforced means
    enforced, references resolve, docs updated in the same PR as the
-   behavior they describe.
+   behavior they describe, and one standard never stated in two
+   disagreeing wordings.
 
 ## Integrations
 
