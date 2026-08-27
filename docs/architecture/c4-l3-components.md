@@ -10,7 +10,7 @@ flowchart LR
     subgraph capture["emit — one Record() call (target design, lands M3)"]
         CTX["ctx: biz.vc member<br/>(decoded ValueContext)"]
         VAL["validate + PII guard<br/>(biz.CheckPII)"]
-        DEDUP["in-process de-dup<br/>bounded by (flow, entity, stage)"]
+        DEDUP["in-process de-dup<br/>bounded, keyed (flow, entity, stage, result)<br/>so failed→success transitions always emit"]
         LABELS["label enforcement<br/>segment ∈ registry enum<br/>flow/stage fallback: unregistered"]
         MP["MetricPoint(s)<br/>biz_value_total · biz_txn_total<br/>delta @ observation time"]
         OUT["biz.Outcome<br/>unsampled, trace-id linked"]
@@ -32,6 +32,11 @@ flowchart LR
     end
     REQ --> REAL & DEF & UNREAL & CUST & COV --> REP
 ```
+
+Cross-process rule the engine legs implement: replicas can each emit the
+same outcome (the in-process de-dup cannot see across processes), so every
+event-summing leg — realized AND coverage — de-duplicates by entity,
+successes included.
 
 Evidence discipline, enforced by the frozen types: `Leg.Evidence` is
 deterministic/estimate/trust; `EstLeg` has no single-number form — only

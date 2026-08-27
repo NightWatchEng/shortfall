@@ -3,9 +3,12 @@ package emit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/registry"
@@ -101,7 +104,9 @@ func emitterVC() biz.ValueContext {
 // flushAndSnapshot forces a synchronous flush so tests never sleep.
 func flushAndSnapshot(t *testing.T, em *Std, exp *captureExporter) ([]MetricPoint, []biz.Outcome) {
 	t.Helper()
-	em.Flush(context.Background())
+	if err := em.Flush(context.Background()); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
 	return exp.snapshot()
 }
 
@@ -321,13 +326,59 @@ func TestOverflowDropsAreCounted(t *testing.T) {
 	if dropped == 0 {
 		t.Fatal("expected overflow drops with a buffer of 2")
 	}
+	// Atomic drop: an overflowed observation contributes NO metric
+	// increments — sums and events cannot diverge through overflow.
+	txn := metricsByName(metrics)["biz_txn_total"]
+	var txnTotal int64
+	for _, p := range txn {
+		txnTotal += p.Value
+	}
+	if txnTotal != int64(len(events)) {
+		t.Fatalf("txn metric total %d != exported events %d — overflow must drop atomically", txnTotal, len(events))
+	}
+}
+
+func TestOverflowDropDoesNotPoisonRetry(t *testing.T) {
+	// Regression for a confirmed finding: the de-dup set must NOT
+	// remember an observation that overflow dropped, or the retry after
+	// the buffer drains is suppressed forever and the event is lost.
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp,
+		WithClock(func() time.Time { return testClock }),
+		WithBufferSize(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+
+	first := emitterVC()
+	second := emitterVC()
+	second.EntityID = "inv_002"
+	em.Record(ctxWithVC(t, first), "capture", biz.ResultFailed)  // fills the buffer
+	em.Record(ctxWithVC(t, second), "capture", biz.ResultFailed) // overflow-dropped
+	if err := em.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	em.Record(ctxWithVC(t, second), "capture", biz.ResultFailed) // retry MUST emit
+	_, events := flushAndSnapshot(t, em, exp)
+	found := false
+	for _, ev := range events {
+		if ev.VC.EntityID == "inv_002" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("retry after overflow was dedup-suppressed — the event is lost in-process")
+	}
 }
 
 func TestExportFailureCountsDrops(t *testing.T) {
 	exp := &captureExporter{failAll: true}
 	em := newTestEmitter(t, exp)
 	em.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed)
-	em.Flush(context.Background())
+	if err := em.Flush(context.Background()); err == nil {
+		t.Fatal("failing export must surface through Flush")
+	}
 	// Let the exporter recover, then flush again: the drop counter for
 	// the failed export must reach the backend.
 	exp.mu.Lock()
@@ -403,13 +454,240 @@ func TestCloseFlushesAndShutsDown(t *testing.T) {
 	}
 }
 
-func BenchmarkRecord(b *testing.B) {
+func TestRecordOptionOverrides(t *testing.T) {
+	webhookAt := time.Date(2026, 8, 27, 9, 15, 0, 0, time.UTC) // hours before receipt
+	cases := []struct {
+		name  string
+		opts  []Option
+		check func(t *testing.T, ev biz.Outcome)
+	}{
+		{"WithAt pins provider event time", []Option{WithAt(webhookAt)}, func(t *testing.T, ev biz.Outcome) {
+			if !ev.At.Equal(webhookAt) {
+				t.Fatalf("At = %v, want the provider timestamp %v — receipt-time stamping moves money across windows", ev.At, webhookAt)
+			}
+		}},
+		{"WithErr carries the failure text", []Option{WithErr("capture timeout after 30s")}, func(t *testing.T, ev biz.Outcome) {
+			if ev.Err != "capture timeout after 30s" {
+				t.Fatalf("Err = %q", ev.Err)
+			}
+		}},
+		{"WithSource tags the origin", []Option{WithSource("stripe:webhook")}, func(t *testing.T, ev biz.Outcome) {
+			if ev.Source != "stripe:webhook" {
+				t.Fatalf("Source = %q", ev.Source)
+			}
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			exp := &captureExporter{}
+			em := newTestEmitter(t, exp)
+			em.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed, c.opts...)
+			_, events := flushAndSnapshot(t, em, exp)
+			if len(events) != 1 {
+				t.Fatalf("events = %d", len(events))
+			}
+			c.check(t, events[0])
+		})
+	}
+}
+
+func TestRecordLinksTraceID(t *testing.T) {
+	exp := &captureExporter{}
+	em := newTestEmitter(t, exp)
+	tid, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
+	sid, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: tid, SpanID: sid})
+	ctx := trace.ContextWithSpanContext(ctxWithVC(t, emitterVC()), sc)
+	em.Record(ctx, "capture", biz.ResultFailed)
+	_, events := flushAndSnapshot(t, em, exp)
+	if len(events) != 1 || events[0].TraceID != "4bf92f3577b34da6a3ce929d0e0e4736" {
+		t.Fatalf("trace link missing: %+v", events)
+	}
+	// And without a span: empty, valid.
+	em2exp := &captureExporter{}
+	em2 := newTestEmitter(t, em2exp)
+	em2.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed)
+	_, events2 := flushAndSnapshot(t, em2, em2exp)
+	if len(events2) != 1 || events2[0].TraceID != "" {
+		t.Fatalf("no-span record should have empty trace id: %+v", events2)
+	}
+}
+
+func TestSetInFlightFencesFlowAndStage(t *testing.T) {
+	cases := []struct {
+		name                string
+		flow, stage         string
+		wantFlow, wantStage string
+	}{
+		{"registered", "invoice.pay", "capture", "invoice.pay", "capture"},
+		{"unregistered flow", "totally.bogus", "capture", "unregistered", "unregistered"},
+		{"unregistered stage", "invoice.pay", "refund", "invoice.pay", "unregistered"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			exp := &captureExporter{}
+			em := newTestEmitter(t, exp)
+			em.SetInFlight(c.flow, c.stage, AgeLt1m, biz.Money{Amount: 1, Currency: "USD", Exponent: 2})
+			metrics, _ := flushAndSnapshot(t, em, exp)
+			g := metricsByName(metrics)["biz_inflight_value"]
+			if len(g) != 1 {
+				t.Fatalf("gauge points: %v", metrics)
+			}
+			if g[0].Labels["flow"] != c.wantFlow || g[0].Labels["stage"] != c.wantStage {
+				t.Fatalf("labels %v, want flow=%s stage=%s — no caller string may mint a series", g[0].Labels, c.wantFlow, c.wantStage)
+			}
+		})
+	}
+}
+
+func TestMetricBufferIsBounded(t *testing.T) {
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp,
+		WithClock(func() time.Time { return testClock }),
+		WithBufferSize(1)) // metricsCap = 8
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+	for i := 0; i < 100; i++ {
+		em.SetInFlight("invoice.pay", "capture", AgeLt1m, biz.Money{Amount: int64(i + 1), Currency: "USD", Exponent: 2})
+	}
+	metrics, _ := flushAndSnapshot(t, em, exp)
+	if len(metrics) > 8 {
+		t.Fatalf("metric buffer exceeded its bound: %d points", len(metrics))
+	}
+}
+
+func TestTwoGenSetEviction(t *testing.T) {
+	s := newTwoGenSet(2)
+	cases := []struct {
+		name string
+		key  string
+		want bool // seen?
+	}{
+		{"a new", "a", false},
+		{"a repeat", "a", true},
+		{"b new", "b", false},
+		{"c new rotates", "c", false},
+		{"a survives one rotation via prev", "a", true},
+		{"d new", "d", false},
+		{"e rotates again", "e", false},
+		{"b evicted after two rotations", "b", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := s.seen(c.key); got != c.want {
+				t.Fatalf("seen(%q) = %v, want %v", c.key, got, c.want)
+			}
+		})
+	}
+}
+
+func TestConcurrentRecordFlushClose(t *testing.T) {
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp, WithFlushInterval(time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				vc := emitterVC()
+				vc.EntityID = fmt.Sprintf("inv_%d_%d", g, i)
+				ctx, err := biz.WithValueContext(context.Background(), vc)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				em.Record(ctx, "capture", biz.ResultFailed)
+				if i%50 == 0 {
+					_ = em.Flush(context.Background())
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+	if err := em.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := em.Close(context.Background()); err != nil {
+		t.Fatal("second Close must be idempotent and return the first result")
+	}
+	_, events := exp.snapshot()
+	if len(events) != 8*200 {
+		t.Fatalf("events = %d, want %d (nothing lost, nothing doubled)", len(events), 8*200)
+	}
+	if !exp.closed {
+		t.Fatal("exporter not shut down")
+	}
+}
+
+func TestBackgroundFlushDelivers(t *testing.T) {
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp, WithFlushInterval(5*time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+	em.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, events := exp.snapshot(); len(events) == 1 {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("background flusher never delivered")
+}
+
+func BenchmarkRecordAccept(b *testing.B) {
 	exp := &captureExporter{}
 	reg, err := registry.Load("../registry/testdata/registry.yaml")
 	if err != nil {
 		b.Fatal(err)
 	}
-	em, err := New(&reg, exp, WithBufferSize(1<<20))
+	em, err := New(&reg, exp, WithBufferSize(1<<22), WithFlushInterval(0))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer em.Close(context.Background())
+	ctxs := make([]context.Context, 4096)
+	for i := range ctxs {
+		vc := emitterVC()
+		vc.EntityID = fmt.Sprintf("inv_%06d", i)
+		ctxs[i], err = biz.WithValueContext(context.Background(), vc)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	stages := [...]string{"auth", "capture", "settle"}
+	results := [...]biz.Result{biz.ResultFailed, biz.ResultSuccess, biz.ResultDeferred, biz.ResultUnknown}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Rotate stage/result/entity so every call takes the ACCEPT path.
+		em.Record(ctxs[i%len(ctxs)], stages[(i/len(ctxs))%len(stages)], results[(i/(len(ctxs)*len(stages)))%len(results)])
+		if i%len(ctxs) == len(ctxs)-1 {
+			b.StopTimer()
+			_ = em.Flush(context.Background())
+			exp.mu.Lock()
+			exp.events, exp.metrics = nil, nil
+			exp.mu.Unlock()
+			b.StartTimer()
+		}
+	}
+}
+
+func BenchmarkRecordSuppressed(b *testing.B) {
+	exp := &captureExporter{}
+	reg, err := registry.Load("../registry/testdata/registry.yaml")
+	if err != nil {
+		b.Fatal(err)
+	}
+	em, err := New(&reg, exp, WithFlushInterval(0))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -418,6 +696,7 @@ func BenchmarkRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	em.Record(ctx, "capture", biz.ResultFailed) // prime the dedup
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
