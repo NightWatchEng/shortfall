@@ -148,6 +148,9 @@ func ParseScenario(raw []byte) (Scenario, error) {
 		if doc.Golden.From.Before(doc.Start) || doc.Golden.To.After(doc.End) {
 			return Scenario{}, fmt.Errorf("scenario %s: golden window outside the run window", doc.Name)
 		}
+		if !doc.Golden.From.Equal(doc.Golden.From.Truncate(time.Minute)) || !doc.Golden.To.Equal(doc.Golden.To.Truncate(time.Minute)) {
+			return Scenario{}, fmt.Errorf("scenario %s: golden window [%v, %v) must be minute-aligned — off-grid bounds silently shift window membership and the snapshot", doc.Name, doc.Golden.From, doc.Golden.To)
+		}
 		d, err := time.ParseDuration(doc.Golden.CaptureSLA)
 		if err != nil || d <= 0 {
 			return Scenario{}, fmt.Errorf("scenario %s: golden.capture_sla: %q invalid", doc.Name, doc.Golden.CaptureSLA)

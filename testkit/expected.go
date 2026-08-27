@@ -31,7 +31,10 @@ type Expected struct {
 
 	// Deferred: in-flight value at the snapshot instant To, by stage,
 	// with the oldest age and capture-SLA breach count. Exact ledger
-	// truth at the snapshot.
+	// truth at the snapshot. BOUNDARY CONTRACT the engine must replicate:
+	// the snapshot is INCLUSIVE of the To instant (authed at exactly To
+	// counts, age 0), while the window-scoped legs use [From, To) with To
+	// excluded.
 	Deferred struct {
 		Count           int   `json:"count"`
 		ValueMinor      int64 `json:"value_minor"`
@@ -56,8 +59,11 @@ type Expected struct {
 		MeanAmountMinorForEst int64 `json:"mean_amount_minor_for_est"`
 	} `json:"unrealized"`
 
-	// Customers impacted: distinct customer ids across realized and
-	// deferred transactions in the window.
+	// Customers impacted: distinct customer ids across realized
+	// transactions created in [From, To) and transactions in flight at
+	// the To snapshot — NOT window-scoped for the deferred half, by the
+	// same snapshot semantics as Deferred (a healthy pipeline contributes
+	// its small baseline in-flight tail).
 	Customers struct {
 		Distinct int `json:"distinct"`
 	} `json:"customers"`
@@ -140,14 +146,21 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 			e.Unrealized.SuppressedCount += s.Count
 		}
 	}
+	// Recoveries are counted by ATTRIBUTION: a recovered txn belongs to
+	// the blackout that originally suppressed it (RecoveredFrom), so the
+	// subtraction is window-coherent even with multiple blackouts in one
+	// run — recoveries from other incidents never deflate this window's
+	// NetLost, and re-suppressed demand is never double-counted.
 	for _, txn := range res.Ledger.Txns {
-		if txn.Recovered {
+		if txn.Recovered && inWindow(txn.RecoveredFrom) {
 			e.Unrealized.RecoveredCount++
 		}
 	}
 	e.Unrealized.NetLostCount = e.Unrealized.SuppressedCount - e.Unrealized.RecoveredCount
 	if e.Unrealized.NetLostCount < 0 {
-		e.Unrealized.NetLostCount = 0
+		// Unreachable under the attribution invariant; kept as a loud
+		// guard rather than a silent clamp.
+		panic("testkit: recovered exceeds suppressed for the same window — attribution invariant broken")
 	}
 	e.Unrealized.MeanAmountMinorForEst = trueMeanAmountMinor(res.Config.EnterpriseFraction)
 	e.Unrealized.NetLostValueMinorEst = int64(e.Unrealized.NetLostCount) * e.Unrealized.MeanAmountMinorForEst

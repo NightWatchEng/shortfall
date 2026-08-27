@@ -72,8 +72,13 @@ type Txn struct {
 
 	State State
 
-	// Recovered marks demand that re-arrived after an upstream blackout.
-	Recovered bool
+	// Recovered marks demand that re-arrived after an upstream blackout;
+	// RecoveredFrom is the ORIGINATING blackout's From instant, so
+	// accounting can attribute a recovery to the incident that suppressed
+	// it — even when the re-arrival was suppressed again by a later
+	// blackout on its way back.
+	Recovered     bool
+	RecoveredFrom time.Time
 }
 
 // Ledger is the ground truth: every synthetic transaction ever created,
@@ -331,14 +336,19 @@ func Run(cfg Config) Result {
 	var (
 		ledger     Ledger
 		suppressed []SuppressedMinute
-		rearrive   = map[int64]int{} // minute unix -> recovered arrivals due
+		// minute unix -> source-blackout From per recovered arrival due
+		// that minute (slice order is scheduling order: deterministic).
+		rearrive = map[int64][]time.Time{}
 	)
 
 	n := 0
-	process := func(t time.Time, recovered bool) {
+	process := func(t time.Time, recoveredFrom time.Time) {
 		n++
 		txn := newTxn(rng, cfg, n, t)
-		txn.Recovered = recovered
+		if !recoveredFrom.IsZero() {
+			txn.Recovered = true
+			txn.RecoveredFrom = recoveredFrom
+		}
 
 		// api faults, in locus order: latency abandonment (the user gives
 		// up before the request lands), then 5xx rejection.
@@ -396,32 +406,39 @@ func Run(cfg Config) Result {
 		delete(rearrive, t.Unix())
 
 		// Upstream blackout: demand never enters — including recovered
-		// demand from an EARLIER blackout that happens to land inside
-		// this one (it gets suppressed and rolled again under this
-		// blackout's recovery model). A recovered fraction re-arrives
-		// after the outage, spread uniformly over the recovery window.
+		// demand from an EARLIER blackout that lands inside this one (it
+		// re-rolls under THIS blackout's recovery model, but keeps its
+		// ORIGINAL attribution, so accounting never double-counts the
+		// same demand). SuppressedMinute counts FRESH demand only for
+		// the same reason. A recovered fraction re-arrives after the
+		// outage, spread uniformly over the recovery window.
 		if f, ok := activeBlackout(t); ok {
-			total := arrivals + due
-			if total > 0 {
-				suppressed = append(suppressed, SuppressedMinute{Minute: t, Count: total})
-				for i := 0; i < total; i++ {
-					if rng.Float64() < f.RecoveredFraction {
-						offset := time.Duration(rng.Int64N(int64(f.RecoveryWithin))).Truncate(time.Minute)
-						at := f.To.Add(offset).Truncate(time.Minute)
-						if at.Before(end) {
-							rearrive[at.Unix()]++
-						}
+			reroll := func(source time.Time) {
+				if rng.Float64() < f.RecoveredFraction {
+					offset := time.Duration(rng.Int64N(int64(f.RecoveryWithin))).Truncate(time.Minute)
+					at := f.To.Add(offset).Truncate(time.Minute)
+					if at.Before(end) {
+						rearrive[at.Unix()] = append(rearrive[at.Unix()], source)
 					}
 				}
+			}
+			if arrivals > 0 {
+				suppressed = append(suppressed, SuppressedMinute{Minute: t, Count: arrivals})
+				for i := 0; i < arrivals; i++ {
+					reroll(f.From)
+				}
+			}
+			for _, source := range due {
+				reroll(source)
 			}
 			continue
 		}
 
 		for i := 0; i < arrivals; i++ {
-			process(t, false)
+			process(t, time.Time{})
 		}
-		for i := 0; i < due; i++ {
-			process(t, true)
+		for _, source := range due {
+			process(t, source)
 		}
 	}
 
