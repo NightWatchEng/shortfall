@@ -1,0 +1,48 @@
+# shortfall's declared agent organization (agentops graph layer).
+# Render: .warden/bin/warden graph render · validate: graph validate.
+# Session-driven deliver pipeline; no unattended night loop (yet).
+#
+# Known validator limit (reviewed at enrollment, accepted): graph validate
+# enforces that merge AUTHORITY is human but cannot inspect boundaries text,
+# so the merge-EXECUTION delegation below is recorded here as prose — which
+# is the platform constitution's prescribed mechanism ("recorded in
+# graph.yaml and revocable"). When the platform pin gains the nodes.github
+# binding field, add github: ["Nigthwatch-eng"] to founder so warden mine
+# can bind real merge events to this node.
+version: 1
+nodes:
+  builder:
+    kind: skill
+    impl: "agentops-skills:deliver"
+    authority: find
+    boundaries:
+      - "one tracked item per invocation"
+      - "never edits gate surface as a side effect of a feature branch"
+      - "never weakens a rule, test, or benchmark to reach green"
+  code-reviewer:
+    kind: subagent
+    impl: "general-purpose (pre-pr-review reviewer pass)"
+    authority: find
+  cross-examiner:
+    kind: subagent
+    impl: "general-purpose (pre-pr-review examiner pass)"
+    authority: judge
+    boundaries: ["single arbiter of candidate findings"]
+  gate:
+    kind: deterministic
+    impl: "warden review --base origin/main --no-comment"
+    authority: gate
+  founder:
+    kind: human
+    impl: "Yauvan Suba"
+    authority: merge
+    boundaries:
+      - "merge EXECUTION delegated to the Claude session agent by explicit founder instruction (2026-08-27); revocable by removing this line"
+      - "delegated merges only when verify, gate, and attestation are all green"
+      - "repo stays private until the pilot exit criterion; the public flip is the founder's alone"
+edges:
+  - {from: builder, to: code-reviewer, payload: diff}
+  - {from: code-reviewer, to: cross-examiner, payload: findings}
+  - {from: cross-examiner, to: builder, payload: findings}
+  - {from: builder, to: gate, payload: diff}
+  - {from: gate, to: founder, payload: pr}

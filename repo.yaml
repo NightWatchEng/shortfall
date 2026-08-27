@@ -1,0 +1,61 @@
+# warden single source of truth for shortfall. Agents and CI read repo facts
+# from HERE — never hardcode paths, tiers, or commands in gate code or CI YAML.
+# Schema-validated on every load against the pinned AgentOps platform; a typo
+# is a hard error, not a silent default.
+version: 1
+repo: shortfall
+
+platform:
+  pin: v1.0.0   # must agree with PIN_SHA in .warden/bin/warden (bump together)
+
+components:
+  biz:       {path: biz/,       lang: go, description: "value types: Money (int64 minor units), ValueContext, Outcome, PII guard"}
+  registry:  {path: registry/,  lang: go, description: "YAML flow registry: schema, loader, validation"}
+  emit:      {path: emit/,      lang: go, description: "stage transitions -> bounded metrics + unsampled outcome events"}
+  propagate: {path: propagate/, lang: go, description: "ValueContext over HTTP Baggage and queue header carriers"}
+  engine:    {path: engine/,    lang: go, description: "realized/deferred/unrealized/customers/coverage + report renderers"}
+  query:     {path: query/,     lang: go, description: "query AST + Querier: the only questions the engine may ask a backend"}
+  cli:       {path: cmd/,       lang: go, description: "shortfall CLI: validate, impact, reconcile, simulate"}
+  adapters:  {path: adapters/,  lang: go, description: "export/query/payment/incident adapters, each a nested module"}
+  harness:   {path: examples/,  lang: go, description: "synthetic checkout system with ground-truth ledger"}
+  testkit:   {path: testkit/,   lang: go, description: "scenario runner + exporter conformance suite"}
+  docs:      {path: docs/,      lang: md, description: "ADRs, guides, semconv proposal draft"}
+
+# First glob match wins, top to bottom; anything unmatched is LOW.
+risk_tiers:
+  - {glob: "repo.yaml",    tier: HIGH, reason: "the policy source of truth itself"}
+  - {glob: ".warden/**",   tier: HIGH, reason: "gate entrypoint shim, rules, and skills policy"}
+  - {glob: "graph.yaml",   tier: HIGH, reason: "declared org constitution: who judges, who gates, who merges"}
+  - {glob: "biz/**",       tier: HIGH, reason: "money representation and the PII guard — every dollar figure flows through these types"}
+  - {glob: "engine/**",    tier: HIGH, reason: "the numbers Finance reads: de-dup, deferred vs lost, ranges; realized and estimate never merged"}
+  - {glob: "emit/**",      tier: HIGH, reason: "cardinality protection and sampling-independent outcome emission are library guarantees"}
+  - {glob: ".github/**",   tier: HIGH, reason: "CI wiring is enforcement surface — a weakened workflow weakens every gate"}
+  - {glob: ".githooks/**", tier: HIGH, reason: "local gate hooks; policy names them gate surface"}
+  - {glob: "registry/**",  tier: MEDIUM}
+  - {glob: "query/**",     tier: MEDIUM}
+  - {glob: "propagate/**", tier: MEDIUM}
+  - {glob: "adapters/**",  tier: MEDIUM}
+  - {glob: "**",           tier: LOW}
+
+protected_paths:
+  - {path: ".warden/rules/",     reason: "gate config; edits change rules_version and need review"}
+  - {path: ".warden/bin/warden", reason: "the executable gate entrypoint — the one gate file that runs as shell; pin bumps only, in lockstep with platform.pin"}
+  - {path: "repo.yaml",          reason: "the policy source of truth; edits are policy PRs, never side effects"}
+  - {path: "graph.yaml",         reason: "who judges, who gates, who merges — including the recorded merge-execution delegation"}
+  - {path: "LICENSE",            reason: "Apache-2.0 decided at bootstrap; changing later is painful and a founder call"}
+
+# Deterministic gates. Commands live here, not in CI YAML or code.
+verify:
+  core:
+    - {run: 'test -z "$(gofmt -l .)"'}
+    - {run: "go vet ./..."}
+    - {run: "go build ./..."}
+    - {run: "go test ./..."}
+  graph:
+    - {run: ".warden/bin/warden graph validate"}
+
+review:
+  rules_dir: .warden/rules
+  blocking_severities: [HIGH]
+  context_excludes:
+    - "**/go.sum"
