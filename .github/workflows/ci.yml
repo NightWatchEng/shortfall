@@ -1,6 +1,13 @@
 # CI: deterministic quality gates. Commands live in repo.yaml / scripts,
 # not in this YAML — jobs here only orchestrate. Gate shape follows the
 # AgentOps adoption guide (distill is the reference consumer).
+#
+# Third-party actions are pinned to immutable commit SHAs, same reasoning as
+# .warden/bin/warden's platform pin: a tag can be force-moved, a SHA cannot.
+#
+# This repo is private and takes same-repo branches only; there is no fork
+# story here. Fork-PR gate handling is a go-public checklist item, decided
+# before the repo ever flips public.
 name: ci
 
 on:
@@ -16,8 +23,8 @@ jobs:
     name: core checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
           go-version: stable
           cache: true
@@ -31,40 +38,57 @@ jobs:
         run: ./scripts/ci-go.sh test
       - name: govulncheck (all modules)
         run: ./scripts/ci-go.sh vuln
+      - name: install golangci-lint (pinned)
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
       - name: golangci-lint (all modules)
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+        run: ./scripts/ci-go.sh lint
 
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0   # scan full history: go-public depends on a clean log
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   gate:
     name: warden gate
     runs-on: ubuntu-latest
-    # Deterministic rules gate: required check on every PR, $0 — no LLM, no
-    # API. engine:python rules run mechanical checkers; HIGH findings exit 1;
+    # Deterministic rules gate: runs on every PR, $0 — no LLM, no API.
+    # engine:python rules run mechanical checkers; HIGH findings exit 1;
     # infra failures exit 2 (fail-closed). engine:claude rules are reviewed
     # pre-PR (warden attest) and show as "deferred" in the sticky comment.
+    # NOTE: whether this check is REQUIRED at the merge button depends on
+    # branch protection, configured outside this file; until then the
+    # delegated-merge discipline (merge only on green) is the control.
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
       issues: write     # sticky comment goes through the issues API
+    env:
+      BASE_REF: ${{ github.base_ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0   # review diffs base...head; a shallow clone has no merge-base
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-go@v5
+      # The gate must never execute PR-controlled gate code: a PR could swap
+      # the shim for `exit 0` (vacuous pass) or read the deploy key. Restore
+      # the entire executable gate surface from the BASE ref before the key
+      # exists on disk and before anything under .warden/bin runs. Policy
+      # changes therefore take effect only after they merge — a gate-surface
+      # PR is judged under the policy it is trying to change, which is the
+      # safe direction. (.warden/memory is NOT restored: the PR's committed
+      # attest shards are exactly what `attest check` verifies.)
+      - name: pin gate surface to the base ref
+        run: |
+          git checkout "origin/${BASE_REF}" -- .warden/bin .warden/rules .warden/skills-policy.md repo.yaml graph.yaml
+          git status --short
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5.4.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
           go-version: stable
           cache: true
@@ -89,15 +113,10 @@ jobs:
           .warden/bin/warden verify --scope graph
       # Assert the PR left a pre-PR review attestation in the COMMITTED corpus
       # (.warden/memory/attest/) — that is what makes the corpus grow every PR.
-      # Fork PRs are exempt: the orchestrated review needs credentials they lack.
       - name: pre-PR review attestation
-        run: |
-          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-            echo "fork PR: attestation not required"; exit 0
-          fi
-          .warden/bin/warden attest check --base "origin/${{ github.base_ref }}"
+        run: .warden/bin/warden attest check --base "origin/${BASE_REF}"
       - name: upload evidence run dirs (provenance archive)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()
         with:
           name: warden-out
@@ -109,8 +128,8 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5.4.2
       - name: platform access (read-only deploy key -> agentops)
         env:
           KEY: ${{ secrets.AGENTOPS_DEPLOY_KEY }}

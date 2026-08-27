@@ -45,12 +45,15 @@ protected_paths:
   - {path: "LICENSE",            reason: "Apache-2.0 decided at bootstrap; changing later is painful and a founder call"}
 
 # Deterministic gates. Commands live here, not in CI YAML or code.
+# One source of truth for the core checks: ci-go.sh discovers every module
+# dynamically, so `warden verify --scope core` and the CI core job can never
+# drift apart or silently skip a nested adapter module.
 verify:
   core:
-    - {run: 'test -z "$(gofmt -l .)"'}
-    - {run: "go vet ./..."}
-    - {run: "go build ./..."}
-    - {run: "go test ./..."}
+    - {run: "./scripts/ci-go.sh fmt"}
+    - {run: "./scripts/ci-go.sh vet"}
+    - {run: "./scripts/ci-go.sh build"}
+    - {run: "./scripts/ci-go.sh test"}
   graph:
     - {run: ".warden/bin/warden graph validate"}
 
