@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Nigthwatch-eng/shortfall/examples/checkout"
+	"github.com/NightWatchEng/shortfall/examples/checkout"
 )
 
 // TestGoldensMatchGroundTruth is the drift fence: the committed goldens

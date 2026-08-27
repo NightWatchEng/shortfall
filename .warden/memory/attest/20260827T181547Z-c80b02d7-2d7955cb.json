@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "c80b02d7d78646a73f15d0cb62b56c1426567232",
+  "base_sha": "29a3eb448e43b5f6bb858629cf6faf901f0dc648",
+  "rules_version": "0b236830a708",
+  "reviewed_at": "2026-08-27T18:15:47+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude Fable 5), independent context \u2014 byte-level shim diff, encoded-form sweep, tidy/build/test verification"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "not convened: zero findings to adjudicate"
+    }
+  ],
+  "records": []
+}

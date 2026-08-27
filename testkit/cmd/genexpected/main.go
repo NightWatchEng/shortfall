@@ -14,8 +14,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Nigthwatch-eng/shortfall/examples/checkout"
-	"github.com/Nigthwatch-eng/shortfall/testkit"
+	"github.com/NightWatchEng/shortfall/examples/checkout"
+	"github.com/NightWatchEng/shortfall/testkit"
 )
 
 func main() {
