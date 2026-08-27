@@ -109,9 +109,11 @@ func TestDecodeRejections(t *testing.T) {
 		"oversize decode":            "1|" + strings.Repeat("a", 600),
 	}
 	for name, s := range cases {
-		if _, err := DecodeVC(s); err == nil {
-			t.Errorf("%s: decode accepted %q", name, s)
-		}
+		t.Run(name, func(t *testing.T) {
+			if _, err := DecodeVC(s); err == nil {
+				t.Errorf("decode accepted %q", s)
+			}
+		})
 	}
 }
 
@@ -185,19 +187,24 @@ func TestWithValueContextPreservesForeignMembers(t *testing.T) {
 }
 
 func TestDeadlineDomain(t *testing.T) {
+	rejections := []struct {
+		name     string
+		deadline time.Time
+	}{
+		{"pre-1970", time.Date(1969, 6, 1, 0, 0, 0, 0, time.UTC)},
+		{"epoch is the no-deadline sentinel", time.Unix(0, 0)},
+		{"beyond year 3000", time.Date(3001, 1, 1, 0, 0, 0, 0, time.UTC)},
+	}
+	for _, c := range rejections {
+		t.Run(c.name, func(t *testing.T) {
+			vc := codecVC()
+			vc.Deadline = c.deadline
+			if _, err := EncodeVC(vc); err == nil {
+				t.Fatal("deadline outside the encodable domain was encoded — the decoder would reject it on the next hop")
+			}
+		})
+	}
 	vc := codecVC()
-	vc.Deadline = time.Date(1969, 6, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := EncodeVC(vc); err == nil {
-		t.Fatal("pre-1970 deadline encoded — the decoder would reject it on the next hop")
-	}
-	vc.Deadline = time.Unix(0, 0)
-	if _, err := EncodeVC(vc); err == nil {
-		t.Fatal("epoch deadline encoded — the wire zero means no deadline and must not be reachable")
-	}
-	vc.Deadline = time.Date(3001, 1, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := EncodeVC(vc); err == nil {
-		t.Fatal("beyond-3000 deadline encoded")
-	}
 	// Sub-second precision truncates by contract (documented): the codec
 	// carries unix seconds.
 	vc.Deadline = time.Date(2026, 8, 27, 14, 32, 0, 500_000_000, time.UTC)
@@ -256,6 +263,7 @@ func randomVC(rng *rand.Rand) ValueContext {
 // TestRoundTripMillionIterations is the ADR-0003 acceptance bar: 1M
 // seeded random round trips, byte-exact equality. Deterministic seed so a
 // failure reproduces; -short runs a 50k slice for quick local loops.
+// ADR-0007 exception: property loop — the case generator is the point.
 func TestRoundTripMillionIterations(t *testing.T) {
 	n := 1_000_000
 	if testing.Short() {

@@ -12,3 +12,4 @@ that rewrites history.
 | [0004](0004-metric-label-set.md) | Exactly six metric labels; cardinality is a library guarantee | proposed |
 | [0005](0005-inflight-age-buckets.md) | Fixed in-flight age buckets (lt1m … gt2h) | proposed |
 | [0006](0006-baseline-v0.md) | Baseline v0: hour-of-week robust median + MAD interval; ML only behind the interface | proposed |
+| [0007](0007-table-driven-tests.md) | Table-driven tests (named cases + t.Run) are the repo standard; declared exceptions only | accepted |
