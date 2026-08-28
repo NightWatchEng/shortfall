@@ -65,10 +65,17 @@ func TestTelemetryOutcomeMapping(t *testing.T) {
 // answers match the ledger's terminal transactions.
 func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	start := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC) // a Monday
+	// A slice of 5xx failures keeps the auth-failed branch of the entry
+	// assertion non-vacuous — with no fault, StateAuthFail never occurs and
+	// the auth-failed term would be asserted against a guaranteed-empty set.
 	res := checkout.Run(checkout.Config{
 		Seed:  42,
 		Start: start,
 		End:   start.Add(2 * time.Hour),
+		Faults: []checkout.FaultSpec{{
+			Kind: checkout.FaultAPI5xx, Rate: 0.2,
+			From: start.Add(30 * time.Minute), To: start.Add(90 * time.Minute),
+		}},
 	})
 	if len(res.Ledger.Txns) == 0 {
 		t.Fatal("harness produced an empty ledger")
@@ -122,6 +129,9 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	}
 	if got := sumTxn(nil); got != wantTerminal+wantEntered {
 		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d)", got, wantTerminal+wantEntered, wantTerminal, wantEntered)
+	}
+	if wantAuthFailed == 0 {
+		t.Fatal("fixture produced no auth failures — the auth-failed half of the entry assertion would be vacuous")
 	}
 	if got := sumTxn(map[string]string{"stage": "auth"}); got != wantEntered+wantAuthFailed {
 		t.Fatalf("entry-stage biz_txn_total sum = %d, want %d entries (entered %d + auth-failed %d)", got, wantEntered+wantAuthFailed, wantEntered, wantAuthFailed)
