@@ -88,7 +88,7 @@ The CLI is one consumer of the library. In your services you:
 
 1. Attach business context to requests with `biz.WithValueContext` and let it
    propagate (`propagate/httpmw`, `kafka`, `sqs`, `amqp`).
-2. Record terminal outcomes with `emit.Std.Record(ctx, stage, result, ...)`,
+2. Record every stage transition with `emit.Std.Record(ctx, stage, result, ...)`,
    backed by an exporter (`adapters/export/*`) that ships the `biz_*` metrics
    and events to your backend.
 3. Query for a report with `engine.Compute` against a `query.Querier`

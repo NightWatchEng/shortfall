@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/NightWatchEng/shortfall/examples/checkout"
 	"github.com/NightWatchEng/shortfall/query"
 	"github.com/NightWatchEng/shortfall/query/memq"
+	"github.com/NightWatchEng/shortfall/registry"
 	"github.com/NightWatchEng/shortfall/testkit"
 )
 
@@ -239,5 +242,105 @@ func TestCoverageWorstSliceIsHeadline(t *testing.T) {
 	}
 	if leg.Ratio != 0.5 {
 		t.Fatalf("headline must be the worst slice (EUR 0.5), got %.4f (slices %+v)", leg.Ratio, slices)
+	}
+}
+
+// perStagePoint builds one success biz_value_total point at a stage — the
+// shape the real emitter ships at every successful stage transition.
+func perStagePoint(stage, currency string, v int64, at time.Time) emit.MetricPoint {
+	return emit.MetricPoint{Name: "biz_value_total", Value: v, At: at, Labels: map[string]string{
+		"flow": "invoice.pay", "stage": stage, "outcome": "success", "currency": currency, "kind": "fee", "segment": "smb"}}
+}
+
+// TestCoverageValueStageAnchored pins the stage-anchored telemetry read: the
+// real emitter ships success value at every stage transition, so an
+// unfiltered cross-stage sum multiply-counts and a clamped ratio can mask an
+// exporter drop entirely. Telemetry is read at the flow's value stage — the
+// declared reconcile stage, defaulting to the last stage.
+func TestCoverageValueStageAnchored(t *testing.T) {
+	window := query.TimeRange{From: time.Unix(0, 0).UTC(), To: time.Unix(3600, 0).UTC()}
+	at := window.From.Add(time.Minute)
+	regYAML := func(reconcile string) string {
+		return `
+version: 1
+segments: [smb]
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: auth,    signals: ["http:POST /pay"] }
+      - { name: capture, signals: ["queue:capture.q"] }
+      - { name: settle,  signals: ["queue:settle.q"] }
+    sla:
+      capture: { deadline: PT30M, on_breach: lost }
+    baseline:  { seasonality: hour_of_week, lookback_weeks: 4 }
+    recovery:  { model: usage_loss_curve, recovered_fraction: 0.0 }
+    reconcile: { ` + reconcile + ` }
+`
+	}
+	// Two settled txns of 100 each; the ledger books 200.
+	full := []emit.MetricPoint{
+		perStagePoint("auth", "USD", 100, at), perStagePoint("capture", "USD", 100, at), perStagePoint("settle", "USD", 100, at),
+		perStagePoint("auth", "USD", 100, at), perStagePoint("capture", "USD", 100, at), perStagePoint("settle", "USD", 100, at),
+	}
+	ledger := []biz.LedgerRow{{
+		Flow: "invoice.pay", Outcome: biz.ResultSuccess,
+		Money: biz.Money{Amount: 200, Currency: "USD", Exponent: 2}, Count: 2,
+	}}
+	cases := []struct {
+		name      string
+		reconcile string
+		points    []emit.MetricPoint
+		wantRatio float64
+	}{
+		{
+			name:      "full per-stage telemetry reads once per txn, full coverage",
+			reconcile: `source: "sql:ledger.payments"`,
+			points:    full,
+			wantRatio: 1.0,
+		},
+		{
+			// The masked-drop defect: the exporter lost one whole txn (all
+			// three of its stage points). The cross-stage sum still reads
+			// 300 >= 200 and clamps to full; the settle-anchored read sees
+			// 100/200.
+			name:      "a dropped txn shows as half coverage, not clamped full",
+			reconcile: `source: "sql:ledger.payments"`,
+			points:    full[:3],
+			wantRatio: 0.5,
+		},
+		{
+			// A declared reconcile stage anchors the read there: with settle
+			// points missing entirely (a settle-blind exporter), capture
+			// still carries every txn once.
+			name:      "declared reconcile stage wins over the last-stage default",
+			reconcile: `source: "sql:ledger.payments", stage: capture`,
+			points: []emit.MetricPoint{
+				perStagePoint("auth", "USD", 100, at), perStagePoint("capture", "USD", 100, at),
+				perStagePoint("auth", "USD", 100, at), perStagePoint("capture", "USD", 100, at),
+			},
+			wantRatio: 1.0,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "registry.yaml")
+			if err := os.WriteFile(path, []byte(regYAML(c.reconcile)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			reg, err := registry.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			q := memq.New(memq.WithMetrics(c.points), memq.WithCaps(query.Caps{Metrics: true}))
+			leg, _, err := Coverage(context.Background(), &reg, q, Request{Window: window, Flows: []string{"invoice.pay"}}, ledger, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if leg.Ratio != c.wantRatio {
+				t.Fatalf("ratio = %.4f, want %.4f", leg.Ratio, c.wantRatio)
+			}
+		})
 	}
 }

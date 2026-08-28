@@ -77,6 +77,24 @@ func TestParseSample(t *testing.T) {
 	if !f.StageValid("settle") || f.StageValid("refund") {
 		t.Fatal("stage lookup wrong")
 	}
+	// No declared reconcile stage: the value stage defaults to the last stage.
+	if vs := f.ValueStage(); vs != "settle" {
+		t.Fatalf("value stage default = %q, want settle", vs)
+	}
+}
+
+func TestReconcileStageDeclared(t *testing.T) {
+	yaml := strings.Replace(sampleYAML,
+		`source: "sql:ledger.payments"`,
+		`source: "sql:ledger.payments", stage: capture`, 1)
+	r, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, _ := r.Flow("invoice.pay")
+	if f.Reconcile.Stage != "capture" || f.ValueStage() != "capture" {
+		t.Fatalf("declared reconcile stage: %+v, ValueStage %q", f.Reconcile, f.ValueStage())
+	}
 }
 
 func TestEstimator(t *testing.T) {
@@ -162,6 +180,7 @@ func TestNegativeFixtures(t *testing.T) {
 		{"bad segment name", mutate("[smb, enterprise]", "[smb, Enterprise!]"), "segment"},
 		{"empty reconcile source", mutate(`source: "sql:ledger.payments"`, `source: ""`), "reconcile"},
 		{"unknown reconcile scheme", mutate("sql:ledger.payments", "ftp:ledger"), "reconcile"},
+		{"reconcile stage not declared", mutate(`source: "sql:ledger.payments"`, `source: "sql:ledger.payments", stage: refund`), "reconcile"},
 		{"flow name uppercase", mutate("invoice.pay:", "Invoice.Pay:"), "flow"},
 		{"no stages", mutate(`stages:
       - { name: auth,    signals: ["http:POST /pay", "provider:stripe.payment_intent"] }

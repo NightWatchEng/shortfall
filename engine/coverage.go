@@ -36,7 +36,6 @@ type CoverageSlice struct {
 // must not tank the headline). With no success ledger rows — or none with
 // value — the leg is Unavailable, never a fabricated 100%.
 func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req Request, ledger []biz.LedgerRow, source string) (CoverageLeg, []CoverageSlice, error) {
-	_ = reg // reserved for per-flow currency/estimator validation
 	leg := CoverageLeg{Window: req.Window, Source: source, Evidence: EvidenceTrust}
 
 	// Ledger success value per (flow, currency), keeping the currency's exponent.
@@ -81,7 +80,18 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		if lcur == nil {
 			continue // requested flow not in the ledger — nothing to reconcile
 		}
-		tel, err := telemetrySuccessValue(ctx, q, flow, req.Window)
+		// Telemetry is read at the flow's value stage so per-stage success
+		// emission is counted once per transaction (a cross-stage sum
+		// multiply-counts, and the clamp would mask exporter drops). A flow
+		// the registry does not know — or a nil registry — falls back to
+		// the unfiltered read.
+		valueStage := ""
+		if reg != nil {
+			if f, ok := reg.Flow(flow); ok {
+				valueStage = f.ValueStage()
+			}
+		}
+		tel, err := telemetrySuccessValue(ctx, q, flow, valueStage, req.Window)
 		if err != nil {
 			return CoverageLeg{}, nil, fmt.Errorf("engine: coverage telemetry query for %q: %w", flow, err)
 		}
@@ -122,17 +132,23 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 }
 
 // telemetrySuccessValue returns captured (success) value per currency for a
-// flow over the window: the biz_value_total metric when the backend serves it,
-// otherwise the exact sum of success outcome events.
-func telemetrySuccessValue(ctx context.Context, q query.Querier, flow string, window query.TimeRange) (map[string]int64, error) {
+// flow over the window — at the flow's value stage when one is known, so
+// per-stage emission counts each transaction once — via the biz_value_total
+// metric when the backend serves it, otherwise the exact sum of success
+// outcome events.
+func telemetrySuccessValue(ctx context.Context, q query.Querier, flow, valueStage string, window query.TimeRange) (map[string]int64, error) {
 	caps := q.Capabilities()
 	out := map[string]int64{}
+	filters := map[string]string{"flow": flow, "outcome": "success"}
+	if valueStage != "" {
+		filters["stage"] = valueStage
+	}
 	switch {
 	case caps.Metrics:
 		series, err := q.QueryMetric(ctx, query.Query{
 			Metric:  "biz_value_total",
 			Agg:     query.AggSum,
-			Filters: map[string]string{"flow": flow, "outcome": "success"},
+			Filters: filters,
 			GroupBy: []string{"currency"},
 			Range:   window,
 		})
@@ -147,7 +163,7 @@ func telemetrySuccessValue(ctx context.Context, q query.Querier, flow string, wi
 	case caps.Events:
 		groups, err := q.QueryEvents(ctx, query.EventQuery{
 			Range:   window,
-			Filters: map[string]string{"flow": flow, "outcome": "success"},
+			Filters: filters,
 			GroupBy: []string{"currency"},
 		})
 		if err != nil {

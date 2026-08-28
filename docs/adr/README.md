@@ -21,3 +21,4 @@ that rewrites history.
 | [0013](0013-severity-suggestion.md) | Suggested severity from a registry $/min-at-risk ladder, worst currency | accepted |
 | [0014](0014-go-readability-conventions.md) | Go readability conventions: line breaks, comment density, doc style | accepted |
 | [0015](0015-go-performance-guidelines.md) | Go performance guidelines: reviewed reference checklist for hot paths | accepted |
+| [0016](0016-value-stage-anchoring.md) | Success value is read at one declared value stage (ADR-0011 amendment) | accepted |

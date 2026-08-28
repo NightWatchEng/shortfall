@@ -57,6 +57,10 @@ invoice.pay:
     within: PT2H                # required when recovered_fraction is set
   reconcile:                    # the ledger source coverage is measured against
     source: "sql:ledger.payments"   # scheme:path — known schemes: sql:, stripe:
+    stage: capture              # optional: the flow's value stage — the stage
+                                # whose success observations telemetry is
+                                # compared at (must be a declared stage;
+                                # defaults to the last stage). ADR-0016.
 ```
 
 ## Field notes
