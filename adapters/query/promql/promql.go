@@ -3,10 +3,12 @@
 // the in-memory reference (query/memq) rather than PromQL's rate helpers:
 // counter families as a non-extrapolating cumulative difference across the
 // window (each boundary read via last_over_time, one-end series filled to 0),
-// the gauge family as last_over_time. See translate() for the exact expression,
-// the exactness properties, and their limits (monotonic-counter assumption,
-// sample-boundary alignment, Step==0 only) — numeric parity against a live
-// Prometheus is verified by the golden harness.
+// the gauge family as last_over_time. A stepped (Step>0) query is one such
+// instant expression per forward bucket, assembled client-side. See
+// translate() and translateStepped() for the exact expressions, the
+// exactness properties, and their limits (monotonic-counter assumption,
+// sample-boundary alignment) — numeric parity against a live Prometheus is
+// verified by the golden harness for both window and stepped shapes.
 //
 // It is events-incapable (Prometheus has no event store) and returns
 // query.ErrUnsupported for QueryEvents, so the engine reports the customers
@@ -24,6 +26,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -74,17 +77,80 @@ func (q *Querier) QueryEvents(context.Context, query.EventQuery) (query.EventGro
 	return nil, query.ErrUnsupported
 }
 
-// QueryMetric translates the query to PromQL and executes it as an instant
-// query against the Prometheus HTTP API, returning the memq Series shape.
+// QueryMetric translates the query to PromQL and executes it against the
+// Prometheus HTTP API, returning the memq Series shape. A Step==0 query is
+// one instant query; a stepped query is one instant query per bucket,
+// assembled client-side (see translateStepped).
 func (q *Querier) QueryMetric(ctx context.Context, qy query.Query) (query.Series, error) {
 	if !qy.Range.To.After(qy.Range.From) {
 		return nil, fmt.Errorf("promql: empty range [%s,%s)", qy.Range.From, qy.Range.To)
+	}
+	if qy.Step > 0 {
+		return q.stepped(ctx, qy)
 	}
 	ex, err := translate(qy)
 	if err != nil {
 		return nil, err
 	}
 	return q.instant(ctx, ex)
+}
+
+// stepped executes one instant query per bucket and merges the per-bucket
+// vectors into Series: points stamped at each bucket's start (memq's stamp),
+// series ordered by their sorted label key (memq's canonical order).
+// Zero-difference counter buckets are dropped — memq omits sample-less
+// buckets — while gauge levels, zero included, are kept (translateStepped
+// documents the tolerance).
+func (q *Querier) stepped(ctx context.Context, qy query.Query) (query.Series, error) {
+	buckets, err := translateStepped(qy)
+	if err != nil {
+		return nil, err
+	}
+	gauge := gaugeFamilies[qy.Metric]
+	merged := map[string]*query.SeriesSlice{}
+	var keys []string
+	for _, b := range buckets {
+		vec, err := q.instant(ctx, b.ex)
+		if err != nil {
+			return nil, err
+		}
+		for _, ss := range vec {
+			if len(ss.Points) == 0 || (!gauge && ss.Points[0].Value == 0) {
+				continue
+			}
+			k := sortedLabelKey(ss.Labels)
+			s, ok := merged[k]
+			if !ok {
+				s = &query.SeriesSlice{Labels: ss.Labels}
+				merged[k] = s
+				keys = append(keys, k)
+			}
+			s.Points = append(s.Points, query.Point{At: b.start, Value: ss.Points[0].Value})
+		}
+	}
+	sort.Strings(keys)
+	out := make(query.Series, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, *merged[k])
+	}
+	return out, nil
+}
+
+// sortedLabelKey renders a label set as a stable sorted key for merge order.
+func sortedLabelKey(labels map[string]string) string {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(labels[k])
+		b.WriteByte(';')
+	}
+	return b.String()
 }
 
 // promResponse is the Prometheus HTTP API envelope.

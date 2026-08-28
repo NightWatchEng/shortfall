@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "9b9c9ab41ea5198a2b2ffc43e0c964652df1f08f",
+  "base_sha": "ffa32082120578370002e580df226254b8f2be8a",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T15:39:17+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; derived pre-window-sample bucket math vs memq"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context, examiner precedent; verified scenario failure semantics and engine reachability"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T15:39:17+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "9b9c9ab41ea5198a2b2ffc43e0c964652df1f08f",
+      "base_sha": "ffa32082120578370002e580df226254b8f2be8a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/promql/translate.go",
+      "line": 19,
+      "severity": "MEDIUM",
+      "finding": "promExpr type comment still said stepped queries are refused and cross-referenced a rationale translate no longer contains \u2014 doc left describing the old behavior by this diff.",
+      "evidence": "translate.go:16-19 vs promql.go stepped routing and translate.go:49-54.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Comment rewritten: instant-per-bucket via translateStepped, no refusal claim.",
+      "id": "4b7fc354365e6371"
+    },
+    {
+      "ts": "2026-08-28T15:39:17+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "9b9c9ab41ea5198a2b2ffc43e0c964652df1f08f",
+      "base_sha": "ffa32082120578370002e580df226254b8f2be8a",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/promgolden",
+      "file": "test/promgolden/golden_test.go",
+      "line": 178,
+      "severity": "MEDIUM",
+      "finding": "Non-vacuous guard covered only biz_txn_total while its comment claimed all counter queries; the failed-value stepped assertion was vacuous in queue-stall (a stall fails nothing) and unguarded in api-5xx where failures are guaranteed.",
+      "evidence": "Examiner traced StateCapFail (never assigned) and StateAuthFail (only FaultAPI5xx); samePointSeries(empty,empty)==true.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Guard extended to biz_value_total in the api-5xx scenario; comment states exactly which queries are guaranteed and why. Live harness re-run green with the new guard.",
+      "id": "3eed84dbce981405"
+    },
+    {
+      "ts": "2026-08-28T15:39:17+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "9b9c9ab41ea5198a2b2ffc43e0c964652df1f08f",
+      "base_sha": "ffa32082120578370002e580df226254b8f2be8a",
+      "rule_id": "unmapped:n-plus-one-query-cost",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/promql/promql.go",
+      "line": 104,
+      "severity": "LOW",
+      "finding": "Sequential instant-per-bucket with lookbacks growing to 2x the window is reachable at engine scale (unrealized baseline: hundreds of round-trips, ~quadratic samples scanned) via shortfall impact --prometheus.",
+      "evidence": "stepped() loop; translateStepped lookback anchor; engine/unrealized.go Step=1h lookback queries; cmd/shortfall/impact.go promql wiring.",
+      "status": "dismissed-with-reason",
+      "origin": "day",
+      "reason": "Parked as tracked bead workspace-ojs (does not block this change): correctness is proven by the golden harness and this PR converts Step>0 from refused/unavailable into correct-but-slow \u2014 a net improvement; the remedies (bounded fan-out, lookback-anchor tightening, batching) each need design attention and, per ADR-0015, a benchmark first. Examiner disposition: tracked follow-up, not in-PR change, not silent dismissal.",
+      "id": "5b17341bb92a0a69"
+    }
+  ]
+}

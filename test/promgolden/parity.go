@@ -70,3 +70,44 @@ func mapsEqual(a, b map[string]float64) bool {
 	}
 	return true
 }
+
+// samePointSeries is the stepped comparator: per series, values must match at
+// each bucket timestamp. Both sides stamp a bucket at its start, so
+// timestamps are comparable directly; a timestamp absent on one side reads as
+// zero (memq emits an explicit zero where the adapter omits a zero
+// difference — the values still agree, while a one-step misalignment shows
+// up as value-vs-zero mismatches and fails).
+func samePointSeries(a, b query.Series) bool {
+	am, bm := pointMap(a), pointMap(b)
+	for k := range bm {
+		if _, ok := am[k]; !ok {
+			am[k] = map[int64]float64{}
+		}
+	}
+	for k, ap := range am {
+		bp := bm[k] // nil reads as all-zero
+		for at, v := range ap {
+			if bp[at] != v {
+				return false
+			}
+		}
+		for at, v := range bp {
+			if ap[at] != v {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func pointMap(s query.Series) map[string]map[int64]float64 {
+	m := map[string]map[int64]float64{}
+	for _, ss := range s {
+		pts := map[int64]float64{}
+		for _, p := range ss.Points {
+			pts[p.At.Unix()] += p.Value
+		}
+		m[labelKey(ss.Labels)] = pts
+	}
+	return m
+}
