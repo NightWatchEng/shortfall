@@ -85,6 +85,75 @@ type buf2 struct{}
 
 func (buf2) Write(p []byte) (int, error) { return len(p), nil }
 
+// TestSanitizationBlocksInjection feeds StatsD framing bytes inside a label
+// value and asserts they cannot break line framing or inject a second
+// metric, an extra tag, a type change, or a sample rate — in either wire
+// format. This is the injection defense; a regression that stopped stripping
+// a byte must fail here.
+func TestSanitizationBlocksInjection(t *testing.T) {
+	// A value packed with every reserved byte for both formats.
+	evil := "a\nb|c,d:e#f@g h.i"
+	cases := []struct {
+		name   string
+		format Format
+		// forbidden bytes that must NOT survive anywhere in the emitted line
+		// beyond the framing the exporter itself writes.
+	}{
+		{name: "dogstatsd", format: DogStatsD},
+		{name: "plain", format: PlainStatsD},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			e, _ := New(WithWriter(&buf), WithFormat(c.format), WithLogger(slog.New(slog.NewTextHandler(&buf2{}, nil))))
+			lbls := valueLbls("USD")
+			lbls["segment"] = evil // inject into one label value
+			if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{
+				{Name: "biz_value_total", Labels: lbls, Value: 14900, At: at},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := e.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			got := lines(t, buf.Bytes())
+			// Exactly one metric line — no injected second metric via newline.
+			if len(got) != 1 {
+				t.Fatalf("injection produced %d lines, want 1: %q", len(got), got)
+			}
+			line := got[0]
+			// The value's reserved bytes must be gone (replaced with '_').
+			for _, b := range []string{"\n", "\r", "\t", " "} {
+				if strings.Contains(line, b) {
+					t.Fatalf("whitespace/newline survived sanitization: %q", line)
+				}
+			}
+			// The evil substring's framing bytes must be gone. DogStatsD tags
+			// permit '.', so only the framing bytes are stripped there; plain
+			// name-encoding also strips '.' (a segment separator).
+			if c.format == PlainStatsD {
+				want := "a_b_c_d_e_f_g_h_i" // '.' also -> '_'
+				if !strings.Contains(line, want) {
+					t.Fatalf("plain value not fully sanitized in %q (want %q)", line, want)
+				}
+			} else {
+				want := "segment:a_b_c_d_e_f_g_h.i" // '.' kept, framing stripped
+				if !strings.Contains(line, want) {
+					t.Fatalf("dogstatsd value not fully sanitized in %q (want %q)", line, want)
+				}
+			}
+			// Structural integrity: exactly one type marker and, for dogstatsd,
+			// exactly one tag section.
+			if strings.Count(line, "|c") != 1 {
+				t.Fatalf("type marker count wrong (injection?): %q", line)
+			}
+			if c.format == DogStatsD && strings.Count(line, "|#") != 1 {
+				t.Fatalf("tag-section marker count wrong (injection?): %q", line)
+			}
+		})
+	}
+}
+
 func TestUnknownFamilyAndNegativeDeltaError(t *testing.T) {
 	cases := []struct {
 		name  string

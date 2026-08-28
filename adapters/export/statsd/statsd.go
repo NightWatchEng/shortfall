@@ -2,7 +2,9 @@
 // In DogStatsD mode (the default) the ADR-0004 label sets ride as tags; in
 // plain-StatsD mode — which has no tags — labels are encoded positionally
 // into the metric name and a one-time warning says what that costs. It is a
-// nested module with no third-party dependencies (net + stdlib only).
+// nested module whose own code imports only net + stdlib over the shortfall
+// core — it wraps no StatsD client library (the core's transitive deps still
+// appear in go.mod as indirect).
 //
 // Honestly metrics-only: Capabilities reports Events=false. StatsD has no
 // place for per-transaction amounts and ids, so the customers leg is
