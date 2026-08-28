@@ -29,6 +29,10 @@ func buildIncident(nEvents int) *memq.Querier {
 	buckets := emit.AgeBuckets
 	events := make([]biz.Outcome, 0, nEvents)
 	span := benchWindow.To.Sub(benchWindow.From)
+	// Per-event stride computed BEFORE multiplying by i: i*span would overflow
+	// int64 (span is ~8.6e13 ns) past ~107k events and wrap negative, silently
+	// dropping events out of the window.
+	stride := span / time.Duration(nEvents)
 	for i := 0; i < nEvents; i++ {
 		cur := currencies[i%len(currencies)]
 		result := biz.ResultFailed
@@ -36,7 +40,7 @@ func buildIncident(nEvents int) *memq.Querier {
 			result = biz.ResultSuccess // a third recover / succeed
 		}
 		events = append(events, biz.Outcome{
-			At:    benchWindow.From.Add(time.Duration(int64(i) * int64(span) / int64(nEvents))),
+			At:    benchWindow.From.Add(time.Duration(i) * stride),
 			Stage: "capture", Result: result,
 			VC: biz.ValueContext{
 				Flow:       "invoice.pay",
@@ -74,13 +78,12 @@ func buildIncident(nEvents int) *memq.Querier {
 // numbers vary by host — the gate compares PR vs main, not against these):
 //
 //	Compute/events=50000    ~200 ms/op   ~164 MB/op   ~2.3M allocs/op
-//	Compute/events=200000   ~470 ms/op   ~447 MB/op   ~6.0M allocs/op
+//	Compute/events=200000   ~730 ms/op   ~646 MB/op   ~10M  allocs/op
 //
-// Time grows sub-linearly across these sizes because the customers leg
-// saturates at the 50k-account cap while realized/deferred stay bounded-pass;
-// the allocation and memory cost grow with event count (the memq grouping
-// builds per-group maps), which is exactly the pressure the gate should watch.
-// ~1M events extrapolates to ~2 GB, so the checked-in sizes stay CI-safe.
+// Time, memory, and allocations grow roughly linearly with event count (each
+// leg is a bounded number of full passes and the memq grouping builds per-group
+// maps) — that linearity is the property the gate should hold. ~1M events
+// extrapolates to ~3 GB, so the checked-in sizes stay CI-safe.
 func BenchmarkCompute(b *testing.B) {
 	reg, err := registry.Load("../registry/testdata/registry.yaml")
 	if err != nil {
