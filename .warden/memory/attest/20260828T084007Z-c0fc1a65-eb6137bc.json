@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "c0fc1a651b59511629cd8a0c6f1c82cde0cfa9ba",
+  "base_sha": "23eb404fde917ac6f3b95b3de14cbc4624c19f12",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T08:40:07+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer+cross-examiner",
+      "agent": "general-purpose subagent (Opus 4.8), independent context \u2014 combined pass, small diff per the skill"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T08:40:07+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "c0fc1a651b59511629cd8a0c6f1c82cde0cfa9ba",
+      "base_sha": "23eb404fde917ac6f3b95b3de14cbc4624c19f12",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized_test.go",
+      "line": 295,
+      "severity": "LOW",
+      "finding": "No boundary test at MetricHistoryWeeks == LookbackWeeks (the no-gap side of the strict `<`), so an off-by-one change to `<=` would not be caught. Tests covered hw=4 (gap) and hw=0 (undeclared) only.",
+      "evidence": "Guard `hw > 0 && hw < flow.Baseline.LookbackWeeks`; no hw==8 case.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Made the no-gap test a table over MetricHistoryWeeks {0 undeclared, 8 == lookback, 12 > lookback}, all asserting no RETENTION GAP note and a proceeding estimate (mid 120000). The hw==8 boundary now guards the strict comparison.",
+      "id": "20ac65110150d72f"
+    }
+  ]
+}
