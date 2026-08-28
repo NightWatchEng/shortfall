@@ -167,11 +167,12 @@ func (f *fakePutter) PutMetricData(_ context.Context, in *cloudwatch.PutMetricDa
 	return &cloudwatch.PutMetricDataOutput{}, nil
 }
 
-func TestPutMetricDataPathSendsDatums(t *testing.T) {
+func TestPutMetricDataReplacesEMFMetricRecords(t *testing.T) {
 	fp := &fakePutter{}
 	var buf bytes.Buffer
 	e := New(WithWriter(&buf), WithMetricPutter(fp))
-	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{
+	ctx := context.Background()
+	if err := e.ExportMetrics(ctx, []emit.MetricPoint{
 		{Name: "biz_value_total", Labels: valueLbls("USD"), Value: 14900, At: at},
 		{Name: "biz_txn_total", Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": "USD", "segment": "smb"}, Value: 1, At: at},
 	}); err != nil {
@@ -183,12 +184,61 @@ func TestPutMetricDataPathSendsDatums(t *testing.T) {
 	if n := len(fp.inputs[0].MetricData); n != 2 {
 		t.Fatalf("want 2 datums, got %d", n)
 	}
-	// EMF records are also written (both paths run).
-	if err := e.Shutdown(context.Background()); err != nil {
+	// Events still go to the writer even with a putter.
+	if err := e.ExportEvents(ctx, []biz.Outcome{{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed}}); err != nil {
 		t.Fatal(err)
 	}
-	if len(decode(t, buf.Bytes())) != 2 {
-		t.Fatal("EMF records must be written even with a putter")
+	if err := e.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	recs := decode(t, buf.Bytes())
+	// With a putter, NO metric EMF records are written (that would
+	// double-count); only the one event record reaches the writer.
+	if len(recs) != 1 {
+		t.Fatalf("want only the event record on the writer, got %d records", len(recs))
+	}
+	if recs[0]["event"] != "biz.outcome" {
+		t.Fatalf("the writer record must be the event, got %v", recs[0])
+	}
+}
+
+// TestPutMetricDataChunksAtServiceLimit exercises the 1000-datum chunking
+// boundary: a batch larger than the limit must split into multiple calls
+// with correct sizes and no lost or duplicated datum.
+func TestPutMetricDataChunksAtServiceLimit(t *testing.T) {
+	cases := []struct {
+		name  string
+		n     int
+		sizes []int
+	}{
+		{"exactly one chunk", 1000, []int{1000}},
+		{"one over the limit", 1001, []int{1000, 1}},
+		{"several chunks", 2500, []int{1000, 1000, 500}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			fp := &fakePutter{}
+			e := New(WithWriter(&bytes.Buffer{}), WithMetricPutter(fp))
+			batch := make([]emit.MetricPoint, c.n)
+			for i := range batch {
+				batch[i] = emit.MetricPoint{Name: "biz_txn_total", Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": "USD", "segment": "smb"}, Value: 1, At: at}
+			}
+			if err := e.ExportMetrics(context.Background(), batch); err != nil {
+				t.Fatal(err)
+			}
+			gotSizes := make([]int, len(fp.inputs))
+			total := 0
+			for i, in := range fp.inputs {
+				gotSizes[i] = len(in.MetricData)
+				total += len(in.MetricData)
+			}
+			if !equalInts(gotSizes, c.sizes) {
+				t.Fatalf("chunk sizes = %v, want %v", gotSizes, c.sizes)
+			}
+			if total != c.n {
+				t.Fatalf("total datums = %d, want %d (lost or duplicated)", total, c.n)
+			}
+		})
 	}
 }
 
@@ -247,6 +297,18 @@ func toStrings(a []any) []string {
 }
 
 func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalInts(a, b []int) bool {
 	if len(a) != len(b) {
 		return false
 	}

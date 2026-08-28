@@ -8,7 +8,9 @@
 // the AWS SDK. The default path (EMF to a writer) makes no API calls at all;
 // the optional PutMetricData path (WithMetricPutter) sends the metric
 // families straight to the CloudWatch API for deployments that cannot ship
-// logs.
+// logs. The two metric paths are mutually exclusive by construction — a
+// putter REPLACES EMF metric records rather than adding to them, so metrics
+// are never counted twice — while outcome events always take the writer.
 //
 // Each EMF record carries its own millisecond Timestamp from the point's or
 // outcome's At, so — unlike the Prometheus exporter — a delayed batch keeps
@@ -77,9 +79,11 @@ func WithNamespace(ns string) func(*Options) { return func(o *Options) { o.names
 // honest default.
 func WithUnit(u string) func(*Options) { return func(o *Options) { o.unit = u } }
 
-// WithMetricPutter enables the optional direct PutMetricData path: metric
-// families are sent to the CloudWatch API in addition to EMF records. Pass a
-// *cloudwatch.Client (or any PutMetricData implementer).
+// WithMetricPutter switches the metric path to the CloudWatch API: metric
+// families are sent via PutMetricData INSTEAD OF being written as EMF metric
+// records — never both, which would double-count under agent extraction.
+// Outcome events still go to the writer (PutMetricData cannot carry them).
+// Pass a *cloudwatch.Client (or any PutMetricData implementer).
 func WithMetricPutter(p metricPutter) func(*Options) { return func(o *Options) { o.putter = p } }
 
 // New builds the exporter. With no options it writes EMF to os.Stdout in the
@@ -110,20 +114,22 @@ func (e *Exporter) Capabilities() emit.Caps {
 	return emit.Caps{Metrics: true, Events: true}
 }
 
-// ExportMetrics writes one EMF record per point and, when a putter is
-// configured, also sends the batch to the CloudWatch API. An unknown family
-// surfaces as an error.
+// ExportMetrics ships the metric families by exactly ONE path, never both:
+// with a putter configured it calls PutMetricData; otherwise it writes EMF
+// metric records for log-based extraction. Emitting both would double-count
+// every metric — the default writer is os.Stdout, which the CloudWatch agent
+// extracts, so "EMF records plus PutMetricData" is the same metric counted
+// twice. Outcome events always go to the writer regardless (see
+// ExportEvents); PutMetricData cannot carry them. An unknown family surfaces
+// as an error.
 func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) error {
 	if len(batch) == 0 {
 		return nil
 	}
-	if err := e.writeMetricRecords(batch); err != nil {
-		return err
-	}
 	if e.putter != nil {
 		return e.putMetricData(ctx, batch)
 	}
-	return nil
+	return e.writeMetricRecords(batch)
 }
 
 func (e *Exporter) writeMetricRecords(batch []emit.MetricPoint) error {
