@@ -17,3 +17,5 @@ use ./adapters/export/splunkhec
 use ./adapters/export/loki
 
 use ./adapters/export/datadog
+
+use ./adapters/query/promql

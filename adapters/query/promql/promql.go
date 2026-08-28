@@ -1,0 +1,228 @@
+// Package promql is a metrics-only query.Querier backed by a Prometheus HTTP
+// API endpoint. It translates the frozen query AST into PromQL — counter
+// families as sum(increase(m[step])), the gauge family as the last level —
+// matching the in-memory reference (query/memq) so the engine reads the same
+// numbers from Prometheus that it reads from memq. It is events-incapable
+// (Prometheus has no event store) and returns query.ErrUnsupported for
+// QueryEvents, so the engine reports the customers leg NotAvailable rather
+// than a silent zero.
+//
+// Nested module, stdlib only: the Prometheus HTTP API is JSON, so no client
+// library is pulled in.
+package promql
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/NightWatchEng/shortfall/query"
+)
+
+// Doer is the slice of *http.Client this adapter needs (a test seam).
+type Doer interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+// Querier queries a Prometheus HTTP API base URL.
+type Querier struct {
+	base            string
+	doer            Doer
+	metricHistWeeks int
+}
+
+var _ query.Querier = (*Querier)(nil)
+
+// Option configures the Querier.
+type Option func(*Querier)
+
+// WithHTTPClient injects the HTTP doer (default 30s *http.Client).
+func WithHTTPClient(d Doer) Option { return func(q *Querier) { q.doer = d } }
+
+// WithMetricHistoryWeeks declares the Prometheus retention (for Caps).
+func WithMetricHistoryWeeks(w int) Option { return func(q *Querier) { q.metricHistWeeks = w } }
+
+// New builds a Querier for a Prometheus base URL, e.g.
+// "http://prometheus:9090".
+func New(baseURL string, opts ...Option) *Querier {
+	q := &Querier{base: baseURL, doer: &http.Client{Timeout: 30 * time.Second}, metricHistWeeks: 6}
+	for _, o := range opts {
+		o(q)
+	}
+	return q
+}
+
+// Capabilities: metrics only.
+func (q *Querier) Capabilities() query.Caps {
+	return query.Caps{Metrics: true, Events: false, MetricHistoryWeeks: q.metricHistWeeks}
+}
+
+// QueryEvents is unsupported: Prometheus is a metric TSDB, not an event store.
+func (q *Querier) QueryEvents(context.Context, query.EventQuery) (query.EventGroups, error) {
+	return nil, query.ErrUnsupported
+}
+
+// QueryMetric translates the query to PromQL and executes it against the
+// Prometheus HTTP API, returning the same shape the memq reference returns.
+func (q *Querier) QueryMetric(ctx context.Context, qy query.Query) (query.Series, error) {
+	if !qy.Range.To.After(qy.Range.From) {
+		return nil, fmt.Errorf("promql: empty range [%s,%s)", qy.Range.From, qy.Range.To)
+	}
+	ex, err := translate(qy)
+	if err != nil {
+		return nil, err
+	}
+	if ex.instant {
+		return q.instant(ctx, ex)
+	}
+	return q.rangeQuery(ctx, ex)
+}
+
+// promResponse is the Prometheus HTTP API envelope.
+type promResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error"`
+	Data   struct {
+		ResultType string            `json:"resultType"`
+		Result     []json.RawMessage `json:"result"`
+	} `json:"data"`
+}
+
+func (q *Querier) instant(ctx context.Context, ex promExpr) (query.Series, error) {
+	v := url.Values{}
+	v.Set("query", ex.expr)
+	v.Set("time", formatTime(ex.at))
+	body, err := q.get(ctx, "/api/v1/query", v)
+	if err != nil {
+		return nil, err
+	}
+	return parseVector(body)
+}
+
+func (q *Querier) rangeQuery(ctx context.Context, ex promExpr) (query.Series, error) {
+	v := url.Values{}
+	v.Set("query", ex.expr)
+	v.Set("start", formatTime(ex.start))
+	// Prometheus range end is inclusive; the frozen range is half-open, so
+	// stop one step before To to avoid an extra boundary bucket.
+	v.Set("end", formatTime(ex.end.Add(-time.Second)))
+	v.Set("step", promDuration(ex.step))
+	body, err := q.get(ctx, "/api/v1/query_range", v)
+	if err != nil {
+		return nil, err
+	}
+	return parseMatrix(body)
+}
+
+func (q *Querier) get(ctx context.Context, path string, v url.Values) ([]byte, error) {
+	u := q.base + path + "?" + v.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("promql: request: %w", err)
+	}
+	resp, err := q.doer.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("promql: do: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("promql: read: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("promql: status %d: %s", resp.StatusCode, string(body))
+	}
+	return body, nil
+}
+
+// parseVector parses an instant-query vector into a Series (one point each).
+func parseVector(body []byte) (query.Series, error) {
+	env, err := decodeEnvelope(body)
+	if err != nil {
+		return nil, err
+	}
+	out := make(query.Series, 0, len(env.Data.Result))
+	for _, raw := range env.Data.Result {
+		var r struct {
+			Metric map[string]string  `json:"metric"`
+			Value  [2]json.RawMessage `json:"value"`
+		}
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("promql: decode vector sample: %w", err)
+		}
+		ts, val, err := sample(r.Value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, query.SeriesSlice{Labels: r.Metric, Points: []query.Point{{At: ts, Value: val}}})
+	}
+	return out, nil
+}
+
+// parseMatrix parses a range-query matrix into a Series (points per series).
+func parseMatrix(body []byte) (query.Series, error) {
+	env, err := decodeEnvelope(body)
+	if err != nil {
+		return nil, err
+	}
+	out := make(query.Series, 0, len(env.Data.Result))
+	for _, raw := range env.Data.Result {
+		var r struct {
+			Metric map[string]string    `json:"metric"`
+			Values [][2]json.RawMessage `json:"values"`
+		}
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("promql: decode matrix series: %w", err)
+		}
+		pts := make([]query.Point, 0, len(r.Values))
+		for _, pair := range r.Values {
+			ts, val, err := sample(pair)
+			if err != nil {
+				return nil, err
+			}
+			pts = append(pts, query.Point{At: ts, Value: val})
+		}
+		out = append(out, query.SeriesSlice{Labels: r.Metric, Points: pts})
+	}
+	return out, nil
+}
+
+func decodeEnvelope(body []byte) (promResponse, error) {
+	var env promResponse
+	if err := json.Unmarshal(body, &env); err != nil {
+		return promResponse{}, fmt.Errorf("promql: decode envelope: %w", err)
+	}
+	if env.Status != "success" {
+		return promResponse{}, fmt.Errorf("promql: query failed: %s", env.Error)
+	}
+	return env, nil
+}
+
+// sample decodes a Prometheus [timestamp, "value"] pair. The value is a
+// float64 (a TSDB stores floats); the engine owns reading money out of it.
+func sample(pair [2]json.RawMessage) (time.Time, float64, error) {
+	var tsF float64
+	if err := json.Unmarshal(pair[0], &tsF); err != nil {
+		return time.Time{}, 0, fmt.Errorf("promql: decode timestamp: %w", err)
+	}
+	var valStr string
+	if err := json.Unmarshal(pair[1], &valStr); err != nil {
+		return time.Time{}, 0, fmt.Errorf("promql: decode value: %w", err)
+	}
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("promql: parse value %q: %w", valStr, err)
+	}
+	sec := int64(tsF)
+	nsec := int64((tsF - float64(sec)) * 1e9)
+	return time.Unix(sec, nsec).UTC(), val, nil
+}
+
+func formatTime(t time.Time) string {
+	return strconv.FormatFloat(float64(t.UnixNano())/1e9, 'f', 3, 64)
+}
