@@ -13,3 +13,5 @@ use ./adapters/export/statsd
 use ./adapters/httpbatch
 
 use ./adapters/export/splunkhec
+
+use ./adapters/export/loki

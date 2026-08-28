@@ -1,0 +1,30 @@
+{
+  "streams": [
+    {
+      "stream": {
+        "flow": "invoice.pay",
+        "outcome": "failed",
+        "stage": "capture"
+      },
+      "values": [
+        [
+          "1787857200000000000",
+          "{\"biz.amount.est\":false,\"biz.amount_minor\":14900,\"biz.currency\":\"USD\",\"biz.customer.id\":\"h:c\",\"biz.entity.id\":\"inv_1\",\"biz.exponent\":2,\"biz.flow\":\"invoice.pay\",\"biz.outcome\":\"failed\",\"biz.segment\":\"smb\",\"biz.stage\":\"capture\",\"biz.value.kind\":\"fee\"}"
+        ]
+      ]
+    },
+    {
+      "stream": {
+        "flow": "invoice.pay",
+        "outcome": "success",
+        "stage": "capture"
+      },
+      "values": [
+        [
+          "1787857200000000000",
+          "{\"biz.amount.est\":false,\"biz.amount_minor\":14900,\"biz.currency\":\"USD\",\"biz.customer.id\":\"h:c\",\"biz.entity.id\":\"inv_3\",\"biz.exponent\":2,\"biz.flow\":\"invoice.pay\",\"biz.outcome\":\"success\",\"biz.segment\":\"smb\",\"biz.stage\":\"capture\",\"biz.value.kind\":\"fee\"}"
+        ]
+      ]
+    }
+  ]
+}
