@@ -381,7 +381,9 @@ func TestSteppedFanOutBounded(t *testing.T) {
 	}
 }
 
-// errAtDoer fails the request whose eval time matches failAt; others succeed.
+// errAtDoer fails the request whose eval time matches failAt immediately;
+// every other request blocks until its context is cancelled, modelling an
+// in-flight call aborted by the fan-out's cancel.
 type errAtDoer struct {
 	failAt string
 	mu     sync.Mutex
@@ -395,22 +397,28 @@ func (e *errAtDoer) Do(req *http.Request) (*http.Response, error) {
 	if req.URL.Query().Get("time") == e.failAt {
 		return &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("boom"))}, nil
 	}
-	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(
-		`{"status":"success","data":{"resultType":"vector","result":[]}}`))}, nil
+	<-req.Context().Done()
+	return nil, req.Context().Err()
 }
 
 // TestSteppedFanOutReportsRealError pins error semantics under concurrency:
-// the failing bucket's own error surfaces (never a cancellation induced by
-// it), and the fan-out stops issuing work after the failure.
+// the failing bucket's own error surfaces (never a cancellation it induced),
+// and the failure stops further work — the first wave's blocked requests
+// hold every semaphore slot until the cancel frees them, after which the
+// remaining buckets observe the cancelled context and never issue a
+// request, so at most steppedConcurrency requests exist.
 func TestSteppedFanOutReportsRealError(t *testing.T) {
-	d := &errAtDoer{failAt: evalAt(from.Add(20 * time.Minute))}
+	d := &errAtDoer{failAt: evalAt(from.Add(time.Minute))} // first bucket fails
 	q := New("http://prom", WithHTTPClient(d))
 	_, err := q.QueryMetric(context.Background(), query.Query{
 		Metric: "biz_txn_total", Agg: query.AggSum,
-		Range: query.TimeRange{From: from, To: to},
-		Step:  20 * time.Minute,
+		Range: query.TimeRange{From: from, To: from.Add(40 * time.Minute)},
+		Step:  time.Minute, // 40 buckets, far above the bound
 	})
 	if err == nil || !strings.Contains(err.Error(), "status 500") {
 		t.Fatalf("want the failing bucket's status 500 error, got %v", err)
+	}
+	if d.n > steppedConcurrency {
+		t.Fatalf("failure must stop further work: %d requests issued, bound %d", d.n, steppedConcurrency)
 	}
 }
