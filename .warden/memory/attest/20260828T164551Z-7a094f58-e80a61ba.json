@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "7a094f58a84646a9a2f3d0bd8fa9e9b7273616ee",
+  "base_sha": "b2669baf9f143b976fdeb9d912ba92920b2ee728",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T16:45:51+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5) \u2014 combined reviewer+examiner pass per the trivial-diff allowance, adversarial self-verification, reviewer memory priors"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same combined pass: every candidate refuted-or-confirmed against the tree before reporting (API signatures, CLI flags, output derivations, de-dup semantics, module paths)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T16:45:51+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "7a094f58a84646a9a2f3d0bd8fa9e9b7273616ee",
+      "base_sha": "b2669baf9f143b976fdeb9d912ba92920b2ee728",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 102,
+      "severity": "MEDIUM",
+      "finding": "Present-tense 'on pkg.go.dev' locator for a private repo pkg.go.dev cannot index.",
+      "evidence": "gh repo view: private true; ADR-0008 honest tense.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Locator now points at go doc locally, with pkg.go.dev framed as landing when the repo goes public.",
+      "id": "a4a3708774a3c0a2"
+    }
+  ]
+}
