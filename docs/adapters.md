@@ -40,6 +40,18 @@ backend grounds deferred + unrealized + a metrics realized upper bound; a
 | `adapters/query/promql` | ✅ | — | Prometheus; gauges via `last_over_time`, counters via a non-extrapolating `@`-diff |
 | `adapters/query/sql` | — | ✅ | any `database/sql` outcomes table; the events source (and the ledger source for coverage) |
 
+Wiring a read boundary — each adapter is one constructor away from
+`engine.Compute`:
+
+```go
+q := promql.New("http://prom:9090")            // metrics legs
+
+db, _ := sql.Open("sqlite", "file:outcomes.db")
+q, _ := sqladapter.New(db)                     // event legs (and the coverage ledger)
+
+report, err := engine.Compute(ctx, &reg, q, req)
+```
+
 The SQL adapter's expected table (override the name with `WithTable`):
 
 ```sql
@@ -66,6 +78,31 @@ Pair a metrics exporter with an events exporter (or use one that does both) to
 ground every leg. The exporter you write ships the same fixed `biz_*` families
 — an exporter that does not recognise a family fails loudly rather than
 silently dropping the batch (a conformance test pins this).
+
+Wiring a write boundary — hand the exporter to `emit.New` and record stage
+transitions as usual:
+
+```go
+exp, _ := promexport.New() // owns a private registry by default
+em, _ := emit.New(&reg, exp)
+http.Handle("/metrics", promhttp.HandlerFor(exp.Gatherer(), promhttp.HandlerOpts{}))
+```
+
+```go
+exp, _ := otlp.New(ctx)    // OTLP metrics + events to your collector
+em, _ := emit.New(&reg, exp)
+defer em.Close(ctx)
+```
+
+## Payment & incident adapters
+
+- `adapters/payment/stripe` — builds the provider-side ledger coverage
+  reconciles against: `stripe.Reconcile(ctx, fetch, since)` pages payment
+  intents into `biz.LedgerRow`s (capture amount basis, ADR-0010); feed the
+  rows to `shortfall reconcile --ledger rows.json`.
+- `adapters/incident/slack` — posts and refreshes the impact ledger in the
+  incident channel: `slack.New(token).Post(ctx, channel, report)`, or
+  `Refresh` to keep one message live while the incident evolves.
 
 ## Writing your own adapter
 
