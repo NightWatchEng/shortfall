@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "281331a448edb89c301ffdafa3f21ca49fe65349",
+  "base_sha": "18d8d3fe924af076e3545469ff584465978b1aab",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T03:54:11+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified currency invariant, cross-flow dedup, top-N ranking/limit, NotAvailable-vs-zero, import boundary, golden independence"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 a docs-accuracy wording finding (ByCurrency labelled 'loss' vs the recovery-agnostic gross failed value the code computes); no behavior change, no failure scenario to refute"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T03:54:11+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "281331a448edb89c301ffdafa3f21ca49fe65349",
+      "base_sha": "18d8d3fe924af076e3545469ff584465978b1aab",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "engine",
+      "file": "engine/customers.go",
+      "line": 21,
+      "severity": "MEDIUM",
+      "finding": "Doc called CustomerImpact.ByCurrency the customer's 'true multi-currency loss', but the leg sums failed-event value without excluding failed-then-recovered customers (unlike RealizedLeg, which nets recovery). It overstated the figure as net loss.",
+      "evidence": "doc: 'a customer's ByCurrency is their true multi-currency loss'; code: flowFilters(req, \"failed\") with no recovery-success pass.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Reworded: ByCurrency is the GROSS value of a customer's failed transactions, deliberately recovery-agnostic ('who was hit', matching the distinct/by-segment counts), explicitly NOT net realized loss (the realized leg's job), with a warning against summing it as company loss. Top-N wording changed from 'loss' to 'failed value'. No behavior change.",
+      "id": "b085231c91ecf04f"
+    }
+  ]
+}
