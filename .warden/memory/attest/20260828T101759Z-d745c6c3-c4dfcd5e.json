@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "d745c6c312691b6387b0cc380e3e01b30f0c4b8e",
+  "base_sha": "e769e351ce97817aa847017252f8b704f61124e3",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T10:17:59+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "docs-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8) \u2014 verified every capability, metric label set, registry field, and money kind against the code; quickstart commands run end-to-end by the author"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T10:17:59+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "d745c6c312691b6387b0cc380e3e01b30f0c4b8e",
+      "base_sha": "e769e351ce97817aa847017252f8b704f61124e3",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "docs",
+      "file": "docs/money.md",
+      "line": 56,
+      "severity": "MEDIUM",
+      "finding": "money.md described the baseline as the median of the last N NON-HOLIDAY weeks, implying holiday exclusion \u2014 but v0 never applies the holiday calendar (Compute passes no Holiday func), contradicting registry.md.",
+      "evidence": "engine/unrealized.go builds baseline.Config with only LookbackWeeks; it notes the calendar is 'not yet applied'.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Reworded to 'last N weeks; the registry can name a holiday calendar to exclude, though v0 does not yet apply one' \u2014 matching registry.md and the code.",
+      "id": "561cd027a968d1e3"
+    },
+    {
+      "ts": "2026-08-28T10:17:59+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "d745c6c312691b6387b0cc380e3e01b30f0c4b8e",
+      "base_sha": "e769e351ce97817aa847017252f8b704f61124e3",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "docs",
+      "file": "docs/semconv.md",
+      "line": 53,
+      "severity": "MEDIUM",
+      "finding": "semconv.md listed the outcome label as success|failed|deferred (3), but the result enumeration has five (adds abandoned, unknown) and the emitter stamps any valid result.",
+      "evidence": "biz/context.go Result constants + Valid() accept success/failed/deferred/abandoned/unknown; emit stamps outcome=string(result).",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Now lists all five as the bounded result enumeration, without over-claiming which legs consume which.",
+      "id": "b6f1e5814df64917"
+    },
+    {
+      "ts": "2026-08-28T10:17:59+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "d745c6c312691b6387b0cc380e3e01b30f0c4b8e",
+      "base_sha": "e769e351ce97817aa847017252f8b704f61124e3",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "docs",
+      "file": "docs/registry.md",
+      "line": 59,
+      "severity": "LOW",
+      "finding": "The reconcile example's 'sql:, stripe:, ...' implied more schemes; only sql: and stripe: are accepted.",
+      "evidence": "registry validation rejects any scheme other than sql/stripe.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Changed to 'known schemes: sql:, stripe:' (no open-ended ...).",
+      "id": "b8ed71cd08b52ef6"
+    }
+  ]
+}

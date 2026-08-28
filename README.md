@@ -59,6 +59,14 @@ Design invariants, enforced in review and by the library itself:
 - No PAN or PII ever appears in `biz.*` attributes (guarded, not promised).
 - Realized and estimated value are never merged into one headline number.
 
+## Documentation
+
+- [Quickstart](docs/quickstart.md) — `go get` to a rendered impact report in 10 minutes.
+- [Adapters & capability matrix](docs/adapters.md) — which backend grounds which leg.
+- [Registry reference](docs/registry.md) — every field of the flow registry.
+- [What is a "dollar" here](docs/money.md) — kind semantics, lost vs delayed, why ranges (for Finance).
+- [Semantic conventions (draft)](docs/semconv.md) — the `biz.*` attribute and metric shapes.
+
 ## Layout
 
 One git repo, multiple Go modules: the core module has no heavy dependencies;
