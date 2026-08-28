@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "d1d9f8cacafe9e6eca4817bf637f883b9bd3adcd",
+  "base_sha": "f71729d88e9c850d71ea2d0ecf59118ea6dc80fe",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T02:27:35+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified two-endpoint routing, ADR-0004 tag safety, count/gauge type mapping, timestamp preservation, gauge At-ordering immunity, replace paths"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 both findings restate patterns already cross-examined (Loki cardinality doc; CloudWatch untested chunking) and the fixes are pure improvements (honest doc + added coverage)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T02:27:35+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "d1d9f8cacafe9e6eca4817bf637f883b9bd3adcd",
+      "base_sha": "f71729d88e9c850d71ea2d0ecf59118ea6dc80fe",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/datadog/datadog.go",
+      "line": 8,
+      "severity": "MEDIUM",
+      "finding": "Package doc claimed metric tags AND log ddtags carry only ADR-0004 bounded dimensions, but only metric tags are emitter-fenced; log ddtags read raw flow/stage off the outcome event, so an unregistered/dynamic flow mints a new tag value.",
+      "evidence": "doc: 'Metric tags and log ddtags carry only the ADR-0004 bounded dimensions'; logTags builds ddtags from vals := {\"flow\": o.VC.Flow, \"stage\": o.Stage, ...}",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Rewrote the package doc and ExportEvents comment to state the asymmetry (metric tags bounded via emitter fence; log ddtag keys fixed and outcome a bounded enum, but flow/stage values raw \u2014 keep flow/stage namespaces bounded). Mirrors the Loki adapter's honest caveat; ADR-0004's guarantee is scoped to metrics.",
+      "id": "53a53a8940b2cfbe"
+    },
+    {
+      "ts": "2026-08-28T02:27:35+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "d1d9f8cacafe9e6eca4817bf637f883b9bd3adcd",
+      "base_sha": "f71729d88e9c850d71ea2d0ecf59118ea6dc80fe",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/datadog/datadog.go",
+      "line": 226,
+      "severity": "MEDIUM",
+      "finding": "maxBatch=500 chunking in ExportMetrics and ExportEvents was untested \u2014 all batches stayed under 500, so the boundary math (multiple posts, tail slice) was unverified.",
+      "evidence": "const maxBatch = 500; for start := 0; start < len(items); start += maxBatch { end := start + maxBatch; if end > len(items) { end = len(items) } ... }",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added TestChunkingAtMaxBatch (table-driven: 500 -> 1 post, 501 -> 2, 1007 -> 3) for BOTH the series and logs paths, asserting post counts and that the item total is preserved (no loss or duplication).",
+      "id": "5c010b8a2c66122c"
+    }
+  ]
+}
