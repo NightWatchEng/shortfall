@@ -18,19 +18,15 @@ import (
 // collapses duplicate failed events for one entity and keeps sums within a
 // single currency (ADR-0001).
 //
-// De-dup and its limit, stated honestly. Under at-least-once delivery a
-// duplicate failed event is the SAME event redelivered, so its amount is
-// identical and collapsing the group as SumMinor/Count is exact. But the
-// frozen query.EventQuery returns only a per-group sum and count — not a
-// representative value — so when an entity legitimately has failed events
-// with DIFFERING amounts, the collapse yields their mean rather than a real
-// figure. The leg flags the DETECTABLE case (the group sum is not divisible
-// by its count) with a caveat; the even-division case (e.g. 100+300 over two
-// events) is not detectable through a sum-only query and is a documented
-// limitation. Exact per-entity de-dup independent of amount uniformity needs
-// a max/first-per-group query capability — a frozen-interface amendment
-// tracked in workspace-7y5, not worked around here. There is no "entity id
-// is unique per transaction" invariant in the library; do not assume one.
+// De-dup is exact. Grouping by (currency, entity) with EventAggMaxPerGroup
+// yields, per entity, the MAXIMUM single failed event's amount (ADR-0009).
+// Under at-least-once delivery a duplicate failed event is the SAME event
+// redelivered, so the max equals its (identical) value — exact. When an entity
+// legitimately has failed events with DIFFERING amounts (partial captures,
+// corrections, order-id reuse), the max is the largest single exposure — a
+// real observed figure, not a synthetic mean, and deterministic. There is no
+// "entity id is unique per transaction" invariant in the library; do not
+// assume one.
 //
 // Metrics-only path (fallback, when the backend serves no events): the failed
 // biz_value_total sums are real, but a time-series cannot de-dup by entity,
@@ -97,16 +93,17 @@ func realizedFromEvents(ctx context.Context, q query.Querier, req Request) (Leg,
 		}
 	}
 
-	// Collapse duplicate failed events per entity to one amount. For a
-	// redelivered (identical) duplicate this mean is exact; when a group's
-	// sum is not divisible by its count the duplicates carry differing
-	// amounts, which the mean cannot represent — flag those loudly. (The
-	// even-division differing-amount case is undetectable through a sum-only
-	// query; see the package doc and workspace-7y5.)
-	inconsistent := 0
+	// Collapse duplicate failed events per entity to ONE representative amount:
+	// EventAggMaxPerGroup returns, per (currency, entity), the maximum single
+	// failed event's amount (ADR-0009). For a redelivered (identical) duplicate
+	// the max IS the value — exact; for genuinely differing failed amounts on
+	// one entity it is the largest single exposure, a real observed figure
+	// rather than a synthetic mean. Either way there is no averaging and no
+	// undetectable even-division case.
 	for _, filters := range flowFilters(req, "failed") {
 		groups, err := q.QueryEvents(ctx, query.EventQuery{
 			Range: req.Window, Filters: filters, GroupBy: []string{"currency", "entity"},
+			Agg: query.EventAggMaxPerGroup,
 		})
 		if err != nil {
 			return Leg{}, fmt.Errorf("engine: realized failed query: %w", err)
@@ -115,20 +112,9 @@ func realizedFromEvents(ctx context.Context, q query.Querier, req Request) (Leg,
 			if succeeded[g.Key["entity"]] {
 				continue // recovered on a later attempt
 			}
-			amount := g.SumMinor
-			if g.Count > 1 {
-				if g.SumMinor%g.Count != 0 {
-					inconsistent++
-				}
-				amount = g.SumMinor / g.Count // exact under the precondition
-			}
-			leg.ByCurrency[g.Key["currency"]] += amount
+			leg.ByCurrency[g.Key["currency"]] += g.MaxMinor
 			leg.Count++
 		}
-	}
-	if inconsistent > 0 {
-		leg.Caveats = append(leg.Caveats, fmt.Sprintf(
-			"%d entity/entities had duplicate failed events with inconsistent amounts; their realized value is approximate", inconsistent))
 	}
 	return leg, nil
 }

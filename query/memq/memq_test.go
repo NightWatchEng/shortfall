@@ -201,6 +201,60 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 			t.Fatalf("groups = %+v", groups)
 		}
 	})
+
+	t.Run("max_per_group sets MaxMinor to the largest event, not the sum (ADR-0009)", func(t *testing.T) {
+		groups, err := q.QueryEvents(ctx, query.EventQuery{
+			Range: full, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"},
+			Agg: query.EventAggMaxPerGroup,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// h:c1 has two USD failures (14900, 100): Count 2, SumMinor 15000, MaxMinor 14900.
+		if len(groups) != 1 || groups[0].Count != 2 || groups[0].SumMinor != 15000 || groups[0].MaxMinor != 14900 {
+			t.Fatalf("group = %+v, want count 2 sum 15000 max 14900", groups[0])
+		}
+	})
+
+	t.Run("max_per_group still enforces the currency invariant", func(t *testing.T) {
+		_, err := q.QueryEvents(ctx, query.EventQuery{Range: full, GroupBy: []string{"customer"}, Agg: query.EventAggMaxPerGroup})
+		if err == nil {
+			t.Fatal("max across currencies must be refused, like a cross-currency sum")
+		}
+	})
+
+	t.Run("max seed is sign-independent (parity must not assume non-negative)", func(t *testing.T) {
+		// memq.WithEvents does not validate money, so the running max must not
+		// seed at 0: an all-negative group must report its real (negative) max,
+		// exactly as SQL MAX() would, not 0.
+		neg := []biz.Outcome{
+			{At: base.Add(time.Minute), Stage: "capture", Result: biz.ResultFailed,
+				VC: biz.ValueContext{Flow: "invoice.pay", CustomerID: "h:x", Money: biz.Money{Amount: -300, Currency: "USD", Exponent: 2}}},
+			{At: base.Add(2 * time.Minute), Stage: "capture", Result: biz.ResultFailed,
+				VC: biz.ValueContext{Flow: "invoice.pay", CustomerID: "h:x", Money: biz.Money{Amount: -100, Currency: "USD", Exponent: 2}}},
+		}
+		qn := New(WithEvents(neg))
+		groups, err := qn.QueryEvents(ctx, query.EventQuery{
+			Range: full, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"},
+			Agg: query.EventAggMaxPerGroup,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(groups) != 1 || groups[0].MaxMinor != -100 {
+			t.Fatalf("group = %+v, want MaxMinor -100 (not the 0 seed)", groups[0])
+		}
+	})
+
+	t.Run("EventAggGroups leaves MaxMinor zero (populated only for max_per_group)", func(t *testing.T) {
+		groups, err := q.QueryEvents(ctx, query.EventQuery{Range: full, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if groups[0].MaxMinor != 0 {
+			t.Fatalf("MaxMinor = %d, want 0 for EventAggGroups", groups[0].MaxMinor)
+		}
+	})
 }
 
 func TestQueryEventsOrderLimitAndDistinct(t *testing.T) {
