@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "cd5da789f15cf405d24663fd82841e9af3660994",
+  "base_sha": "a69de68711be00d5a918bbf52d70858d5a1eda8e",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T14:57:36+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; verified the regression cases fail pre-fix by scratch-reverting the guard"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5) \u2014 no candidate findings to arbitrate (reviewer returned an empty list)"
+    }
+  ],
+  "records": []
+}
