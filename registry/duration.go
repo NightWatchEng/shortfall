@@ -8,10 +8,9 @@ import (
 
 // maxDurationSeconds caps registry durations at 10 years. SLAs and
 // recovery windows beyond that are config errors, and the bound keeps
-// every intermediate value in whole-second int64 arithmetic — overflow
-// is structurally impossible, not caught by luck (a confirmed HIGH
-// finding: an unbounded day count could wrap POSITIVE through int64
-// nanoseconds and turn a 213504-day SLA into a silent 25-minute fence).
+// every intermediate value in whole-second int64 arithmetic: an
+// unbounded day count could wrap positive through int64 nanoseconds
+// and turn a 213504-day SLA into a silent 25-minute fence.
 const maxDurationSeconds int64 = 10 * 365 * 24 * 3600
 
 // ParseISODuration parses the ISO-8601 duration subset the registry

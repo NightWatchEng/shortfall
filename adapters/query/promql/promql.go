@@ -6,7 +6,7 @@
 // the gauge family as last_over_time. See translate() for the exact expression,
 // the exactness properties, and their limits (monotonic-counter assumption,
 // sample-boundary alignment, Step==0 only) — numeric parity against a live
-// Prometheus is verified by the golden harness tracked in workspace-0ka.
+// Prometheus is verified by the golden harness.
 //
 // It is events-incapable (Prometheus has no event store) and returns
 // query.ErrUnsupported for QueryEvents, so the engine reports the customers

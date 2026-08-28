@@ -96,7 +96,7 @@ func TestSanitizationBlocksInjection(t *testing.T) {
 	cases := []struct {
 		name   string
 		format Format
-		// forbidden bytes that must NOT survive anywhere in the emitted line
+		// forbidden bytes must not survive anywhere in the emitted line
 		// beyond the framing the exporter itself writes.
 	}{
 		{name: "dogstatsd", format: DogStatsD},

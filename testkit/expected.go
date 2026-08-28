@@ -3,9 +3,9 @@
 // against. The exporter conformance suite every adapter must pass lives in
 // the testkit/conformance subpackage.
 //
-// Evidence discipline mirrors the library's: Realized and Deferred and the
-// abandonment leg are EXACT (the omniscient ledger knows every amount);
-// the suppressed-demand leg is an EXPECTATION (those transactions never
+// Evidence discipline mirrors the library's: Realized, Deferred, and the
+// abandonment leg are exact (the omniscient ledger knows every amount);
+// the suppressed-demand leg is an expectation (those transactions never
 // drew amounts), computed from the generator's true distribution and
 // labelled as such. The two are never summed here and must never be
 // summed downstream.
@@ -32,9 +32,9 @@ type Expected struct {
 
 	// Deferred: in-flight value at the snapshot instant To, by stage,
 	// with the oldest age and capture-SLA breach count. Exact ledger
-	// truth at the snapshot. BOUNDARY CONTRACT the engine must replicate:
-	// the snapshot is INCLUSIVE of the To instant (authed at exactly To
-	// counts, age 0), while the window-scoped legs use [From, To) with To
+	// truth at the snapshot. Boundary contract the engine must replicate:
+	// the snapshot includes the To instant (authed at exactly To counts,
+	// age 0), while the window-scoped legs use [From, To) with To
 	// excluded.
 	Deferred struct {
 		Count           int   `json:"count"`
@@ -62,7 +62,7 @@ type Expected struct {
 
 	// Customers impacted: distinct customer ids across realized
 	// transactions created in [From, To) and transactions in flight at
-	// the To snapshot — NOT window-scoped for the deferred half, by the
+	// the To snapshot — not window-scoped for the deferred half, by the
 	// same snapshot semantics as Deferred (a healthy pipeline contributes
 	// its small baseline in-flight tail).
 	Customers struct {
@@ -147,7 +147,7 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 			e.Unrealized.SuppressedCount += s.Count
 		}
 	}
-	// Recoveries are counted by ATTRIBUTION: a recovered txn belongs to
+	// Recoveries are counted by attribution: a recovered txn belongs to
 	// the blackout that originally suppressed it (RecoveredFrom), so the
 	// subtraction is window-coherent even with multiple blackouts in one
 	// run — recoveries from other incidents never deflate this window's
@@ -164,7 +164,8 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 		panic("testkit: recovered exceeds suppressed for the same window — attribution invariant broken")
 	}
 	e.Unrealized.MeanAmountMinorForEst = trueMeanAmountMinor(res.Config.EnterpriseFraction)
-	e.Unrealized.NetLostValueMinorEst = int64(e.Unrealized.NetLostCount) * e.Unrealized.MeanAmountMinorForEst
+	e.Unrealized.NetLostValueMinorEst = int64(e.Unrealized.NetLostCount) *
+		e.Unrealized.MeanAmountMinorForEst
 
 	e.Customers.Distinct = len(customers)
 	return e

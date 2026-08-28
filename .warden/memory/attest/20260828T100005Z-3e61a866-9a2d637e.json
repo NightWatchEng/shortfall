@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "3e61a86626d47c8ed5973e47570a5f4acc72289e",
+  "base_sha": "a950a7bad8093d099a35ad8142c1194164a39adb",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T10:00:05+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8), independent context \u2014 verified per-currency worst-severity, >= boundary, strictly-decreasing validation, Compute ordering, import boundary, KnownFields nesting"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T10:00:05+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "3e61a86626d47c8ed5973e47570a5f4acc72289e",
+      "base_sha": "a950a7bad8093d099a35ad8142c1194164a39adb",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "registry",
+      "file": "registry/registry.go",
+      "line": 45,
+      "severity": "MEDIUM",
+      "finding": "The SeverityThreshold doc comment's worked example was ~100x wrong: '$2M/hour \u2248 33333 minor/min at exponent 2' conflated dollars/min with minor/min and telescoped $2M/hour down to $333/min. Misleads the registry author choosing floors.",
+      "evidence": "$2M/hour at exponent 2 is 200,000,000 minor/hour = 3,333,333 minor/min, not ~33333.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Rewrote the example with correct arithmetic: a flow losing $2M/hour is 200,000,000 minor/hour / 60 \u2248 3,333,333 minor/min at exponent 2 (USD cents).",
+      "id": "6a5731cd71736c94"
+    },
+    {
+      "ts": "2026-08-28T10:00:05+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "3e61a86626d47c8ed5973e47570a5f4acc72289e",
+      "base_sha": "a950a7bad8093d099a35ad8142c1194164a39adb",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "registry",
+      "file": "registry/registry_test.go",
+      "line": 477,
+      "severity": "LOW",
+      "finding": "The sev-name validation (empty || >32 || whitespace/control) had only the empty branch tested; the >32-length and whitespace branches were unexercised. Also a SuggestSeverity case duplicated 'exactly the floor', leaving 'rate strictly above the top floor' untested.",
+      "evidence": "Only {empty sev} negative case; two identical USD 1_000_000 cases.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added negative cases for a whitespace sev, a >32-char sev, and an unknown field inside a severity entry (KnownFields). Replaced the duplicate SuggestSeverity case with a rate well above the top floor (still SEV1).",
+      "id": "ea21f159d477acc8"
+    }
+  ]
+}

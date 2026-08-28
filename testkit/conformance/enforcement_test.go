@@ -11,25 +11,16 @@ import (
 )
 
 // TestEveryExporterRunsTheSuite is the enforcement wiring: every module
-// under adapters/export/ MUST reference conformance.RunExporter from a test,
-// so a new exporter package cannot merge without wiring up the suite. This
-// test runs in the core module's `go test ./...` (CI's core checks), needs
-// no gate-surface change, and fails the build of any exporter that skips it.
+// under adapters/export/ must reference conformance.RunExporter from a test,
+// so a new exporter package cannot merge without wiring up the suite. It runs
+// in the core module's `go test ./...` and fails the build of any exporter
+// that skips it.
 //
-// What it guarantees, precisely: each exporter module's test sources contain
-// a real (parsed, non-comment, non-string) reference to
-// conformance.RunExporter. The check is an AST scan, not a substring grep,
-// so a mention in a comment or a string literal does NOT satisfy it. This
-// catches the failure it exists to catch — an exporter added with no suite
-// wiring at all.
-//
-// What it does NOT prove: that the reference actually executes. A test that
-// references RunExporter but t.Skip()s before reaching it, or a bare
-// `var _ = conformance.RunExporter`, would satisfy this tripwire without
-// running the suite. Execution is proven elsewhere: the adapter's own
-// `go test` run (CI runs every module) is where a real, unskipped call
-// enters the suite and its assertions catch a lying harness. This test is
-// the "did you wire it at all" gate, not a proof of coverage.
+// It guarantees only that each exporter module's test sources contain a real
+// (parsed, non-comment, non-string) reference to conformance.RunExporter —
+// the "did you wire it at all" gate. It does not prove the reference
+// executes (a t.Skip before it, or `var _ = conformance.RunExporter`, would
+// pass); execution is proven by the adapter's own `go test` run in CI.
 func TestEveryExporterRunsTheSuite(t *testing.T) {
 	root := repoRoot(t)
 	exportDir := filepath.Join(root, "adapters", "export")

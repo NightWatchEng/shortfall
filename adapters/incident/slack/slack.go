@@ -1,5 +1,5 @@
 // Package slack posts a shortfall impact report to a Slack channel and keeps it
-// fresh while an incident is open — the first real consumer of the engine.
+// fresh while an incident is open.
 //
 // It posts the text ledger block (engine/report.RenderText) inside a code fence
 // so the columns line up, remembers the message timestamp, and edits that same

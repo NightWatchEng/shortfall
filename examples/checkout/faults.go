@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-// FaultKind names the four degradation loci from the proposal: API-level
-// failures, API-level latency (abandonment), queue consumer stalls, and
-// upstream blackouts (traffic never enters).
+// FaultKind names the four degradation loci: API-level failures,
+// API-level latency (abandonment), queue consumer stalls, and upstream
+// blackouts (traffic never enters).
 type FaultKind string
 
 const (
@@ -35,7 +35,7 @@ type FaultSpec struct {
 
 	// Rate: api-5xx failure probability, or api-latency abandonment
 	// probability, in (0, 1]. Semantics when faults overlap: each active
-	// fault rolls INDEPENDENTLY per transaction, so two 0.5 faults
+	// fault rolls independently per transaction, so two 0.5 faults
 	// compound to ~0.75 — overlapping specs model overlapping causes.
 	// Abandonment short-circuits the 5xx roll (an abandoned request never
 	// reached the api), which makes rng consumption outcome-dependent;
@@ -60,7 +60,7 @@ func (f FaultSpec) Validate() error {
 	}
 	// The simulation is a minute grid: off-grid boundaries would activate
 	// on rounded minutes while freeze math used exact sub-minute lengths,
-	// leaking off-grid timestamps into ground truth (confirmed finding).
+	// leaking off-grid timestamps into ground truth.
 	if !f.From.Equal(f.From.Truncate(time.Minute)) || !f.To.Equal(f.To.Truncate(time.Minute)) {
 		return fmt.Errorf("fault %s: window [%v, %v) must be minute-aligned", f.Kind, f.From, f.To)
 	}

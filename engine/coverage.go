@@ -31,13 +31,12 @@ type CoverageSlice struct {
 //
 // A slice in the ledger but unseen by telemetry is 0 coverage (the dropped-
 // exporter case). A slice telemetry saw but the ledger did not does not lower
-// the ratio (the ledger is the denominator of record) and is out of scope for
-// v0 attribution — detecting a telemetry-side over-count is future work. A
-// ledger slice that sums to zero value is skipped (coverage of zero is
-// undefined, and a $0 slice must not tank the headline). With no success ledger
-// rows — or none with value — the leg is Unavailable, never a fabricated 100%.
+// the ratio — the ledger is the denominator of record. A ledger slice that
+// sums to zero value is skipped (coverage of zero is undefined, and a $0 slice
+// must not tank the headline). With no success ledger rows — or none with
+// value — the leg is Unavailable, never a fabricated 100%.
 func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req Request, ledger []biz.LedgerRow, source string) (CoverageLeg, []CoverageSlice, error) {
-	_ = reg // reserved: per-flow currency/estimator validation lands with M8 polish
+	_ = reg // reserved for per-flow currency/estimator validation
 	leg := CoverageLeg{Window: req.Window, Source: source, Evidence: EvidenceTrust}
 
 	// Ledger success value per (flow, currency), keeping the currency's exponent.
@@ -88,14 +87,23 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		}
 		for currency, a := range lcur {
 			if a.minor <= 0 {
-				continue // no ledger value to reconcile in this slice — coverage is undefined, not 0; skipping keeps a $0 slice from tanking the trust number
+				// Coverage of a $0 slice is undefined, not 0 — skipping keeps
+				// it from tanking the trust number.
+				continue
 			}
 			telMinor := tel[currency]
 			ratio := float64(telMinor) / float64(a.minor)
 			if ratio > 1 {
 				ratio = 1 // the ledger is the denominator; telemetry seeing more is full coverage, not >100%
 			}
-			slices = append(slices, CoverageSlice{Flow: flow, Currency: currency, Exponent: a.exponent, TelemetryMinor: telMinor, LedgerMinor: a.minor, Ratio: ratio})
+			slices = append(slices, CoverageSlice{
+				Flow:           flow,
+				Currency:       currency,
+				Exponent:       a.exponent,
+				TelemetryMinor: telMinor,
+				LedgerMinor:    a.minor,
+				Ratio:          ratio,
+			})
 			if ratio < worst {
 				worst = ratio
 			}

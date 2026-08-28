@@ -60,10 +60,10 @@ type Flow struct {
 	Name  string
 	Money MoneySpec
 	// Currencies optionally declares the currencies this flow expects,
-	// bounding metric cardinality at review time (ADR-0004). EMPTY MEANS
-	// UNDECLARED: any valid currency is accepted at runtime and the
-	// worst-case cardinality bound falls back to observed traffic — it
-	// does not mean "no currencies".
+	// bounding metric cardinality at review time (ADR-0004). Empty means
+	// undeclared, not "no currencies": any valid currency is accepted at
+	// runtime and the worst-case cardinality bound falls back to observed
+	// traffic.
 	Currencies []string
 	Stages     []Stage
 	SLA        map[string]SLA
@@ -147,7 +147,11 @@ func (r Registry) Flow(name string) (Flow, bool) {
 		out.SLA[k] = v
 	}
 	if f.Estimator != nil {
-		est := Estimator{DefaultMinor: f.Estimator.DefaultMinor, Exponent: f.Estimator.Exponent, BySegment: make(map[string]int64, len(f.Estimator.BySegment))}
+		est := Estimator{
+			DefaultMinor: f.Estimator.DefaultMinor,
+			Exponent:     f.Estimator.Exponent,
+			BySegment:    make(map[string]int64, len(f.Estimator.BySegment)),
+		}
 		for k, v := range f.Estimator.BySegment {
 			est.BySegment[k] = v
 		}
@@ -207,7 +211,7 @@ func (f Flow) EstimateMoney(segment, currency string) (biz.Money, bool) {
 // subdomain of domain (never domain itself, and never a suffix trick
 // like "evil-domain"). Input contract: pass a bare hostname — no port,
 // no trailing dot (use url.URL.Hostname()); case is normalized here, but
-// a ported or dotted input is DENIED, not cleaned. An empty allowlist
+// a ported or dotted input is denied, not cleaned. An empty allowlist
 // denies everything: that is the deny-by-default the ADR mandates.
 func (p Propagation) HostAllowed(host string) bool {
 	host = strings.ToLower(host)
@@ -383,7 +387,7 @@ func Parse(raw []byte) (Registry, error) {
 	r.Propagation = Propagation{AllowHosts: hosts}
 
 	// Severity thresholds (optional): a $/min-at-risk ladder, most-severe first.
-	// Each floor must be positive and STRICTLY DECREASING, so "the highest sev
+	// Each floor must be positive and strictly decreasing, so "the highest sev
 	// whose floor a rate clears" is unambiguous; a duplicate sev or an
 	// out-of-order floor is a config error, not a silent tie.
 	seen := map[string]struct{}{}
@@ -391,18 +395,35 @@ func Parse(raw []byte) (Registry, error) {
 		// A severity name is a display label (SEV1, P1, Critical) — not a metric
 		// token — so it allows mixed case, but must be a single non-empty,
 		// bounded, whitespace-free word (it lands in the report and a pager).
-		if sd.Sev == "" || len(sd.Sev) > 32 || strings.ContainsFunc(sd.Sev, func(r rune) bool { return r <= ' ' || r == 127 }) {
-			return Registry{}, fmt.Errorf("severity[%d].sev %q must be a non-empty word of at most 32 characters with no whitespace", i, sd.Sev)
+		if sd.Sev == "" ||
+			len(sd.Sev) > 32 ||
+			strings.ContainsFunc(sd.Sev, func(r rune) bool { return r <= ' ' || r == 127 }) {
+			return Registry{}, fmt.Errorf(
+				"severity[%d].sev %q must be a non-empty word of at most 32 characters with no whitespace",
+				i,
+				sd.Sev,
+			)
 		}
 		if _, dup := seen[sd.Sev]; dup {
 			return Registry{}, fmt.Errorf("severity[%d]: sev %q declared twice", i, sd.Sev)
 		}
 		seen[sd.Sev] = struct{}{}
 		if sd.MinPerMinute <= 0 {
-			return Registry{}, fmt.Errorf("severity[%d] (%s): min_per_minute %d must be positive minor units", i, sd.Sev, sd.MinPerMinute)
+			return Registry{}, fmt.Errorf(
+				"severity[%d] (%s): min_per_minute %d must be positive minor units",
+				i,
+				sd.Sev,
+				sd.MinPerMinute,
+			)
 		}
 		if i > 0 && sd.MinPerMinute >= doc.Severity[i-1].MinPerMinute {
-			return Registry{}, fmt.Errorf("severity[%d] (%s): min_per_minute %d must be strictly less than the previous threshold %d (order most-severe first)", i, sd.Sev, sd.MinPerMinute, doc.Severity[i-1].MinPerMinute)
+			return Registry{}, fmt.Errorf(
+				"severity[%d] (%s): min_per_minute %d must be strictly less than the previous threshold %d (order most-severe first)",
+				i,
+				sd.Sev,
+				sd.MinPerMinute,
+				doc.Severity[i-1].MinPerMinute,
+			)
 		}
 		r.Severity = append(r.Severity, SeverityThreshold{Sev: sd.Sev, MinPerMinuteMinor: sd.MinPerMinute})
 	}
@@ -444,7 +465,9 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 	}
 	seenCur := map[string]struct{}{}
 	for _, c := range fd.Currencies {
-		if len(c) != 3 || strings.ToUpper(c) != c || strings.ContainsFunc(c, func(r rune) bool { return r < 'A' || r > 'Z' }) {
+		if len(c) != 3 ||
+			strings.ToUpper(c) != c ||
+			strings.ContainsFunc(c, func(r rune) bool { return r < 'A' || r > 'Z' }) {
 			return fail("currencies entry %q is not an ISO 4217 code", c)
 		}
 		if _, dup := seenCur[c]; dup {
@@ -504,7 +527,11 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 				return fail("estimator exponent %d outside [0, 4]", exponent)
 			}
 		}
-		f.Estimator = &Estimator{DefaultMinor: fd.Estimator.DefaultMinor, Exponent: exponent, BySegment: fd.Estimator.BySegment}
+		f.Estimator = &Estimator{
+			DefaultMinor: fd.Estimator.DefaultMinor,
+			Exponent:     exponent,
+			BySegment:    fd.Estimator.BySegment,
+		}
 	}
 	if fd.Baseline.Seasonality != "hour_of_week" {
 		return fail("baseline seasonality %q is not supported (hour_of_week)", fd.Baseline.Seasonality)
@@ -512,7 +539,11 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 	if fd.Baseline.LookbackWeeks < 1 {
 		return fail("baseline lookback_weeks %d must be >= 1", fd.Baseline.LookbackWeeks)
 	}
-	f.Baseline = Baseline{Seasonality: fd.Baseline.Seasonality, LookbackWeeks: fd.Baseline.LookbackWeeks, Holidays: fd.Baseline.Holidays}
+	f.Baseline = Baseline{
+		Seasonality:   fd.Baseline.Seasonality,
+		LookbackWeeks: fd.Baseline.LookbackWeeks,
+		Holidays:      fd.Baseline.Holidays,
+	}
 
 	if fd.Recovery.Model != "usage_loss_curve" {
 		return fail("recovery model %q is not supported (usage_loss_curve)", fd.Recovery.Model)

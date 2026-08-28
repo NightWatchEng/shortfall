@@ -1,23 +1,19 @@
-// Package stripe adapts Stripe to shortfall on two paths. This file is the
-// INBOUND path: a webhook receiver (webhook.go) that verifies the signature
-// and maps events to biz.Outcome. The OUTBOUND path (client.go) is a
-// stripe.Backend decorator that observes every API call for
-// biz_provider_calls_total and emits synchronous auth-stage outcomes for the
-// timeouts and 5xx that Stripe never sends a webhook for. It is a nested
-// module — a non-Stripe user never pulls stripe-go.
+// Package stripe adapts Stripe to shortfall on two paths: an inbound webhook
+// receiver (webhook.go) that verifies the Stripe-Signature and maps events to
+// biz.Outcome, and an outbound stripe.Backend decorator (client.go) that
+// observes every API call for biz_provider_calls_total and emits synchronous
+// auth-stage outcomes for the timeouts and 5xx Stripe never webhooks. It is a
+// nested module — a non-Stripe user never pulls stripe-go.
 //
-// Signature verification is not optional and not hand-rolled: every webhook
-// payload goes through stripe-go's webhook.ConstructEvent, which checks the
-// Stripe-Signature HMAC and timestamp tolerance. An unverified payload is
-// rejected, never mapped — a forged "payment_failed" must not be able to
-// invent a loss.
+// Every webhook payload goes through stripe-go's webhook.ConstructEvent (HMAC
+// and timestamp tolerance); an unverified payload is rejected, never mapped —
+// a forged "payment_failed" must not invent a loss.
 //
 // The ValueContext (flow, entity, customer) rides Stripe metadata: stamp it at
 // PaymentIntent creation with WithStripeMetadata so every resulting webhook
-// arrives pre-tagged. Amounts and currency come from the event payload
-// (Stripe amounts are already minor units); the event's own Created time is
-// the outcome time, so a webhook delivered late during an incident does not
-// move realized loss into the wrong window.
+// arrives pre-tagged. Amounts and currency come from the payload (already
+// minor units); the event's own Created time is the outcome time, so a late
+// webhook does not move realized loss into the wrong window.
 package stripe
 
 import (
@@ -106,14 +102,11 @@ type object struct {
 // VerifyAndMap verifies the Stripe-Signature over payload against secret and,
 // on success, maps the event to an outcome. The bool is false for a verified
 // event this adapter does not map (ignore it). A signature/timestamp failure
-// returns a non-nil error and NO outcome — the payload is rejected.
+// returns a non-nil error and no outcome — the payload is rejected.
 func VerifyAndMap(payload []byte, sigHeader, secret string) (biz.Outcome, bool, error) {
-	// The HMAC + timestamp-tolerance check (the security guarantee) still runs;
-	// IgnoreAPIVersionMismatch only relaxes the SDK's insistence that the
-	// event's api_version equals the pinned stripe-go version. We read only
-	// stable primitive fields (amount, currency, metadata), so an account on a
-	// different API version deserializes identically — rejecting it would drop
-	// legitimate webhooks, not forged ones.
+	// The HMAC + timestamp check still runs; IgnoreAPIVersionMismatch only
+	// skips the SDK's api_version pin — we read only stable primitive fields,
+	// which deserialize identically across API versions.
 	event, err := webhook.ConstructEventWithOptions(payload, sigHeader, secret,
 		webhook.ConstructEventOptions{IgnoreAPIVersionMismatch: true})
 	if err != nil {

@@ -19,13 +19,21 @@ func mp(name string, at time.Time, val int64, labels map[string]string) emit.Met
 
 func TestQueryMetricUnsupportedWhenNoMetrics(t *testing.T) {
 	q := New(WithCaps(query.Caps{Events: true}))
-	if _, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_txn_total"}); !errors.Is(err, query.ErrUnsupported) {
+	if _, err := q.QueryMetric(
+		context.Background(),
+		query.Query{Metric: "biz_txn_total"},
+	); !errors.Is(err, query.ErrUnsupported) {
 		t.Fatalf("err = %v, want ErrUnsupported", err)
 	}
 }
 
 func TestQueryMetricAggregation(t *testing.T) {
-	lbl := map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": "USD"}
+	lbl := map[string]string{
+		"flow":     "invoice.pay",
+		"stage":    "capture",
+		"outcome":  "failed",
+		"currency": "USD",
+	}
 	metrics := []emit.MetricPoint{
 		mp("biz_value_total", base.Add(1*time.Minute), 100, lbl),
 		mp("biz_value_total", base.Add(2*time.Minute), 50, lbl),
@@ -56,7 +64,11 @@ func TestQueryMetricAggregation(t *testing.T) {
 		},
 		{
 			name: "range excludes out-of-window points",
-			q:    query.Query{Metric: "biz_value_total", Agg: query.AggSum, Range: query.TimeRange{From: base, To: base.Add(3 * time.Minute)}},
+			q: query.Query{
+				Metric: "biz_value_total",
+				Agg:    query.AggSum,
+				Range:  query.TimeRange{From: base, To: base.Add(3 * time.Minute)},
+			},
 			want: []float64{150},
 		},
 		{
@@ -96,14 +108,23 @@ func TestQueryMetricAggregation(t *testing.T) {
 // last_over_time — a bucket with no fresh sample must report the carried
 // level, not a gap.
 func TestGaugeCarriesForward(t *testing.T) {
-	lbl := map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": "USD"}
+	lbl := map[string]string{
+		"flow":       "invoice.pay",
+		"stage":      "capture",
+		"age_bucket": "5m-30m",
+		"currency":   "USD",
+	}
 	metrics := []emit.MetricPoint{
-		mp("biz_inflight_value", base.Add(-time.Hour), 200, lbl), // set BEFORE the window
+		mp("biz_inflight_value", base.Add(-time.Hour), 200, lbl), // set before the window
 		mp("biz_inflight_value", base.Add(90*time.Second), 800, lbl),
 	}
 	q := New(WithMetrics(metrics))
 	full := query.TimeRange{From: base, To: base.Add(5 * time.Minute)}
-	series, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_inflight_value", Range: full, Step: time.Minute})
+	series, err := q.QueryMetric(context.Background(), query.Query{
+		Metric: "biz_inflight_value",
+		Range:  full,
+		Step:   time.Minute,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,17 +148,27 @@ func TestGaugeCarriesForward(t *testing.T) {
 	}
 }
 
-// TestGaugeSumsCollapsedSeries is the named regression test for the
-// workspace-0ka gauge-aggregation bug: when GroupBy collapses several gauge
-// series into one group, the bucket value must be the SUM of each series'
-// carried-forward level, matching a real backend's sum by(g)(last_over_time),
-// not a single last sample across the whole group. Two stages (capture, settle)
-// share one (age_bucket, currency) group; the answer is their sum.
+// TestGaugeSumsCollapsedSeries pins the gauge-aggregation regression: when
+// GroupBy collapses several gauge series into one group, the bucket value
+// must be the sum of each series' carried-forward level, matching a real
+// backend's sum by(g)(last_over_time), not a single last sample across the
+// whole group. Two stages (capture, settle) share one (age_bucket, currency)
+// group; the answer is their sum.
 func TestGaugeSumsCollapsedSeries(t *testing.T) {
 	full := query.TimeRange{From: base, To: base.Add(5 * time.Minute)}
 	metrics := []emit.MetricPoint{
-		mp("biz_inflight_value", base.Add(time.Minute), 300, map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "lt1m", "currency": "USD"}),
-		mp("biz_inflight_value", base.Add(time.Minute), 700, map[string]string{"flow": "invoice.pay", "stage": "settle", "age_bucket": "lt1m", "currency": "USD"}),
+		mp("biz_inflight_value", base.Add(time.Minute), 300, map[string]string{
+			"flow":       "invoice.pay",
+			"stage":      "capture",
+			"age_bucket": "lt1m",
+			"currency":   "USD",
+		}),
+		mp("biz_inflight_value", base.Add(time.Minute), 700, map[string]string{
+			"flow":       "invoice.pay",
+			"stage":      "settle",
+			"age_bucket": "lt1m",
+			"currency":   "USD",
+		}),
 	}
 	q := New(WithMetrics(metrics))
 	series, err := q.QueryMetric(context.Background(), query.Query{
@@ -157,8 +188,14 @@ func TestGaugeSumsCollapsedSeries(t *testing.T) {
 func TestQueryMetricGroupsByLabel(t *testing.T) {
 	full := query.TimeRange{From: base, To: base.Add(time.Hour)}
 	metrics := []emit.MetricPoint{
-		mp("biz_txn_total", base.Add(time.Minute), 3, map[string]string{"flow": "invoice.pay", "outcome": "failed"}),
-		mp("biz_txn_total", base.Add(time.Minute), 1, map[string]string{"flow": "invoice.pay", "outcome": "success"}),
+		mp("biz_txn_total", base.Add(time.Minute), 3, map[string]string{
+			"flow":    "invoice.pay",
+			"outcome": "failed",
+		}),
+		mp("biz_txn_total", base.Add(time.Minute), 1, map[string]string{
+			"flow":    "invoice.pay",
+			"outcome": "success",
+		}),
 	}
 	q := New(WithMetrics(metrics))
 	series, err := q.QueryMetric(context.Background(), query.Query{
@@ -182,7 +219,13 @@ func TestQueryMetricGroupsByLabel(t *testing.T) {
 func ev(at time.Time, flow, stage string, result biz.Result, amount int64, currency, customer, segment string) biz.Outcome {
 	return biz.Outcome{
 		At: at, Stage: stage, Result: result,
-		VC: biz.ValueContext{Flow: flow, CustomerID: customer, Segment: segment, Money: biz.Money{Amount: amount, Currency: currency, Exponent: 2}, Kind: biz.KindFee},
+		VC: biz.ValueContext{
+			Flow:       flow,
+			CustomerID: customer,
+			Segment:    segment,
+			Money:      biz.Money{Amount: amount, Currency: currency, Exponent: 2},
+			Kind:       biz.KindFee,
+		},
 	}
 }
 
@@ -204,7 +247,11 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 	})
 
 	t.Run("grouping by currency yields per-currency sums", func(t *testing.T) {
-		groups, err := q.QueryEvents(ctx, query.EventQuery{Range: full, GroupBy: []string{"currency"}, OrderBy: query.OrderSumDesc})
+		groups, err := q.QueryEvents(ctx, query.EventQuery{
+			Range:   full,
+			GroupBy: []string{"currency"},
+			OrderBy: query.OrderSumDesc,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -220,7 +267,11 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 	})
 
 	t.Run("pinning currency via filter allows a single-currency sum", func(t *testing.T) {
-		groups, err := q.QueryEvents(ctx, query.EventQuery{Range: full, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"}})
+		groups, err := q.QueryEvents(ctx, query.EventQuery{
+			Range:   full,
+			Filters: map[string]string{"currency": "USD"},
+			GroupBy: []string{"customer"},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -231,20 +282,27 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 
 	t.Run("max_per_group sets MaxMinor to the largest event, not the sum (ADR-0009)", func(t *testing.T) {
 		groups, err := q.QueryEvents(ctx, query.EventQuery{
-			Range: full, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"},
-			Agg: query.EventAggMaxPerGroup,
+			Range:   full,
+			Filters: map[string]string{"currency": "USD"},
+			GroupBy: []string{"customer"},
+			Agg:     query.EventAggMaxPerGroup,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		// h:c1 has two USD failures (14900, 100): Count 2, SumMinor 15000, MaxMinor 14900.
-		if len(groups) != 1 || groups[0].Count != 2 || groups[0].SumMinor != 15000 || groups[0].MaxMinor != 14900 {
+		if len(groups) != 1 || groups[0].Count != 2 || groups[0].SumMinor != 15000 ||
+			groups[0].MaxMinor != 14900 {
 			t.Fatalf("group = %+v, want count 2 sum 15000 max 14900", groups[0])
 		}
 	})
 
 	t.Run("max_per_group still enforces the currency invariant", func(t *testing.T) {
-		_, err := q.QueryEvents(ctx, query.EventQuery{Range: full, GroupBy: []string{"customer"}, Agg: query.EventAggMaxPerGroup})
+		_, err := q.QueryEvents(ctx, query.EventQuery{
+			Range:   full,
+			GroupBy: []string{"customer"},
+			Agg:     query.EventAggMaxPerGroup,
+		})
 		if err == nil {
 			t.Fatal("max across currencies must be refused, like a cross-currency sum")
 		}
@@ -256,14 +314,24 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 		// exactly as SQL MAX() would, not 0.
 		neg := []biz.Outcome{
 			{At: base.Add(time.Minute), Stage: "capture", Result: biz.ResultFailed,
-				VC: biz.ValueContext{Flow: "invoice.pay", CustomerID: "h:x", Money: biz.Money{Amount: -300, Currency: "USD", Exponent: 2}}},
+				VC: biz.ValueContext{
+					Flow:       "invoice.pay",
+					CustomerID: "h:x",
+					Money:      biz.Money{Amount: -300, Currency: "USD", Exponent: 2},
+				}},
 			{At: base.Add(2 * time.Minute), Stage: "capture", Result: biz.ResultFailed,
-				VC: biz.ValueContext{Flow: "invoice.pay", CustomerID: "h:x", Money: biz.Money{Amount: -100, Currency: "USD", Exponent: 2}}},
+				VC: biz.ValueContext{
+					Flow:       "invoice.pay",
+					CustomerID: "h:x",
+					Money:      biz.Money{Amount: -100, Currency: "USD", Exponent: 2},
+				}},
 		}
 		qn := New(WithEvents(neg))
 		groups, err := qn.QueryEvents(ctx, query.EventQuery{
-			Range: full, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"},
-			Agg: query.EventAggMaxPerGroup,
+			Range:   full,
+			Filters: map[string]string{"currency": "USD"},
+			GroupBy: []string{"customer"},
+			Agg:     query.EventAggMaxPerGroup,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -274,7 +342,11 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 	})
 
 	t.Run("EventAggGroups leaves MaxMinor zero (populated only for max_per_group)", func(t *testing.T) {
-		groups, err := q.QueryEvents(ctx, query.EventQuery{Range: full, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"}})
+		groups, err := q.QueryEvents(ctx, query.EventQuery{
+			Range:   full,
+			Filters: map[string]string{"currency": "USD"},
+			GroupBy: []string{"customer"},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -332,7 +404,10 @@ func TestQueryEventsOrderLimitAndDistinct(t *testing.T) {
 
 func TestQueryEventsUnsupportedWhenNoEvents(t *testing.T) {
 	q := New(WithCaps(query.Caps{Metrics: true}))
-	if _, err := q.QueryEvents(context.Background(), query.EventQuery{}); !errors.Is(err, query.ErrUnsupported) {
+	if _, err := q.QueryEvents(
+		context.Background(),
+		query.EventQuery{},
+	); !errors.Is(err, query.ErrUnsupported) {
 		t.Fatalf("err = %v, want ErrUnsupported", err)
 	}
 }

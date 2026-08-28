@@ -100,7 +100,10 @@ flows:
 		t.Fatalf("nil registry must give no suggestion, got %q", s)
 	}
 	// Zero-length window -> no rate -> no suggestion.
-	zero := Report{Request: Request{Window: query.TimeRange{From: time.Unix(0, 0), To: time.Unix(0, 0)}}, Realized: Leg{ByCurrency: map[string]int64{"USD": 9_999_999}}}
+	zero := Report{
+		Request:  Request{Window: query.TimeRange{From: time.Unix(0, 0), To: time.Unix(0, 0)}},
+		Realized: Leg{ByCurrency: map[string]int64{"USD": 9_999_999}},
+	}
 	if s := SuggestSeverity(reg, zero); s != "" {
 		t.Fatalf("zero window must give no suggestion, got %q", s)
 	}

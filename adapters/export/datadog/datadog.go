@@ -4,21 +4,18 @@
 // this package maps payloads and holds two clients, one per intake endpoint.
 //
 // Nested module — a non-Datadog user pulls neither this nor its plumbing.
-// Both signals are honest (Capabilities Metrics+Events). Amounts and ids ride
-// in the log message, never as a metric tag or a log ddtag. Metric points
-// keep their own timestamp (v1 series is timestamped), so a delayed batch is
-// not restamped to now.
+// Both signals are supported (Capabilities Metrics+Events). Amounts and ids
+// ride in the log message, never as a metric tag or a log ddtag. Metric
+// points keep their own timestamp (v1 series is timestamped), so a delayed
+// batch is not restamped to now.
 //
-// Tag cardinality, honestly. Metric tags come from emit.MetricPoint labels,
-// which the emitter has already fenced per ADR-0004 (an unregistered flow or
-// stage is collapsed to "unregistered"), so metric tag cardinality is
-// bounded. Log ddtags are different: they are built from the outcome EVENT,
-// which deliberately keeps the RAW flow/stage names for diagnosis, and this
-// exporter holds no registry to fence with. The ddtag KEYS are fixed
+// Metric tags come from emit.MetricPoint labels, already fenced per ADR-0004
+// (an unregistered flow/stage collapses to "unregistered"), so metric tag
+// cardinality is bounded. Log ddtags are built from the outcome event, which
+// keeps raw flow/stage names for diagnosis: the ddtag keys are fixed
 // (flow/stage/outcome) and `outcome` is a bounded enum, but the flow/stage
-// VALUES are raw — an unregistered, typo'd, or dynamically-named flow mints a
-// new Datadog tag value. Keep your flow and stage namespaces bounded (as the
-// registry does). ADR-0004's cardinality guarantee is scoped to metrics.
+// values are raw — a typo'd or dynamically-named flow mints a new Datadog
+// tag value. ADR-0004's cardinality guarantee is scoped to metrics.
 package datadog
 
 import (
@@ -76,7 +73,7 @@ func WithMetricsEndpoint(url string) func(*Options) {
 // WithLogsEndpoint overrides the full logs intake URL (tests, proxies).
 func WithLogsEndpoint(url string) func(*Options) { return func(o *Options) { o.logsEndpoint = url } }
 
-// WithHTTPClient injects the HTTP doer for BOTH intakes (tests, transports).
+// WithHTTPClient injects the HTTP doer for both intakes (tests, transports).
 func WithHTTPClient(d httpbatch.Doer) func(*Options) {
 	return func(o *Options) { o.httpOpts = append(o.httpOpts, httpbatch.WithHTTPClient(d)) }
 }

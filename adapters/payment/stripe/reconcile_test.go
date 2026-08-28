@@ -16,8 +16,8 @@ import (
 )
 
 // pi builds a payment-intent fixture. received is the captured amount, set only
-// to model a partial capture (received < amount) — the reconciler deliberately
-// ignores it and reconciles on the intended amount, which these fixtures verify.
+// to model a partial capture (received < amount) — the reconciler ignores it
+// and reconciles on the intended amount (ADR-0010), which these fixtures verify.
 // withErr attaches a last_payment_error so a non-succeeded status maps to a
 // failed loss.
 func pi(id string, status stripe.PaymentIntentStatus, amount, received int64, currency, flow string, withErr bool) *stripe.PaymentIntent {
@@ -69,7 +69,7 @@ func rowFor(rows []biz.LedgerRow, flow, currency string, outcome biz.Result) (bi
 func TestReconcileAggregatesAndReconciles100(t *testing.T) {
 	// A mixed fixture set: successes (captured), a partial capture, a decline
 	// (failed), a processing (deferred), across two flows and two currencies,
-	// plus intents that must NOT become rows (bare cancel, requires_capture).
+	// plus intents that must not become rows (bare cancel, requires_capture).
 	all := []*stripe.PaymentIntent{
 		pi("pi_1", stripe.PaymentIntentStatusSucceeded, 10000, 10000, "usd", "checkout.pay", false),
 		pi("pi_2", stripe.PaymentIntentStatusSucceeded, 5000, 4000, "usd", "checkout.pay", false), // partial capture: received < amount
@@ -94,14 +94,11 @@ func TestReconcileAggregatesAndReconciles100(t *testing.T) {
 		t.Fatalf("skipped = %d, want 2", led.Skipped)
 	}
 
-	// Independent reconciliation oracle: the expected rows are computed by hand
-	// on the TELEMETRY basis — the intended `amount`, the same field the webhook
-	// path records for a succeeded event — NOT the reconciler's own output and
-	// NOT amount_received. pi_2 is a partial capture (amount 5000, received
-	// 4000): the oracle counts 5000, so if the reconciler ever reverts to
-	// amount_received the checkout success row (15000 vs 14000) makes this fail.
-	// This is what makes "reconciles to 100%" a real cross-check rather than a
-	// tautology over the reconciler's own basis.
+	// Independent oracle: expected rows are computed by hand on the telemetry
+	// basis — the intended `amount`, the field the webhook path records — not
+	// the reconciler's own output or amount_received. pi_2 (amount 5000,
+	// received 4000) makes this fail if the reconciler ever reverts to
+	// amount_received, so "reconciles to 100%" is a real cross-check.
 	type want struct {
 		flow, currency string
 		outcome        biz.Result

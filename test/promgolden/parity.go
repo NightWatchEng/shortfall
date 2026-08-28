@@ -25,7 +25,7 @@ func waitIngested(t *testing.T, ctx context.Context, q query.Querier, probe quer
 }
 
 // sameSeries reports whether two results carry the same value per labelled
-// series. It compares the summed value per series keyed by labels — NOT the
+// series. It compares the summed value per series keyed by labels — not the
 // point timestamps: memq stamps a Step==0 bucket at the window start while
 // Prometheus stamps the @-evaluation time, and the parity that matters is the
 // number, not the instant. Money is integer minor units, so the counter sums

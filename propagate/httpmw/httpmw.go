@@ -5,8 +5,8 @@
 // attach flow, entity, and amount so every downstream failure already
 // carries value context.
 //
-// The Transport is the egress FENCE, not just an injector. It fails
-// CLOSED: toward a host outside the allowlist it removes the biz.vc
+// The Transport is the egress fence, not just an injector. It fails
+// closed: toward a host outside the allowlist it removes the biz.vc
 // member — even one a globally-installed generic Baggage propagator
 // added, even when the surrounding header is otherwise malformed —
 // rewriting the header from the recovered members rather than forwarding
@@ -14,7 +14,7 @@
 // only on purpose.
 //
 // Host shapes: allowlist entries are lowercase DNS names or dotted IPv4
-// literals. IPv6 literals and non-punycode IDNs are always OUTSIDE the
+// literals. IPv6 literals and non-punycode IDNs are always outside the
 // fence (they cannot be allowlisted), so biz.vc is never injected toward
 // them and always stripped.
 package httpmw
@@ -32,9 +32,9 @@ import (
 
 const baggageHeader = "baggage"
 
-// recoverMembers parses EVERY baggage field line (HTTP allows more than
+// recoverMembers parses every baggage field line (HTTP allows more than
 // one) and returns the valid members by key. otel's Parse skips invalid
-// members and returns the valid ones ALONGSIDE an error, so a malformed
+// members and returns the valid ones alongside an error, so a malformed
 // neighbour never hides a valid biz.vc — the fence works on what was
 // recoverable, and a genuinely unparsable value simply yields no member
 // for that key rather than being waved through. hadError reports whether
@@ -56,7 +56,7 @@ func recoverMembers(h http.Header) (members map[string]baggage.Member, hadError 
 	return members, hadError
 }
 
-// writeMembers replaces ALL baggage field lines with a single canonical
+// writeMembers replaces all baggage field lines with a single canonical
 // one built from members (or deletes the header when none remain).
 func writeMembers(h http.Header, members map[string]baggage.Member) error {
 	if len(members) == 0 {
@@ -81,7 +81,7 @@ func writeMembers(h http.Header, members map[string]baggage.Member) error {
 // Entry-point estimation: when the amount is not knowable at ingress,
 // set Estimated=true and leave Money.Amount 0 (keep a valid Currency);
 // the middleware fills the registry estimator's value at its declared
-// exponent. A KNOWN amount — including a genuine 0 — must have
+// exponent. A known amount — including a genuine 0 — must have
 // Estimated=false; it is never overwritten.
 type IngressFunc func(*http.Request) (biz.ValueContext, bool)
 
@@ -135,7 +135,10 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 					if vc, stamp := cfg.ingress(r); stamp {
 						vc = estimate(reg, vc)
 						if err := vc.Validate(); err != nil {
-							cfg.logger.Warn("httpmw: ingress stamp rejected — the hook's output must satisfy the same fences as the wire", "error", err)
+							cfg.logger.Warn(
+								"httpmw: ingress stamp rejected — the hook's output must satisfy the same fences as the wire",
+								"error", err,
+							)
 						} else if stamped, err := biz.WithValueContext(ctx, vc); err != nil {
 							cfg.logger.Warn("httpmw: ingress stamp not encodable", "error", err)
 						} else {
@@ -150,14 +153,13 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 }
 
 // estimate fills an ingress stamp's amount from the registry's entry-point
-// estimator. It is OPT-IN and never touches a known amount: a hook that
+// estimator. It is opt-in and never touches a known amount: a hook that
 // cannot determine the amount (e.g. GET /cart) signals so by setting
 // Estimated=true and leaving Money.Amount 0; estimate then fills the
 // default or by-segment value at the estimator's declared exponent (a
-// genuine, KNOWN $0 has Estimated=false and is never overwritten — the
-// free-checkout that must not become $187.50). The stamp's currency is
-// kept; a flow with no estimator or the wrong signal is returned
-// unchanged.
+// genuine, known $0 has Estimated=false and is never overwritten). The
+// stamp's currency is kept; a flow with no estimator or the wrong signal
+// is returned unchanged.
 func estimate(reg *registry.Registry, vc biz.ValueContext) biz.ValueContext {
 	if !vc.Estimated || vc.Money.Amount != 0 || reg == nil {
 		return vc
@@ -202,12 +204,12 @@ func NewTransport(reg *registry.Registry, base http.RoundTripper, opts ...Transp
 	return t
 }
 
-// RoundTrip fences the outbound baggage header. It ALWAYS rebuilds the
+// RoundTrip fences the outbound baggage header. It always rebuilds the
 // header from the recovered members (never forwards unknown bytes),
 // cloning the request first (net/http forbids mutating the original):
 //   - host allowed: inject the ctx's ValueContext as biz.vc, replacing
 //     any stale member;
-//   - host NOT allowed: remove biz.vc — including one a global propagator
+//   - host not allowed: remove biz.vc — including one a global propagator
 //     added or one hidden behind a malformed neighbour;
 //   - foreign members pass through in every case.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -235,7 +237,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	} else if hadBizVC {
 		delete(members, biz.MemberKey)
-		t.logger.Warn("httpmw: biz.vc stripped at egress — host is outside the propagation allowlist", "host", host)
+		t.logger.Warn(
+			"httpmw: biz.vc stripped at egress — host is outside the propagation allowlist",
+			"host", host,
+		)
 	}
 
 	// Always rebuild from the recovered members onto a clone: the
@@ -243,7 +248,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// or multi-line header can never smuggle biz.vc past the fence.
 	clone := req.Clone(req.Context())
 	if err := writeMembers(clone.Header, members); err != nil {
-		// Fail CLOSED: if we cannot express a safe header, send none
+		// Fail closed: if we cannot express a safe header, send none
 		// rather than forward a possibly-leaky original.
 		t.logger.Warn("httpmw: could not rebuild outbound baggage; sending no baggage header", "error", err)
 		clone.Header.Del(baggageHeader)

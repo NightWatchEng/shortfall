@@ -1,25 +1,17 @@
 // Package loki exports shortfall outcome events to Grafana Loki's push API.
-// Loki is a LOG store, not a metrics store, so this exporter is honestly
-// events-only (Capabilities Events=true, Metrics=false): the engine reads
-// the customers leg from here and gets its metric families from a metrics
-// exporter (Prometheus, OTLP, ...).
+// Loki is a log store, not a metrics store, so this exporter is events-only
+// (Capabilities Events=true, Metrics=false): the engine reads the customers
+// leg from here and gets its metric families from a metrics exporter
+// (Prometheus, OTLP, ...).
 //
-// Cardinality discipline: stream labels are the low-cardinality dimensions
-// flow, stage and outcome; amounts, entity ids, customer ids and currency
-// ride in the LOG LINE, never as labels — an unbounded label set is the
-// classic way to melt a Loki cluster.
-//
-// One honest caveat about that boundedness. `outcome` is a fixed enum, so it
-// is structurally bounded. `flow` and `stage` are NOT fenced here: ADR-0004's
-// "unregistered" collapse is applied by the emitter to METRIC points only —
-// the outcome EVENT deliberately keeps the raw flow/stage names for
-// diagnosis, and this exporter has no registry to fence against. So Loki
-// stream cardinality follows the CALLER's flow/stage discipline: with
-// registry-driven flows (the normal case) it is bounded, but an unregistered,
-// typo'd, or dynamically-named flow mints a new stream. Keep your flow and
-// stage namespaces bounded — the same rule every Loki operator already lives
-// by. ADR-0004's "cardinality is a library guarantee" is scoped to metrics,
-// not to this log adapter.
+// Stream labels are the low-cardinality dimensions flow, stage and outcome;
+// amounts, entity ids, customer ids and currency ride in the log line, never
+// as labels. `outcome` is a bounded enum, but flow and stage are not fenced
+// here: ADR-0004's "unregistered" collapse applies to metric points only —
+// the outcome event keeps raw flow/stage names for diagnosis — so stream
+// cardinality follows the caller's flow/stage discipline (bounded with
+// registry-driven flows; a typo'd or dynamically-named flow mints a new
+// stream).
 //
 // Thin HTTP batcher over adapters/httpbatch, which supplies retry/backoff.
 package loki
@@ -79,9 +71,9 @@ func New(endpoint string, opts ...func(*Options)) *Exporter {
 	return &Exporter{client: httpbatch.New(endpoint, o.httpOpts...)}
 }
 
-// Capabilities: events only — Loki has no metrics ingest, and saying so is
-// the honest thing (the engine reports the metrics-derived legs from a
-// metrics exporter, not silently empty from here).
+// Capabilities declares events only — Loki has no metrics ingest; the engine
+// reports metrics-derived legs from a metrics exporter, never silently empty
+// from here.
 func (e *Exporter) Capabilities() emit.Caps {
 	return emit.Caps{Metrics: false, Events: true}
 }

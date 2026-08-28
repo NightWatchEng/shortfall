@@ -97,9 +97,9 @@ func TestRealizedLegEventsPath(t *testing.T) {
 }
 
 func TestRealizedLegDeDupsDuplicatesExactly(t *testing.T) {
-	// Per-entity de-dup takes the MAX single failed amount, not a mean
+	// Per-entity de-dup takes the max single failed amount, not a mean
 	// (ADR-0009). Identical redeliveries collapse to their exact value; an
-	// entity with DIFFERING failed amounts collapses to the largest single
+	// entity with differing failed amounts collapses to the largest single
 	// exposure — a real figure, never an average — with no caveat.
 	cases := []struct {
 		name    string
@@ -155,9 +155,16 @@ func TestRealizedLegScopeDoesNotOverrideOutcome(t *testing.T) {
 
 func TestRealizedLegMetricsOnlyCarriesCaveat(t *testing.T) {
 	metrics := []emit.MetricPoint{{
-		Name:   "biz_value_total",
-		Labels: map[string]string{"flow": "invoice.pay", "currency": "USD", "outcome": "failed", "stage": "capture", "kind": "fee", "segment": "smb"},
-		Value:  15000, At: win.From.Add(time.Minute),
+		Name: "biz_value_total",
+		Labels: map[string]string{
+			"flow":     "invoice.pay",
+			"currency": "USD",
+			"outcome":  "failed",
+			"stage":    "capture",
+			"kind":     "fee",
+			"segment":  "smb",
+		},
+		Value: 15000, At: win.From.Add(time.Minute),
 	}}
 	// metrics-only backend: events unsupported.
 	q := memq.New(
@@ -229,11 +236,10 @@ func TestRealizedLegMatchesGoldenScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The events path is an exact integer sum, so it must match ground truth
-	// EXACTLY (well within the AC's 0.5%). This test covers the sum/feeder/
-	// memq integration on realistic data; the de-dup and recovery-exclusion
-	// branches (which the harness never triggers — one terminal state per
-	// unique txn) are covered by TestRealizedLegEventsPath with synthetic
-	// events.
+	// exactly. This test covers the sum/feeder/memq integration on realistic
+	// data; the de-dup and recovery-exclusion branches (which the harness
+	// never triggers — one terminal state per unique txn) are covered by
+	// TestRealizedLegEventsPath with synthetic events.
 	got := leg.ByCurrency["USD"]
 	if got != wantUSD {
 		diff := float64(got-wantUSD) / float64(wantUSD) * 100

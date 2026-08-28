@@ -111,7 +111,7 @@ func (q *Querier) distinctCount(ctx context.Context, groupCols []string, whereSQ
 	// With no GroupBy the distinct count of empty tuples is 1 if any row
 	// matches, else 0 (memq canonicalizes every event's empty key to the same
 	// value). SELECT DISTINCT 1 collapses all matching rows to one, so
-	// COUNT(*) is 1/0 — NOT the row count. With GroupBy it is the count of
+	// COUNT(*) is 1/0 — not the row count. With GroupBy it is the count of
 	// distinct column combinations.
 	inner := "SELECT DISTINCT 1"
 	if len(groupCols) > 0 {
@@ -241,7 +241,7 @@ func orderClause(o query.EventOrder, tiebreakCols []string) string {
 }
 
 // tiebreakCols returns the group columns ordered to match memq's canonical
-// key tiebreak, which sorts by label NAME (not GroupBy order). So a Limit on a
+// key tiebreak, which sorts by label name (not GroupBy order). So a Limit on a
 // multi-key ordered query keeps the same groups the reference would.
 func tiebreakCols(groupBy []string) []string {
 	names := append([]string(nil), groupBy...)

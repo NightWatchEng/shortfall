@@ -1,12 +1,12 @@
 // Package conformance is the exporter conformance suite: the invariants
-// EVERY emit.Exporter must honor, run against a concrete exporter through a
+// every emit.Exporter must honor, run against a concrete exporter through a
 // harness the adapter provides. It lives in the core module and imports only
 // emit + biz, so an adapter can call it from its own nested-module test
 // without dragging the suite's dependencies — or the adapter's — across the
 // boundary.
 //
 // The invariants (emit.Exporter's contract, ADR-0002):
-//   - Flush on Shutdown with no loss: everything handed to a CAPABLE signal
+//   - Flush on Shutdown with no loss: everything handed to a capable signal
 //     before Shutdown reaches the backend after it. A buffering exporter
 //     that drops on close fails here.
 //   - Capability honesty: what Capabilities() declares matches what the
@@ -55,16 +55,14 @@ type Result struct {
 
 var baseTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
-// sampleMetrics builds a fixed batch of metric points, each on a DISTINCT
+// sampleMetrics builds a fixed batch of metric points, each on a distinct
 // series (a unique currency label per point), stamped with its own time.
 //
-// Distinct series is load-bearing: an AGGREGATING backend (Prometheus,
-// StatsD, a remote-write buffer) collapses points that share a label set
-// into one series, so feeding n identical-label points would leave one
-// series and make "delivered == n" untestable. n distinct series in must
-// mean n series out — that invariant holds for a preserving exporter (OTLP,
-// n data points) and an aggregating one alike, and a dropped point shows up
-// as a missing series either way.
+// Distinct series is load-bearing: an aggregating backend (Prometheus,
+// StatsD) collapses points that share a label set into one series, which
+// would make "delivered == n" untestable. n distinct series in must mean n
+// series out, for preserving and aggregating exporters alike, so a dropped
+// point shows up as a missing series either way.
 func sampleMetrics(n int) []emit.MetricPoint {
 	currencies := []string{"USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "SEK", "NZD", "NOK", "DKK", "SGD"}
 	out := make([]emit.MetricPoint, 0, n)
@@ -73,20 +71,29 @@ func sampleMetrics(n int) []emit.MetricPoint {
 		cur := currencies[i%len(currencies)]
 		// Interleave the in-flight gauge families so every metric exporter is
 		// exercised on all families, not just biz_value_total — a family an
-		// exporter fails to handle drops the whole batch (this caught the
-		// biz_inflight_count gap, ADR-0012).
+		// exporter fails to handle drops the whole batch (ADR-0012).
 		switch i % 3 {
 		case 0:
 			out = append(out, emit.MetricPoint{
-				Name:   "biz_inflight_count",
-				Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": cur},
-				Value:  int64(1 + i), At: at,
+				Name: "biz_inflight_count",
+				Labels: map[string]string{
+					"flow":       "invoice.pay",
+					"stage":      "capture",
+					"age_bucket": "5m-30m",
+					"currency":   cur,
+				},
+				Value: int64(1 + i), At: at,
 			})
 		case 1:
 			out = append(out, emit.MetricPoint{
-				Name:   "biz_inflight_value",
-				Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": cur},
-				Value:  int64(100 + i), At: at,
+				Name: "biz_inflight_value",
+				Labels: map[string]string{
+					"flow":       "invoice.pay",
+					"stage":      "capture",
+					"age_bucket": "5m-30m",
+					"currency":   cur,
+				},
+				Value: int64(100 + i), At: at,
 			})
 		default:
 			out = append(out, emit.MetricPoint{
@@ -235,7 +242,7 @@ func metricHonesty(h Harness, caps emit.Caps, n int) Result {
 		return r
 	}
 	exp, be := h.New()
-	// An incapable signal MAY return an error (signalling a drop) — that is
+	// An incapable signal may return an error (signalling a drop) — that is
 	// honest. What it must never do is silently deliver.
 	_, _ = batchesOfMetrics(exp, n)
 	_ = exp.Shutdown(context.Background())
@@ -279,7 +286,7 @@ func emptyNoop(h Harness) Result {
 }
 
 // RunExporter runs the conformance suite against a concrete exporter as
-// subtests. Every adapters/export/* module MUST call this from a test —
+// subtests. Every adapters/export/* module must call this from a test —
 // enforcement_test.go fails the build of any exporter module that does not.
 func RunExporter(t *testing.T, h Harness) {
 	t.Helper()

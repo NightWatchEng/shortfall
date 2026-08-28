@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "43e3741cb405469766ae58ba93c19b9c032dca5d",
+  "base_sha": "c7cb8184a86850fcac214d21148b3d04cb48651a",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T14:22:25+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context, examiner memory priors"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T14:22:25+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "43e3741cb405469766ae58ba93c19b9c032dca5d",
+      "base_sha": "c7cb8184a86850fcac214d21148b3d04cb48651a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0014-go-readability-conventions.md",
+      "line": 85,
+      "severity": "MEDIUM",
+      "finding": "ADR-0014's Consequences misdescribed the same-PR application pass in both directions: claimed a core-packages-only pass ('worked examples') when the diff sweeps ~85 files repo-wide, and made a present-tense 'follow-up sweep covers the remaining modules' claim with no tracking marker.",
+      "evidence": "ADR-0014 line 84-86 vs the range's own diffstat (88 files across core, adapters, testkit, examples, cmd, test/promgolden); head commit title says 'repo-wide comment sweep'.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Commit 70fb3e6 rewrites the Consequences bullet to state the repo-wide scope and that untouched files were already compliant; the untracked future-work claim is removed (convention holds through review, not further sweeps). Cross-examiner's confirmed verdict acted on in full. Its adjacent observation \u2014 'deliberately'/'by design' persuasion wording surviving in five touched comments despite the ADR banning it \u2014 fixed in the same commit; stripe reconcile.go:134 'deliberately canceled' kept with reason (describes the payment's domain state, not reviewer persuasion).",
+      "id": "3fb14a35ac077d4b"
+    }
+  ]
+}

@@ -90,7 +90,7 @@ func TestGoldenRenders(t *testing.T) {
 }
 
 // TestNoRendererSumsRealizedWithEstimate is the rendering invariant: realized
-// (15000) and the estimate legs are NEVER merged into one headline number.
+// (15000) and the estimate legs are never merged into one headline number.
 func TestNoRendererSumsRealizedWithEstimate(t *testing.T) {
 	r := sampleReport()
 	renders := map[string]string{
@@ -117,8 +117,8 @@ func TestNoRendererSumsRealizedWithEstimate(t *testing.T) {
 				t.Fatalf("%s renderer contains %q — realized must never be summed with an estimate", name, sum)
 			}
 		}
-		// Sanity: the separate figures ARE present. Use the realized value and
-		// the estimate low/high (2000/8000) — values that are NOT substrings
+		// Sanity: the separate figures are present. Use the realized value and
+		// the estimate low/high (2000/8000) — values that are not substrings
 		// of any other rendered number, so a dropped estimate leg is caught
 		// (the mid 5000 would be a substring of realized 15000 and prove
 		// nothing).

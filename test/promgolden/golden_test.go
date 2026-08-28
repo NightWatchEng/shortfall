@@ -19,7 +19,7 @@ const promImage = "prom/prometheus:v2.53.5"
 
 // startPrometheus runs a throwaway Prometheus with the remote-write receiver on,
 // returns its base URL and a cleanup func. Without SHORTFALL_GOLDEN it skips
-// (a no-op on a Docker-less machine and in the core CI job); WITH the env set it
+// (a no-op on a Docker-less machine and in the core CI job); with the env set it
 // requires Docker and hard-fails if it is missing, so the golden CI job can
 // never go green without actually running the parity assertions.
 func startPrometheus(t *testing.T) (string, func()) {
@@ -29,7 +29,7 @@ func startPrometheus(t *testing.T) (string, func()) {
 		t.Skip("set SHORTFALL_GOLDEN=1 (and have Docker) to run the live Prometheus golden harness")
 	}
 	// SHORTFALL_GOLDEN is an explicit demand to run the parity gate (the golden
-	// CI job sets it). Docker being absent here is a HARD FAILURE, never a skip:
+	// CI job sets it). Docker being absent here is a hard failure, never a skip:
 	// a skip would exit 0 and let the required-looking parity gate go green
 	// having asserted nothing — a silent gate-weakening.
 	if _, err := exec.LookPath("docker"); err != nil {
@@ -38,7 +38,7 @@ func startPrometheus(t *testing.T) (string, func()) {
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Fatalf("SHORTFALL_GOLDEN is set but the docker daemon is not running; the parity gate cannot run: %v", err)
 	}
-	// Pull the image EXPLICITLY first. On a cold runner (CI) `docker run -d`
+	// Pull the image explicitly first. On a cold runner (CI) `docker run -d`
 	// would otherwise interleave image-pull progress with the container id on
 	// its output, so the id we parse below would be the whole blob and every
 	// `docker port` lookup would fail. A warm local cache hid this.
@@ -94,7 +94,7 @@ func startPrometheus(t *testing.T) (string, func()) {
 	return base, cleanup
 }
 
-// TestPromQLParityAgainstRealPrometheus is the workspace-0ka correctness bar:
+// TestPromQLParityAgainstRealPrometheus is the parity correctness bar:
 // the same harness metrics, fed to memq and to a real Prometheus, must yield
 // identical Series through the frozen query AST for the api-5xx and queue-stall
 // scenarios.
@@ -123,7 +123,7 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 			// Snapshot the in-flight gauge one minute before the window closes.
 			// A sample stamped exactly at To (MetricsFromResult's default, the
 			// run end == window end here) is dropped by the half-open [From,To)
-			// read on BOTH sides — memq excludes At>=To and the promql adapter
+			// read on both sides — memq excludes At>=To and the promql adapter
 			// evaluates last_over_time at To-1ms — so it would make the gauge
 			// parity vacuous. Inside the window it exercises last_over_time.
 			gaugeAt := end.Add(-time.Minute)
@@ -133,7 +133,7 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			// Seed Prometheus with the CUMULATIVE counter series a real client
+			// Seed Prometheus with the cumulative counter series a real client
 			// would expose; memq reads the raw deltas. Both must agree.
 			if err := remoteWrite(ctx, base, cumulativeForPrometheus(points)); err != nil {
 				t.Fatalf("remote_write: %v", err)

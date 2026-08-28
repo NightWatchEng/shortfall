@@ -17,7 +17,7 @@ type Header struct {
 	Value []byte
 }
 
-// Carrier adapts a header slice to propagate.Carrier. Set REPLACES an
+// Carrier adapts a header slice to propagate.Carrier. Set replaces an
 // existing header with the same key (Kafka permits duplicates; a single
 // canonical biz.vc is what the consumer must read), matching last-write
 // semantics. The slice is addressed through a pointer so Set can grow it.
@@ -41,7 +41,7 @@ func (c Carrier) Get(key string) string {
 	return ""
 }
 
-// Set makes key CANONICAL: the first matching header takes the value and
+// Set makes key canonical: the first matching header takes the value and
 // every later duplicate (Kafka permits them) is removed, so a consumer
 // reads one unambiguous value regardless of its client's dup semantics.
 // Returns false on a nil backing pointer so Inject fails loudly.

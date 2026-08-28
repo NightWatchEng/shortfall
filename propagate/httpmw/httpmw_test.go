@@ -292,9 +292,9 @@ flows:
 	}
 }
 
-// TestEgressFenceFailsClosed is the regression for the two confirmed HIGH
-// bypasses: a malformed neighbour or a second header line must never let
-// biz.vc reach a disallowed host.
+// TestEgressFenceFailsClosed is the regression for two fence bypasses: a
+// malformed neighbour or a second header line must never let biz.vc
+// reach a disallowed host.
 func TestEgressFenceFailsClosed(t *testing.T) {
 	valid := encodedVC(t)
 	cases := []struct {
@@ -324,7 +324,7 @@ func TestEgressFenceFailsClosed(t *testing.T) {
 			if _, err := tr.RoundTrip(req); err != nil {
 				t.Fatal(err)
 			}
-			// Inspect EVERY outbound baggage line, not just the first.
+			// Inspect every outbound baggage line, not just the first.
 			outLines := rec.got.Header.Values("baggage")
 			hasVC := false
 			foreign := map[string]bool{}
@@ -392,7 +392,7 @@ func TestRedirectAcrossTrustBoundaryStrips(t *testing.T) {
 	}))
 	defer allowed.Close()
 
-	// Registry allows only the FIRST server's host.
+	// Registry allows only the first server's host.
 	allowedHost := strings.Split(strings.TrimPrefix(allowed.URL, "http://"), ":")[0]
 	disallowedHost := strings.Split(strings.TrimPrefix(disallowed.URL, "http://"), ":")[0]
 	if allowedHost == disallowedHost {
@@ -426,7 +426,7 @@ func TestRedirectAcrossTrustBoundaryStrips(t *testing.T) {
 
 func TestIngressEstimatorStampsUnknownAmounts(t *testing.T) {
 	// Opt-in: a hook that cannot determine the amount sets Estimated=true
-	// and leaves Amount 0; the estimator fills it. A KNOWN amount
+	// and leaves Amount 0; the estimator fills it. A known amount
 	// (including a genuine 0) has Estimated=false and is untouched.
 	cases := []struct {
 		name        string
@@ -475,7 +475,7 @@ func TestIngressEstimatorStampsUnknownAmounts(t *testing.T) {
 
 func TestEstimatorRespectsExponent(t *testing.T) {
 	// A JPY/0 flow's estimator must apply its own exponent, not inherit a
-	// USD/2 assumption (the 100x-error finding).
+	// USD/2 assumption (a 100x error).
 	regYAML := `
 version: 1
 segments: [smb]

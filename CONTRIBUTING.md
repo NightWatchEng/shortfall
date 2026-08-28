@@ -62,6 +62,17 @@ Dry-run rehearsal: run the `release` workflow manually (workflow_dispatch)
 — it builds a snapshot and uploads `dist/` as an artifact without tagging
 or publishing.
 
+## Code style
+
+gofmt and go vet are the mechanical baseline (CI-gated). What they leave
+open, ADR-0014 decides: method chains break after the dot; multi-line
+calls and literals go one item per line with a trailing comma; long
+conditions break after the operator; exported identifiers carry terse
+godoc contracts; inline comments state only what the code cannot show,
+cite ADRs instead of restating them, and never carry tracked-item ids,
+change history, or ALL-CAPS emphasis. Reviewers block on departures by
+citing the ADR.
+
 ## Tests
 
 Table-driven, per ADR-0007 (founder mandate): named cases, `t.Run`

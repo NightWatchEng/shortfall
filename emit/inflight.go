@@ -33,7 +33,7 @@ func AgeBucketFor(age time.Duration) string {
 // consumer wrapper: Track on receive/enqueue, Done on completion, and
 // either Start a publish loop or call Publish on your own cadence.
 //
-// Age semantics: measured from the FIRST enqueue timestamp — a retry
+// Age semantics: measured from the first enqueue timestamp — a retry
 // re-Track of the same id never makes the backlog look younger.
 type InFlightTracker struct {
 	em     Emitter
@@ -47,15 +47,15 @@ type InFlightTracker struct {
 	live map[comboKey]struct{}
 	// canonical exponent per currency, pinned on first sight: a second
 	// exponent for the same currency would silently flap one gauge
-	// series between incomparable sums (a confirmed finding).
+	// series between incomparable sums.
 	exponents map[string]int8
 	maxItems  int
-	overflow  int64 // Track CALLS the bound rejected (retries count each)
+	overflow  int64 // Track calls the bound rejected (retries count each)
 	rejected  int64 // Track calls rejected for invalid/mismatched money
 
-	// publishMu serializes snapshot AND emission: without it an older
+	// publishMu serializes snapshot and emission: without it an older
 	// snapshot can be emitted after a newer one and win under the
-	// order-by-At contract (a confirmed finding).
+	// order-by-At contract.
 	publishMu sync.Mutex
 
 	started  bool
@@ -86,18 +86,17 @@ func WithTrackerClock(now func() time.Time) TrackerOption {
 
 // WithTrackerMaxItems bounds the tracked set (default 1<<20). Beyond the
 // bound, Track calls are dropped, logged, and counted — the published
-// value is then an UNDERSTATEMENT and Overflowed() reports the rejected
-// Track CALLS (a retried message counts once per attempt). Values below
-// 1 are replaced by the default, loudly. Memory note: Go maps retain
-// their high-water bucket memory, so this bound is also the worst-case
-// resident footprint after an incident-sized backlog drains.
+// value then understates, and Overflowed() reports the rejected Track
+// calls (a retried message counts once per attempt). Values below 1 are
+// replaced by the default, loudly. Go maps retain their high-water
+// bucket memory, so this bound is also the worst-case resident footprint
+// after an incident-sized backlog drains.
 func WithTrackerMaxItems(n int) TrackerOption {
 	return func(t *InFlightTracker) { t.maxItems = n }
 }
 
 // WithTrackerLogger sets the warning logger for rejected and overflowed
-// tracks (default slog.Default) — drops are loud here like everywhere
-// else in this package.
+// tracks (default slog.Default).
 func WithTrackerLogger(l *slog.Logger) TrackerOption {
 	return func(t *InFlightTracker) { t.logger = l }
 }
@@ -125,7 +124,7 @@ func NewInFlightTracker(em Emitter, opts ...TrackerOption) *InFlightTracker {
 }
 
 // Track records a message entering a stage. Re-tracking an id keeps the
-// OLDEST enqueue time seen (retries never rejuvenate backlog; an earlier
+// oldest enqueue time seen (retries never rejuvenate backlog; an earlier
 // timestamp on a retrack is adopted as better information) and updates
 // the money (amounts should not change; last write wins if they do).
 // Rejections are loud: invalid money and a currency re-tracked under a
@@ -144,8 +143,12 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 	if pinned, ok := t.exponents[money.Currency]; ok {
 		if pinned != money.Exponent {
 			t.rejected++
-			t.logger.Warn("emit: tracker rejected mismatched currency exponent — one series must never flap between incomparable sums",
-				"currency", money.Currency, "pinned", pinned, "got", money.Exponent)
+			t.logger.Warn(
+				"emit: tracker rejected mismatched currency exponent — one series must never flap between incomparable sums",
+				"currency", money.Currency,
+				"pinned", pinned,
+				"got", money.Exponent,
+			)
 			return
 		}
 	} else {
@@ -165,16 +168,16 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 	t.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
 }
 
-// Done records a message leaving its stage. Unknown ids are a no-op —
-// Done is idempotent by design (consumer wrappers retry).
+// Done records a message leaving its stage. Unknown ids are a no-op, so
+// Done is idempotent (consumer wrappers retry).
 func (t *InFlightTracker) Done(flow, stage, id string) {
 	t.mu.Lock()
 	delete(t.items, inflightKey{flow, stage, id})
 	t.mu.Unlock()
 }
 
-// Overflowed returns how many Track CALLS the bound rejected since the
-// tracker was built: nonzero means the published gauge UNDERSTATES the
+// Overflowed returns how many Track calls the bound rejected since the
+// tracker was built: nonzero means the published gauge understates the
 // true in-flight value.
 func (t *InFlightTracker) Overflowed() int64 {
 	t.mu.Lock()
@@ -273,7 +276,10 @@ func (t *InFlightTracker) Publish() {
 // panic), and a second Start is a no-op — one publish loop per tracker.
 func (t *InFlightTracker) Start(interval time.Duration) {
 	if interval <= 0 {
-		t.logger.Warn("emit: tracker Start refused non-positive interval — call Publish yourself or pass a real cadence", "interval", interval)
+		t.logger.Warn(
+			"emit: tracker Start refused non-positive interval — call Publish yourself or pass a real cadence",
+			"interval", interval,
+		)
 		return
 	}
 	t.mu.Lock()

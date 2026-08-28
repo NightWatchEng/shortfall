@@ -217,7 +217,7 @@ func TestPIIGuard(t *testing.T) {
 	accept := []struct {
 		name, value string
 	}{
-		// Luhn-INVALID 16 digits: not a PAN, must pass (order ids exist).
+		// Luhn-invalid 16 digits: not a PAN, must pass (order ids exist).
 		{"luhn-invalid digits", "4111111111111112"},
 		{"short digits", "123456789012"},        // 12 digits: below PAN range
 		{"long digits", "12345678901234567890"}, // 20 digits: above PAN range
@@ -344,7 +344,7 @@ func TestPANBoundariesAndSubSegments(t *testing.T) {
 			}
 		})
 	}
-	// One unbroken over-length run must NOT fire on a Luhn-valid substring.
+	// One unbroken over-length run must not fire on a Luhn-valid substring.
 	t.Run("unbroken 20-digit id passes", func(t *testing.T) {
 		vc := validVC()
 		vc.CustomerID = "12345678901234567890"
@@ -369,7 +369,7 @@ func TestIBANCaseAndBoundaryHardening(t *testing.T) {
 			}
 		})
 	}
-	// Shape match with a FAILING mod-97 checksum is an id, not an IBAN.
+	// Shape match with a failing mod-97 checksum is an id, not an IBAN.
 	t.Run("mod-97-invalid shape passes", func(t *testing.T) {
 		vc := validVC()
 		vc.EntityID = "DE00370400440532013001"

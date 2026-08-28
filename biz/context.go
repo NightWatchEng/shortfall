@@ -47,8 +47,8 @@ func (r Result) Valid() bool {
 
 // ValueContext is the business context that propagates with a request:
 // which flow, which entity, whose money, how much. CustomerID arrives
-// PRE-HASHED by the caller — this library never sees a raw account id,
-// and the PII guard enforces the spirit of that contract mechanically.
+// already hashed by the caller — this library never sees a raw account
+// id, and the PII guard enforces that contract mechanically.
 type ValueContext struct {
 	Flow       string // registry flow name, bounded cardinality
 	EntityID   string // invoice/order id — events only, never metrics
@@ -97,10 +97,8 @@ func idToken(s string, maxLen int) error {
 }
 
 // Validate rejects malformed or PII-carrying context. The PII guard runs
-// on EntityID and CustomerID: amounts are not cardholder data, but a PAN,
-// email, or IBAN smuggled into an id field would flow into every event
-// sink this library exports to — enforcement is a library guarantee, not
-// a user promise.
+// on EntityID and CustomerID: a PAN, email, or IBAN smuggled into an id
+// field would flow into every event sink this library exports to.
 func (vc ValueContext) Validate() error {
 	if err := lowerToken(vc.Flow, maxFlowLen); err != nil {
 		return fmt.Errorf("biz: flow %q: %w", vc.Flow, err)
@@ -153,8 +151,7 @@ const maxErrLen = 512
 // Stage by charset, Source by charset + the PII guard, Err (free text —
 // the field upstream error strings echo card numbers into) by length +
 // the PII guard, and TraceID by shape (32 lowercase hex admits no PII by
-// construction). The guarantee the docs make is the one the code
-// enforces.
+// construction).
 func (o Outcome) Validate() error {
 	if o.At.IsZero() {
 		return fmt.Errorf("biz: outcome time is zero")

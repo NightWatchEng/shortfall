@@ -3,12 +3,12 @@
 // events through the OTLP Log exporter (event.name=biz.outcome), so one
 // integration reaches any backend an OpenTelemetry Collector fans out to.
 //
-// It is a NESTED module: a Prometheus-only user never pulls the otel
+// It is a nested module: a Prometheus-only user never pulls the otel
 // OTLP/gRPC stack into their build. Per ADR-0002 the experimental
-// go.opentelemetry.io/otel/sdk/log dependency is isolated HERE and
+// go.opentelemetry.io/otel/sdk/log dependency is isolated here and
 // nowhere in the core.
 //
-// Metric temporality is DELTA for the counter families (matching
+// Metric temporality is delta for the counter families (matching
 // emit.MetricPoint's delta semantics) and gauge for biz_inflight_value;
 // each point is stamped with its own observation time, never flush time.
 package otlp
@@ -117,13 +117,10 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 		_ = m.Shutdown(ctx)
 		return nil, fmt.Errorf("otlp: log exporter: %w", err)
 	}
-	// No attribute cap: WithAttributeCountLimit(-1) disables the limit
-	// entirely, so every biz.* field survives regardless of how many an
-	// outcome grows to carry. The SDK's default (128) clears today's ~12
-	// comfortably, but that is a silent cliff — a directly built
-	// sdklog.Record has a limit of 0 and drops everything — so per ADR-0002
-	// (this experimental dependency is fenced HERE) we pin the safe value
-	// rather than lean on a default that could change under us.
+	// WithAttributeCountLimit(-1) disables the attribute cap so every biz.*
+	// field survives however many an outcome carries. The SDK default (128)
+	// clears today's ~12, but is a silent cliff — pin the safe value rather
+	// than lean on a default that could change under us (ADR-0002).
 	provider := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(l)),
 		sdklog.WithAttributeCountLimit(-1),

@@ -5,7 +5,7 @@
 // supplies the retry/backoff; this package only maps payloads.
 //
 // Nested module: a non-Splunk user pulls neither this nor its plumbing. Both
-// signals are honest (Capabilities Metrics+Events): HEC carries metrics and
+// signals are supported (Capabilities Metrics+Events): HEC carries metrics and
 // events on the same endpoint. Each record stamps its own time from the
 // point's/outcome's At, so a delayed batch keeps money at observation time.
 package splunkhec

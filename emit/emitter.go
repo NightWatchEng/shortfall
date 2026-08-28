@@ -21,8 +21,8 @@ import (
 //
 // Ordering: batches may reach the exporter out of order when flushes
 // overlap (background ticker plus caller-driven Flush). Consumers order
-// by each point's/outcome's At — arrival order is explicitly NOT part of
-// the contract.
+// by each point's/outcome's At — arrival order is not part of the
+// contract.
 type Std struct {
 	reg    *registry.Registry
 	exp    Exporter
@@ -37,7 +37,7 @@ type Std struct {
 	events         []biz.Outcome
 	metrics        []MetricPoint
 	dropCounts     map[string]int64 // reason -> delta since last flush
-	metricOverflow int64            // dropped metric points since last flush (logged, not a money counter)
+	metricOverflow int64            // dropped points since last flush (logged, not a money counter)
 	dedup          *twoGenSet
 
 	loopCtx    context.Context
@@ -69,8 +69,7 @@ func WithLogger(l *slog.Logger) EmitterOption { return func(s *Std) { s.logger =
 // obligation to call it, since buffers are bounded and overflow drops).
 func WithFlushInterval(d time.Duration) EmitterOption { return func(s *Std) { s.interval = d } }
 
-// Record option helpers — the concrete Options the frozen surface
-// anticipated.
+// Record option helpers.
 
 // WithSource sets the outcome's Source field.
 func WithSource(source string) Option { return func(c *RecordConfig) { c.Source = source } }
@@ -129,9 +128,9 @@ func (s *Std) loop() {
 
 // Record implements Emitter. It never blocks and never returns an error:
 // anything unusable is dropped and counted (reason invalid); a full event
-// buffer drops the WHOLE observation — event, metric increments, and
+// buffer drops the whole observation — event, metric increments, and
 // de-dup memory — and counts it (reason overflow), so a retry after the
-// buffer drains emits cleanly with no double-count; failed EVENT exports
+// buffer drains emits cleanly with no double-count; failed event exports
 // are counted at flush (reason export; metric-delta export failures are
 // logged only — see Flush).
 func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts ...Option) {
@@ -164,14 +163,9 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 		return
 	}
 
-	// De-dup key DELIBERATELY includes the result — the proposal wrote
-	// (flow, entity, stage), but the engine's realized leg de-duplicates
-	// failures against LATER SUCCESS events for the same entity+stage,
-	// so suppressing the transition here would corrupt realized loss.
-	// Retries of the same outcome de-dup; transitions always emit.
-	// Cross-process consequence (binds the engine legs): duplicate
-	// SUCCESS events from different replicas both emit, so every
-	// event-summing leg de-duplicates by entity, successes included.
+	// The key includes the result: retries de-dup, transitions always emit.
+	// Suppressing a failure→success transition here would corrupt the
+	// engine's realized leg, which de-dups per entity across processes.
 	key := vc.Flow + "\x00" + vc.EntityID + "\x00" + stage + "\x00" + string(result)
 
 	// Admission first, construction after: a suppressed or overflowing
@@ -200,11 +194,9 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 		Value: 1,
 		At:    at,
 	}
-	// biz_value_total is the REALIZED value sum: estimated amounts never
-	// enter it (ADR-0004 froze its label set with no evidence axis, and
-	// "realized and estimate never merged" is an invariant). The estimated
-	// amount still rides the outcome EVENT, where the counterfactual leg
-	// reads it. A count is fine either way.
+	// biz_value_total is the realized value sum: estimated amounts never
+	// enter it (ADR-0004) — they still ride the outcome event, where the
+	// counterfactual leg reads them. A count is fine either way.
 	if vc.Estimated {
 		s.appendMetrics(txnPoint)
 	} else {
@@ -235,7 +227,10 @@ func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money, count 
 		}
 	}
 	if !valid || money.Validate() != nil || count < 0 {
-		s.dropInvalid("in-flight gauge rejected", fmt.Errorf("bucket %q / money %+v / count %d", ageBucket, money, count))
+		s.dropInvalid(
+			"in-flight gauge rejected",
+			fmt.Errorf("bucket %q / money %+v / count %d", ageBucket, money, count),
+		)
 		return
 	}
 	flowLabel, stageLabel := s.flowStageLabels(flow, stage)
@@ -255,8 +250,8 @@ func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money, count 
 }
 
 // Flush exports everything pending and returns the first export error.
-// Failed EVENT batches are dropped and counted (reason export). Failed
-// METRIC batches are logged and dropped WITHOUT counting — re-queuing
+// Failed event batches are dropped and counted (reason export). Failed
+// metric batches are logged and dropped without counting — re-queuing
 // deltas risks double-count on partial writes — except the
 // biz_dropped_events_total points themselves, which are re-credited so a
 // backend outage can never destroy the record of its own damage.
@@ -285,7 +280,11 @@ func (s *Std) Flush(ctx context.Context) error {
 	if len(events) > 0 {
 		if err := s.exp.ExportEvents(ctx, events); err != nil {
 			firstErr = err
-			s.logger.Warn("emit: event export failed; batch dropped and counted", "error", err, "dropped", len(events))
+			s.logger.Warn(
+				"emit: event export failed; batch dropped and counted",
+				"error", err,
+				"dropped", len(events),
+			)
 			s.mu.Lock()
 			s.dropCounts["export"] += int64(len(events))
 			s.mu.Unlock()
@@ -314,11 +313,11 @@ func (s *Std) Flush(ctx context.Context) error {
 
 // Close is idempotent: the first call stops the background flusher
 // (cancelling any in-flight background export so Close can honor its
-// ctx), performs a final flush with the CALLER's ctx, and shuts the
-// exporter down; later calls return the first result. Terminal limit,
-// stated honestly: if the backend is down at Close, the final counters
-// remain un-exported — they survive in memory until process exit and in
-// the warning log, and reconciliation is the backstop.
+// ctx), performs a final flush with the caller's ctx, and shuts the
+// exporter down; later calls return the first result. Terminal limit: if
+// the backend is down at Close, the final counters remain un-exported —
+// they survive in memory until process exit and in the warning log, and
+// reconciliation is the backstop.
 func (s *Std) Close(ctx context.Context) error {
 	s.closeOnce.Do(func() {
 		close(s.stop)

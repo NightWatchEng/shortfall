@@ -269,11 +269,10 @@ func TestUnregisteredStageFallsBack(t *testing.T) {
 }
 
 func TestDedupKeyIncludesResult(t *testing.T) {
-	// DEVIATION from the proposal's (flow, entity, stage) key, on
-	// purpose: the engine's realized leg de-duplicates failures against
-	// LATER SUCCESSES for the same entity+stage — suppressing the
-	// success event here would break that. Retries of the SAME outcome
-	// de-dup; transitions always emit.
+	// The key includes the result on purpose: the engine's realized leg
+	// de-duplicates failures against later successes for the same
+	// entity+stage — suppressing the success event here would break that.
+	// Retries of the same outcome de-dup; transitions always emit.
 	exp := &captureExporter{}
 	em := newTestEmitter(t, exp)
 	ctx := ctxWithVC(t, emitterVC())
@@ -326,7 +325,7 @@ func TestOverflowDropsAreCounted(t *testing.T) {
 	if dropped == 0 {
 		t.Fatal("expected overflow drops with a buffer of 2")
 	}
-	// Atomic drop: an overflowed observation contributes NO metric
+	// Atomic drop: an overflowed observation contributes no metric
 	// increments — sums and events cannot diverge through overflow.
 	txn := metricsByName(metrics)["biz_txn_total"]
 	var txnTotal int64
@@ -339,9 +338,9 @@ func TestOverflowDropsAreCounted(t *testing.T) {
 }
 
 func TestOverflowDropDoesNotPoisonRetry(t *testing.T) {
-	// Regression for a confirmed finding: the de-dup set must NOT
-	// remember an observation that overflow dropped, or the retry after
-	// the buffer drains is suppressed forever and the event is lost.
+	// Regression: the de-dup set must not remember an observation that
+	// overflow dropped, or the retry after the buffer drains is
+	// suppressed forever and the event is lost.
 	exp := &captureExporter{}
 	em, err := New(testRegistry(t), exp,
 		WithClock(func() time.Time { return testClock }),
@@ -359,7 +358,7 @@ func TestOverflowDropDoesNotPoisonRetry(t *testing.T) {
 	if err := em.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	em.Record(ctxWithVC(t, second), "capture", biz.ResultFailed) // retry MUST emit
+	em.Record(ctxWithVC(t, second), "capture", biz.ResultFailed) // retry must emit
 	_, events := flushAndSnapshot(t, em, exp)
 	found := false
 	for _, ev := range events {
@@ -693,7 +692,7 @@ func BenchmarkRecordAccept(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Rotate stage/result/entity so every call takes the ACCEPT path.
+		// Rotate stage/result/entity so every call takes the accept path.
 		em.Record(ctxs[i%len(ctxs)], stages[(i/len(ctxs))%len(stages)], results[(i/(len(ctxs)*len(stages)))%len(results)])
 		if i%len(ctxs) == len(ctxs)-1 {
 			b.StopTimer()

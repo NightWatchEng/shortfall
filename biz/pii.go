@@ -8,20 +8,15 @@ import (
 // CheckPII rejects the three shapes that must never enter biz.*
 // attributes or event fields: card numbers (PAN), email addresses, and
 // IBANs. Exported so the emit and registry layers can guard free-text
-// surfaces (error strings, attribute values) with the same net —
-// reimplementing a PII guard is how coverage gaps are born.
+// surfaces (error strings, attribute values) with the same net.
 //
-// Documented tradeoffs, chosen deliberately:
-//   - PAN detection Luhn-checks digit runs AND their dash/space-delimited
+// Tradeoffs callers see:
+//   - PAN detection Luhn-checks digit runs and their dash/space-delimited
 //     sub-segments (so "ord-9-<PAN>" cannot hide a card behind one stray
-//     digit). A Luhn-INVALID run passes: it is an order id, not a card —
-//     a guard that cries wolf gets disabled, and a disabled guard
-//     protects nothing.
-//   - ~10% of RANDOM numeric 13-19 digit ids are Luhn-valid by chance
-//     (measured: unix-nano and unix-milli ids flag at almost exactly
-//     10%). Callers using bare numeric ids in EntityID/CustomerID will
-//     see data-dependent rejections: PREFIX numeric ids ("inv_170266...")
-//     and the guard never fires on them.
+//     digit). A Luhn-invalid run passes: it is an order id, not a card.
+//   - ~10% of random numeric 13-19 digit ids are Luhn-valid by chance, so
+//     bare numeric ids in EntityID/CustomerID see data-dependent
+//     rejections; prefixed numeric ids ("inv_170266...") never fire.
 //   - IBAN detection is case-insensitive, needs no word boundary, and
 //     requires the ISO 13616 mod-97 checksum to pass, so a random
 //     id matching the shape survives ~96/97 of the time.
@@ -50,11 +45,10 @@ var (
 
 // hasPAN scans for runs of digits (optionally separated by single spaces
 // or dashes, as cards are commonly written). A run is flagged when the
-// FULL run or any contiguous span of its separator-delimited segments
-// totals 13-19 digits and passes Luhn. Checking spans matters in both
-// directions: a 16-digit Luhn-valid substring of one unbroken 20-digit id
-// must NOT fire (segments are only split at separators), while a PAN
-// dash-joined to a stray digit must still be caught.
+// full run or any contiguous span of its separator-delimited segments
+// totals 13-19 digits and passes Luhn. Segments split only at separators:
+// a Luhn-valid substring of one unbroken 20-digit id must not fire, while
+// a PAN dash-joined to a stray digit is still caught.
 func hasPAN(s string) bool {
 	i := 0
 	for i < len(s) {

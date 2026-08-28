@@ -1,6 +1,6 @@
 //go:build integration
 
-// Integration test: exercises the REAL otel OTLP HTTP exporters against a
+// Integration test: exercises the real otel OTLP HTTP exporters against a
 // live endpoint. It needs an OTLP receiver (a collector) at
 // OTEL_EXPORTER_OTLP_ENDPOINT and is excluded from the default build
 // (run: go test -tags integration ./...). The unit tests cover the

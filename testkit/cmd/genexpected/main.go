@@ -3,9 +3,9 @@
 //
 //	go run ./testkit/cmd/genexpected
 //
-// AUTHORITY NOTE: goldens are CI-authoritative (ubuntu/amd64). If your
-// platform's math.Exp differs, TestGoldensMatchGroundTruth fails in CI
-// and prints the CI-computed values — adopt those, never your local ones.
+// Goldens are CI-authoritative (ubuntu/amd64). If your platform's
+// math.Exp differs, TestGoldensMatchGroundTruth fails in CI and prints
+// the CI-computed values — adopt those, never your local ones.
 package main
 
 import (

@@ -9,8 +9,8 @@ import (
 // realized loss plus the deferred (in-flight) value — money the incident has
 // already lost or put at stake — divided by the window's minutes.
 //
-// The rate is evaluated PER CURRENCY (ADR-0001: no cross-currency sum) and the
-// suggestion is the MOST-SEVERE level any currency triggers — a $2M/hour flow
+// The rate is evaluated per currency (ADR-0001: no cross-currency sum) and the
+// suggestion is the most severe level any currency triggers — a $2M/hour flow
 // pages even if a co-incident low-value flow would not. Returns "" when there
 // is no ladder, no window, or nothing clears the lowest threshold — never a
 // fabricated severity.

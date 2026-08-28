@@ -39,9 +39,9 @@ type scenarioDoc struct {
 	Customers          int     `yaml:"customers,omitempty"`
 	CaptureDelayMin    int     `yaml:"capture_delay_min,omitempty"`
 	SettleDelayMin     int     `yaml:"settle_delay_min,omitempty"`
-	// Capacities are pointers so an author's EXPLICIT 0 is distinguishable
+	// Capacities are pointers so an author's explicit 0 is distinguishable
 	// from absent — a literal 0 is rejected with guidance rather than
-	// silently meaning "default" (a confirmed zero-coercion finding).
+	// silently meaning "default".
 	CaptureCapacityPerMin *int `yaml:"capture_capacity_per_min,omitempty"`
 	SettleCapacityPerMin  *int `yaml:"settle_capacity_per_min,omitempty"`
 

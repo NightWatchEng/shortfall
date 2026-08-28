@@ -95,8 +95,8 @@ func resultsByName(rs []Result) map[string]Result {
 }
 
 // TestSuiteVerdicts pins what the conformance suite must conclude for a
-// range of well- and mis-behaved exporters: it must PASS a conformant one
-// and FAIL exactly the invariant each defect breaks.
+// range of well- and mis-behaved exporters: it must pass a conformant one
+// and fail exactly the invariant each defect breaks.
 func TestSuiteVerdicts(t *testing.T) {
 	both := emit.Caps{Metrics: true, Events: true, MetricHistoryWeeks: 2, EventHistoryWeeks: 8}
 	metricsOnly := emit.Caps{Metrics: true}
@@ -118,14 +118,20 @@ func TestSuiteVerdicts(t *testing.T) {
 			wantFail: nil,
 		},
 		{
-			name:     "drops buffer on shutdown",
-			cfg:      fakeCfg{caps: both, buffer: true, dropOnShutdown: true},
-			wantFail: []string{"metrics flush on shutdown with no loss", "events flush on shutdown with no loss"},
+			name: "drops buffer on shutdown",
+			cfg:  fakeCfg{caps: both, buffer: true, dropOnShutdown: true},
+			wantFail: []string{
+				"metrics flush on shutdown with no loss",
+				"events flush on shutdown with no loss",
+			},
 		},
 		{
-			name:     "errors on capable export",
-			cfg:      fakeCfg{caps: both, errOnExport: true},
-			wantFail: []string{"metrics flush on shutdown with no loss", "events flush on shutdown with no loss"},
+			name: "errors on capable export",
+			cfg:  fakeCfg{caps: both, errOnExport: true},
+			wantFail: []string{
+				"metrics flush on shutdown with no loss",
+				"events flush on shutdown with no loss",
+			},
 		},
 		{
 			name:     "metrics-only, honest about events",

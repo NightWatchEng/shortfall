@@ -49,14 +49,11 @@ type Ledger struct {
 // a bare cancel with no error) is skipped, not guessed — counted in Skipped so
 // the omission is visible rather than silently zeroed.
 //
-// Every row's amount is the intent's `amount` (the intended value), NEVER
-// `amount_received`. This is deliberate: the webhook telemetry path this ledger
-// is reconciled against records a succeeded intent at `amount` too (stripe.go
-// eventMap uses the payload's `amount` field), so both sides of the coverage
-// comparison measure the same money and a partial capture does not read as a
-// telemetry drift. Surfacing captured-vs-intended shortfall on partial captures
-// is a separate concern (both sides currently use the intended amount), the
-// basis ratified in ADR-0010, not silently decided here.
+// Every row's amount is the intent's `amount` (the intended value), never
+// `amount_received`: the webhook telemetry path records a succeeded intent at
+// `amount` too, so both sides of the coverage comparison measure the same
+// money and a partial capture does not read as telemetry drift. The
+// intended-amount basis is ratified in ADR-0010.
 func Reconcile(ctx context.Context, fetch PageFunc, since time.Time) (Ledger, error) {
 	type key struct {
 		flow, currency string

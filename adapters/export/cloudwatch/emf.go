@@ -72,9 +72,9 @@ type emfMeta struct {
 // field (EMF requires the dimension values to appear as members), and the
 // record's Timestamp is the point's own observation time.
 //
-// The metric VALUE carries the amount/count; ADR-0004 forbids amounts as
-// dimensions, never as values, and dimsFor pins the dimension set so no
-// unbounded key can become a dimension.
+// The metric value carries the amount/count — ADR-0004 forbids amounts as
+// dimensions — and dimsFor pins the dimension set so no unbounded key can
+// become a dimension.
 func buildMetricRecord(namespace, unit string, p emit.MetricPoint) ([]byte, error) {
 	dims := dimsFor(p.Name)
 	if dims == nil {
@@ -99,7 +99,7 @@ func buildMetricRecord(namespace, unit string, p emit.MetricPoint) ([]byte, erro
 
 // buildEventRecord renders one Outcome as a structured EMF-style log record.
 // It carries the individual amount and ids (events-only data, ADR-0004) as
-// fields for CloudWatch Logs Insights — it declares NO metric, so it never
+// fields for CloudWatch Logs Insights — it declares no metric, so it never
 // double-counts the aggregated families the metric path already emits. Its
 // Timestamp is the outcome's own time.
 func buildEventRecord(o biz.Outcome) ([]byte, error) {

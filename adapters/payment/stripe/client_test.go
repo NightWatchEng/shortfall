@@ -49,7 +49,7 @@ func TestDeriveOp(t *testing.T) {
 		{"GET", "/v1/issuing/cards/ic_1AbCdefG", "issuing.cards.get"},
 		{"GET", "/v1/customers/cus_NffrFeUf/sources/card_1Ab2", "customers.sources.get"},
 		// User-defined ids (coupons, custom product/plan ids) are all-lowercase
-		// and shape-indistinguishable from resource words — they MUST be stripped
+		// and shape-indistinguishable from resource words — they are stripped
 		// by position, never leaked into the op label (the boundedness guard).
 		{"GET", "/v1/coupons/summer", "coupons.get"},
 		{"GET", "/v1/coupons/FREESHIP", "coupons.get"},
@@ -114,7 +114,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 		)
 	}
 
-	// 5xx on a PaymentIntent create: provider call failed AND an auth/failed
+	// 5xx on a PaymentIntent create: provider call failed and an auth/failed
 	// outcome the webhook would never report, carrying the params' money+VC.
 	calls, auths = nil, nil
 	b := newBackend(&stripe.Error{HTTPStatusCode: 503})
@@ -142,7 +142,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 		t.Fatal("a successful call must emit no auth failure")
 	}
 
-	// 402 decline on create: provider call is "success" (API answered) and NOT
+	// 402 decline on create: provider call is "success" (API answered), not
 	// a synthetic auth failure — the decline arrives on the response.
 	calls, auths = nil, nil
 	b = newBackend(&stripe.Error{HTTPStatusCode: 402})
@@ -154,7 +154,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 		t.Fatal("a 402 decline is answered by Stripe, not a provider-infra auth failure")
 	}
 
-	// 5xx on a NON-auth op: provider call recorded, no auth outcome.
+	// 5xx on a non-auth op: provider call recorded, no auth outcome.
 	calls, auths = nil, nil
 	b = newBackend(&stripe.Error{HTTPStatusCode: 500})
 	_ = b.Call("GET", "/v1/charges", "", &stripe.ChargeListParams{}, nil)
@@ -165,7 +165,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 		t.Fatal("a non-auth op must not emit an auth outcome")
 	}
 
-	// 5xx on create WITHOUT biz metadata: provider call recorded, but no auth
+	// 5xx on create without biz metadata: provider call recorded, but no auth
 	// outcome (we cannot ground it without the ValueContext).
 	calls, auths = nil, nil
 	b = newBackend(&stripe.Error{HTTPStatusCode: 503})

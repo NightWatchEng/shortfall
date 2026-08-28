@@ -4,10 +4,9 @@
 // gate rule enforces exactly that, and the Querier's four verbs are the
 // only questions it may ask a backend.
 //
-// FROZEN SURFACE (v0.1.0): the Request/Report shapes and the Compute
-// signature. Leg computations land milestone by milestone; until a leg
-// is implemented, Compute says so loudly rather than returning a
-// plausible-looking zero.
+// The Request/Report shapes and the Compute signature are frozen
+// (v0.1.0). Until a leg is implemented, Compute says so explicitly
+// rather than returning a plausible-looking zero.
 package engine
 
 import (
@@ -20,11 +19,10 @@ import (
 
 // Scope narrows a report to part of the system, expressed as ADR-0004
 // label filters (e.g. {"stage": "capture"}) — never backend-specific
-// selectors. DELIBERATE LIMIT, decided at the freeze: deployment axes
-// (region, cluster, environment) are NOT biz.* labels and cannot be
-// scoped here — a per-region deployment points Compute at that region's
-// Querier instead. Widening the label universe is an ADR-0004 amendment,
-// not a Scope key.
+// selectors. Deployment axes (region, cluster, environment) are not
+// biz.* labels and cannot be scoped here — a per-region deployment
+// points Compute at that region's Querier instead. Widening the label
+// universe is an ADR-0004 amendment, not a Scope key.
 type Scope map[string]string
 
 // Request is the whole question: which window, which slice, which flows.
@@ -35,7 +33,7 @@ type Request struct {
 }
 
 // Evidence labels how a number is known. Realized and estimated value are
-// NEVER merged into one headline figure — the label rides every leg so no
+// never merged into one headline figure — the label rides every leg so no
 // renderer or consumer can blur them.
 type Evidence string
 
@@ -128,13 +126,11 @@ const LibraryVersion = "v0.1.0"
 // assembles a report.
 const defaultTopN = 10
 
-// Compute assembles the impact report from the deterministic legs (realized,
-// deferred, customers) against whatever backend the Querier fronts. A leg
-// that its backend cannot ground is marked unavailable on that leg — a
-// caveat for the money legs, a NotAvailableReason for customers — rather than
-// failing the whole report or fabricating a zero. The counterfactual
-// (unrealized, M7) and trust (coverage, M8) legs are not yet computed and say
-// so explicitly.
+// Compute assembles the impact report against whatever backend the Querier
+// fronts. A leg its backend cannot ground is marked unavailable on that leg —
+// a caveat for the money legs, a NotAvailableReason for customers — rather
+// than failing the whole report or fabricating a zero. The coverage leg is
+// not yet computed and says so explicitly.
 func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req Request) (Report, error) {
 	report := Report{
 		Request:        req,
@@ -146,13 +142,23 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 	}
 
 	if leg, err := RealizedLeg(ctx, reg, q, req); err != nil {
-		report.Realized = Leg{Evidence: EvidenceDeterministic, ByCurrency: map[string]int64{}, Caveats: []string{"unavailable: " + err.Error()}}
+		report.Realized = Leg{
+			Evidence:   EvidenceDeterministic,
+			ByCurrency: map[string]int64{},
+			Caveats:    []string{"unavailable: " + err.Error()},
+		}
 	} else {
 		report.Realized = leg
 	}
 
 	if leg, err := Deferred(ctx, reg, q, req); err != nil {
-		report.Deferred = DeferredLeg{Leg: Leg{Evidence: EvidenceDeterministic, ByCurrency: map[string]int64{}, Caveats: []string{"unavailable: " + err.Error()}}}
+		report.Deferred = DeferredLeg{
+			Leg: Leg{
+				Evidence:   EvidenceDeterministic,
+				ByCurrency: map[string]int64{},
+				Caveats:    []string{"unavailable: " + err.Error()},
+			},
+		}
 	} else {
 		report.Deferred = leg
 	}
@@ -164,13 +170,22 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 	}
 
 	if leg, err := Unrealized(ctx, reg, q, req); err != nil {
-		report.Unrealized = EstLeg{Evidence: EvidenceEstimate, LowMinor: map[string]int64{}, MidMinor: map[string]int64{}, HighMinor: map[string]int64{}, Notes: []string{"unavailable: " + err.Error()}}
+		report.Unrealized = EstLeg{
+			Evidence:  EvidenceEstimate,
+			LowMinor:  map[string]int64{},
+			MidMinor:  map[string]int64{},
+			HighMinor: map[string]int64{},
+			Notes:     []string{"unavailable: " + err.Error()},
+		}
 	} else {
 		report.Unrealized = leg
 	}
 
 	// Not yet landed — stated honestly rather than rendered as zero.
-	report.Coverage = CoverageLeg{Evidence: EvidenceTrust, Unavailable: "reconciliation lands in M8 — no coverage ratio computed yet"}
+	report.Coverage = CoverageLeg{
+		Evidence:    EvidenceTrust,
+		Unavailable: "reconciliation lands in M8 — no coverage ratio computed yet",
+	}
 
 	// Suggested severity from the $/min-at-risk ladder (ADR-0013); "" when the
 	// registry declares no ladder or nothing clears the lowest threshold.

@@ -9,7 +9,7 @@ import (
 // madToStdDev is the normal-consistency factor that scales a median absolute
 // deviation to a standard-deviation estimate; intervalSigma widens it to an
 // ≈95% band under normality. Both are part of the ADR-0006 contract — two
-// conforming implementations MUST produce the same range — so they are
+// conforming implementations must produce the same range — so they are
 // constants here, not tuning knobs.
 const (
 	madToStdDev   = 1.4826
@@ -28,8 +28,8 @@ type Sample struct {
 // Expectation is the expected stage-entry count for one target hour with its
 // interval (ADR-0006). Lower is clamped at 0 — a negative expected count is
 // meaningless. N is how many same-hour-of-week samples the estimate rests on,
-// so a caller can flag a thin or empty basis (the retention-gap check, 8.3)
-// rather than trusting a baseline built from too little history.
+// so a caller can flag a thin or empty basis rather than trusting a baseline
+// built from too little history.
 type Expectation struct {
 	At       time.Time
 	Expected float64
@@ -58,7 +58,7 @@ type Baseline interface {
 }
 
 // HourOfWeek is the ADR-0006 v0 baseline: for each target hour, the robust
-// median (and MAD interval) of the SAME hour-of-week across the lookback,
+// median (and MAD interval) of the same hour-of-week across the lookback,
 // holidays excluded.
 type HourOfWeek struct{}
 
@@ -74,10 +74,10 @@ func (HourOfWeek) Expected(history []Sample, target []time.Time, cfg Config) ([]
 		return nil, nil
 	}
 
-	// The lookback is measured back from the earliest target instant (the
-	// incident start): the baseline is the "last N weeks BEFORE" the window,
-	// never the window itself. Enforcing it here means an over-long history
-	// (a caller that pre-bounds loosely) cannot silently widen the basis.
+	// The lookback is measured back from the earliest target instant: the
+	// baseline is the last N weeks before the window, never the window itself.
+	// Enforcing it here means a loosely pre-bounded history cannot silently
+	// widen the basis.
 	earliest := target[0]
 	for _, t := range target[1:] {
 		if t.Before(earliest) {

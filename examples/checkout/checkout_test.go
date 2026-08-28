@@ -103,7 +103,8 @@ func TestLifecycleCoherence(t *testing.T) {
 			if txn.SettledAt.IsZero() || txn.CapturedAt.IsZero() || txn.AuthedAt.IsZero() {
 				t.Fatalf("%s settled with missing stage timestamps: %+v", txn.ID, txn)
 			}
-			if txn.SettledAt.Before(txn.CapturedAt) || txn.CapturedAt.Before(txn.AuthedAt) || txn.AuthedAt.Before(txn.CreatedAt) {
+			if txn.SettledAt.Before(txn.CapturedAt) || txn.CapturedAt.Before(txn.AuthedAt) ||
+				txn.AuthedAt.Before(txn.CreatedAt) {
 				t.Fatalf("%s: stage timestamps out of order: %+v", txn.ID, txn)
 			}
 		case StateCaptured:
@@ -111,7 +112,8 @@ func TestLifecycleCoherence(t *testing.T) {
 				t.Fatalf("%s captured but has SettledAt: %+v", txn.ID, txn)
 			}
 			// In flight at window end is the only honest reason.
-			if !txn.CapturedAt.Add(time.Duration(res.Config.SettleDelayMin) * time.Minute).After(end.Add(-time.Minute)) {
+			if !txn.CapturedAt.Add(time.Duration(res.Config.SettleDelayMin) * time.Minute).
+				After(end.Add(-time.Minute)) {
 				t.Fatalf("%s: captured txn should have settled inside the window: %+v", txn.ID, txn)
 			}
 		case StateAuthed:

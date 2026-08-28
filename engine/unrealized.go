@@ -11,27 +11,23 @@ import (
 	"github.com/NightWatchEng/shortfall/registry"
 )
 
-// Unrealized estimates the counterfactual leg (M7): demand the incident
-// suppressed or drove to abandonment — value that never became a
-// telemetry-visible outcome, so no deterministic leg can see it. For each flow
-// and currency it is, summed over the incident hours:
+// Unrealized estimates the counterfactual leg: demand the incident suppressed
+// or drove to abandonment — value that never became a telemetry-visible
+// outcome, so no deterministic leg can see it. For each flow and currency it
+// is, summed over the incident hours:
 //
 //	max(0, expected_entries - observed_entries) * AOV * (1 - recovered_fraction)
 //
-// where expected_entries is the baseline (ADR-0006 hour-of-week median, with its
-// interval) and observed_entries is biz_txn_total at the flow's ENTRY stage
-// (registry Stages[0], summed over outcomes) — every transaction that reached
-// the flow is counted once there, so suppressed/abandoned demand shows up as the
-// shortfall. AOV is the observed captured average (biz_value_total / biz_txn_total
-// for successes) in that currency, falling back to the registry estimator.
+// where expected_entries is the baseline (ADR-0006 hour-of-week median, with
+// its interval) and observed_entries is biz_txn_total at the flow's entry
+// stage (registry Stages[0], summed over outcomes), where every transaction
+// that reached the flow is counted once — this assumes the emitter records
+// biz_txn_total there for every transaction. AOV is the observed captured
+// average in that currency, falling back to the registry estimator.
 //
-// It is reported ONLY as a range: the baseline's Lower/Upper expectations give
+// It is reported only as a range: the baseline's Lower/Upper expectations give
 // the Low/High unrealized bounds, Mid uses the median. Evidence is always
-// estimate, and the leg is NEVER added to realized loss.
-//
-// entries basis (v0, workspace-tmw.8.2): counting at the entry stage assumes the
-// emitter records biz_txn_total there for every transaction. The distinct-entity
-// alternative is model-independent but query-heavy; see the bead.
+// estimate, and the leg is never added to realized loss.
 func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, req Request) (EstLeg, error) {
 	leg := EstLeg{
 		LowMinor:  map[string]int64{},
@@ -74,11 +70,9 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			notes = append(notes, fmt.Sprintf("flow %q has no baseline lookback — skipped", flowName))
 			continue
 		}
-		// Retention gap (workspace-tmw.8.3): if the querier declares less metric
-		// history than the baseline lookback needs, do NOT silently compute a
-		// baseline from too little data — flag the gap and suggest a
-		// longer-retention source. A querier that declares 0 weeks means
-		// "unknown/undeclared" (not "zero"), so it is not treated as a gap.
+		// A querier declaring less metric history than the lookback needs is a
+		// retention gap: flag it, never compute a baseline from too little data.
+		// Declaring 0 weeks means "undeclared", not "zero" — no gap.
 		if hw := q.Capabilities().MetricHistoryWeeks; hw > 0 && hw < flow.Baseline.LookbackWeeks {
 			notes = append(notes, fmt.Sprintf(
 				"flow %q: RETENTION GAP — the querier serves %d week(s) of metric history but the baseline needs %d; not estimated, to avoid a counterfactual built from too little history. Point the counterfactual at a longer-retention (e.g. warehouse) querier.",
@@ -86,15 +80,17 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			continue
 		}
 		if flow.Baseline.Holidays != "" {
-			notes = append(notes, fmt.Sprintf("flow %q declares holiday calendar %q, which v0 does not yet apply", flowName, flow.Baseline.Holidays))
+			notes = append(notes, fmt.Sprintf(
+				"flow %q declares holiday calendar %q, which v0 does not yet apply",
+				flowName,
+				flow.Baseline.Holidays,
+			))
 		}
 		entryStage := flow.Stages[0].Name
 
-		// Both history and observed are bucketed on the SAME hour-aligned grid as
-		// target — memq/adapters bucket from Range.From, so querying observed over
-		// req.Window (which need not be hour-aligned) would offset the buckets and
-		// pair each target hour with the wrong observed count. Query the aligned
-		// span [target[0], lastTarget+1h) instead.
+		// Query observed over the aligned span [target[0], lastTarget+1h), not
+		// req.Window: backends bucket from Range.From, so a non-hour-aligned
+		// window would pair each target hour with the wrong observed count.
 		alignedWindow := query.TimeRange{From: target[0], To: target[len(target)-1].Add(time.Hour)}
 		hist, err := hourlyEntriesByCurrency(ctx, q, flowName, entryStage,
 			query.TimeRange{From: target[0].AddDate(0, 0, -7*flow.Baseline.LookbackWeeks), To: target[0]})
@@ -107,7 +103,11 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 		}
 
 		for currency, histSamples := range hist {
-			exp, err := (baseline.HourOfWeek{}).Expected(histSamples, target, baseline.Config{LookbackWeeks: flow.Baseline.LookbackWeeks})
+			exp, err := (baseline.HourOfWeek{}).Expected(
+				histSamples,
+				target,
+				baseline.Config{LookbackWeeks: flow.Baseline.LookbackWeeks},
+			)
 			if err != nil {
 				return EstLeg{}, fmt.Errorf("engine: unrealized baseline: %w", err)
 			}
@@ -116,11 +116,19 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 				notes = append(notes, warn)
 			}
 			if !ok {
-				notes = append(notes, fmt.Sprintf("flow %q currency %s: no observed AOV and no applicable registry estimator — not valued", flowName, currency))
+				notes = append(notes, fmt.Sprintf(
+					"flow %q currency %s: no observed AOV and no applicable registry estimator — not valued",
+					flowName,
+					currency,
+				))
 				continue
 			}
 			if aovSource == "metric" && flow.Estimator != nil {
-				notes = append(notes, fmt.Sprintf("flow %q currency %s: AOV from the value counter may understate — this flow emits estimated successes the counter omits, and no event source was available to correct it", flowName, currency))
+				notes = append(notes, fmt.Sprintf(
+					"flow %q currency %s: AOV from the value counter may understate — this flow emits estimated successes the counter omits, and no event source was available to correct it",
+					flowName,
+					currency,
+				))
 			}
 			recovery := clampFraction(flow.Recovery.RecoveredFraction)
 			observedAt := hourMap(obs[currency])
@@ -128,7 +136,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			for i, e := range exp {
 				if e.N == 0 {
 					thin = true
-					continue // no history for this hour-of-week; 8.3 flags the gap
+					continue // no history for this hour-of-week; the gap is noted below
 				}
 				o := observedAt[hourKey(target[i])]
 				low += shortfallValue(e.Lower, o, aov, recovery)
@@ -191,17 +199,14 @@ func hourlyEntriesByCurrency(ctx context.Context, q query.Querier, flow, entrySt
 
 // aovMinor is the observed average order value in minor units for a currency,
 // with a source label for the notes. Preference order:
-//  1. EVENTS (exact source of truth): sum of success amounts / count of success
-//     events. This INCLUDES estimated amounts — they ride the event — so it is
-//     unbiased where the biz_value_total counter, which omits estimated
-//     successes, would understate.
+//  1. events: sum of success amounts / count of success events. Estimated
+//     amounts ride the event, so this is unbiased where the biz_value_total
+//     counter, which omits estimated successes, would understate.
 //  2. the biz_value_total/biz_txn_total metric ratio (only when events are not
 //     served); flagged as possibly understated for flows with estimated traffic.
-//  3. the registry estimator, applied ONLY for a currency the flow DECLARES
-//     (the estimator has no intrinsic currency, so it is not stamped onto a
-//     currency a declared-currency flow did not list). Its amount is used as
-//     minor units; the registry is responsible for declaring the estimator at
-//     the currency's exponent (Finance-reviewed), biz_value_total's basis.
+//  3. the registry estimator, applied only for a currency the flow declares
+//     (the estimator has no intrinsic currency). The registry is responsible
+//     for declaring it at the currency's exponent, biz_value_total's basis.
 //
 // ok is false when none is available (the currency is then left unvalued). warn
 // is a non-empty disclosure the caller must surface (e.g. an events-backend
@@ -236,12 +241,8 @@ func aovMinor(ctx context.Context, q query.Querier, flow, currency string, f reg
 			return int64(math.Round(value / count)), "metric", warn, true
 		}
 	}
-	// The estimator has no intrinsic currency — EstimateMoney stamps whatever
-	// currency is asked for — so it is trustworthy only for a currency the flow
-	// actually declares. For an undeclared flow (empty Currencies) we cannot know
-	// the estimator's basis, so it is applied only when the flow's currency set
-	// is unspecified (the registry's own choice), never onto a currency a
-	// declared-currency flow did not list.
+	// EstimateMoney stamps whatever currency is asked for, so the estimator is
+	// trusted only for a currency the flow declares (or a flow declaring none).
 	if m, ok := f.EstimateMoney("", currency); ok && flowAllowsCurrency(f, currency) {
 		return m.Amount, "estimator", warn, true
 	}

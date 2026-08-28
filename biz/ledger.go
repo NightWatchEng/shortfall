@@ -4,14 +4,14 @@ import "fmt"
 
 // LedgerRow is one reconciliation fact from a payment provider's own books: the
 // ground-truth money that moved for a (Flow, currency, Outcome) slice. The
-// coverage leg (M8) compares these sums against the telemetry sums for the same
+// coverage leg compares these sums against the telemetry sums for the same
 // slice — the degree to which they agree is the Finance-trust number. Amounts
 // are minor units and are never summed across currencies (ADR-0001), so the
 // currency is part of the row's identity, carried inside Money.
 type LedgerRow struct {
 	Flow    string // biz flow, from provider metadata; "" when the record was unattributed
 	Outcome Result // success / failed / deferred — the terminal fact the provider recorded
-	Money   Money  // Money.Amount is the SUM over the slice; Currency/Exponent identify it
+	Money   Money  // Money.Amount is the sum over the slice; Currency/Exponent identify it
 	Count   int64  // number of provider records in the slice
 }
 

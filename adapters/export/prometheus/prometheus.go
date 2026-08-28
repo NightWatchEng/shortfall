@@ -5,19 +5,18 @@
 // a nested module: a user who never touches Prometheus does not pull
 // client_golang into their build.
 //
-// It is honestly metrics-only: Capabilities reports Events=false. Amounts
-// and ids ride on OUTCOME EVENTS, which Prometheus has no place for, so the
-// customers leg is answered from an event sink (OTLP, Loki, ...), never
-// from here — the engine reports it NotAvailable rather than silently
-// empty. Pairing this exporter with an event exporter gives both.
+// Metrics-only: Capabilities reports Events=false. Amounts and ids ride on
+// outcome events, which Prometheus has no place for, so the customers leg is
+// answered from an event sink (OTLP, Loki, ...), never from here — the
+// engine reports it NotAvailable rather than silently empty. Pairing this
+// exporter with an event exporter gives both.
 //
-// Two consequences of Prometheus's pull model are load-bearing and
-// deliberate:
-//   - Counter families are CUMULATIVE. The emit layer produces delta
+// Two consequences of Prometheus's pull model are load-bearing:
+//   - Counter families are cumulative. The emit layer produces delta
 //     points; this exporter Adds each delta to the counter, so a scrape
 //     reads the running total. biz_inflight_value is a gauge Set to the
 //     level observed at the point's time.
-//   - Sample timestamps are NOT preserved. Prometheus text exposition
+//   - Sample timestamps are not preserved. Prometheus text exposition
 //     carries no per-sample time; the server stamps at scrape. Unlike the
 //     OTLP exporter, a batch delayed by an incident is seen at scrape time,
 //     not at the outcome's time. Deployments that need money pinned to
@@ -65,7 +64,7 @@ type Exporter struct {
 	gatherer   prometheus.Gatherer
 
 	// mu guards inflightAt: the last At applied to each biz_inflight_value
-	// series. The gauge is a LEVEL, so a stale sample arriving after a fresh
+	// series. The gauge is a level, so a stale sample arriving after a fresh
 	// one (overlapping flushes deliver batches out of order — emit's
 	// contract) must not overwrite the fresh level. Counters need no such
 	// guard: Add commutes, so arrival order is irrelevant.
@@ -147,8 +146,8 @@ func (e *Exporter) collectors() []prometheus.Collector {
 //	promhttp.HandlerFor(exp.Gatherer(), promhttp.HandlerOpts{})
 func (e *Exporter) Gatherer() prometheus.Gatherer { return e.gatherer }
 
-// Capabilities: metrics only, honestly. Retention is the Prometheus
-// server's, unknown here, so the history weeks are 0.
+// Capabilities reports metrics only. Retention is the Prometheus server's,
+// unknown here, so the history weeks are 0.
 func (e *Exporter) Capabilities() emit.Caps {
 	return emit.Caps{Metrics: true, Events: false}
 }
@@ -240,6 +239,6 @@ func (e *Exporter) ExportEvents(context.Context, []biz.Outcome) error {
 }
 
 // Shutdown is a no-op. Prometheus is scrape-based: there is nothing buffered
-// to flush, and unregistering here would DELETE already-recorded series
+// to flush, and unregistering here would delete already-recorded series
 // before a final scrape — losing data, the opposite of a flush.
 func (e *Exporter) Shutdown(context.Context) error { return nil }

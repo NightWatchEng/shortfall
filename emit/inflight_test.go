@@ -142,7 +142,7 @@ func TestTrackerPublishesCountAlongsideValue(t *testing.T) {
 	if c := countTotals(t, exp, em)[key]; c != 3 {
 		t.Fatalf("count = %d, want 3", c)
 	}
-	// Complete all three; the bucket must zero BOTH value and count.
+	// Complete all three; the bucket must zero both value and count.
 	tr.Done("invoice.pay", "capture", "a")
 	tr.Done("invoice.pay", "capture", "b")
 	tr.Done("invoice.pay", "capture", "c")
@@ -156,7 +156,7 @@ func TestTrackerAgesAcrossPublishes(t *testing.T) {
 	tr, em, exp, clk := newTrackerHarness(t)
 	tr.Track("invoice.pay", "capture", "m1", usd(100), clk.now)
 	tr.Publish()
-	// 3 minutes later the same message must have MOVED buckets, and the
+	// 3 minutes later the same message must have moved buckets, and the
 	// old bucket must read zero — a gauge that never returns to zero
 	// lies to the pager.
 	clk.now = clk.now.Add(3 * time.Minute)
@@ -188,7 +188,7 @@ func TestTrackerRetrackKeepsOriginalAge(t *testing.T) {
 	tr, em, exp, clk := newTrackerHarness(t)
 	enq := clk.now.Add(-10 * time.Minute)
 	tr.Track("invoice.pay", "capture", "m1", usd(100), enq)
-	// A retry re-tracks the same id "now"; age measures time since FIRST
+	// A retry re-tracks the same id "now"; age measures time since first
 	// enqueue — a retry does not make the backlog younger.
 	tr.Track("invoice.pay", "capture", "m1", usd(100), clk.now)
 	tr.Publish()
@@ -235,8 +235,8 @@ func TestTrackerEmptiedComboZeroesOnceThenStops(t *testing.T) {
 }
 
 func TestTrackerTenThousandAcrossBoundaries(t *testing.T) {
-	// The bead's acceptance: 10k simulated in-flight messages bucketed
-	// correctly, boundary values included.
+	// Acceptance: 10k simulated in-flight messages bucketed correctly,
+	// boundary values included.
 	tr, em, exp, clk := newTrackerHarness(t)
 	ages := []time.Duration{0, time.Minute - time.Nanosecond, time.Minute, 5 * time.Minute, 30 * time.Minute, 2 * time.Hour, 3 * time.Hour}
 	wantTotals := map[string]int64{}
