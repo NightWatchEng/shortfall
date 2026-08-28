@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "cb68b8871bb84755fab4c73432cedea77d82724f",
+  "base_sha": "81621f6e54e148f0090a8ef21c74e081ca6fa110",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T04:04:34+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified import boundary/no-cycle, money rendering (no float, no cross-currency), JSON determinism, nil-map safety; confirmed the no-sum invariant is structural (render.go does no money arithmetic)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 test-robustness and doc-consolidation findings; the structural guarantee (no money arithmetic in render.go) was verified by the reviewer, so the fixes only harden the tests/docs"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T04:04:34+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "cb68b8871bb84755fab4c73432cedea77d82724f",
+      "base_sha": "81621f6e54e148f0090a8ef21c74e081ca6fa110",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/render_test.go",
+      "line": 120,
+      "severity": "MEDIUM",
+      "finding": "Sanity assertion Contains(out,\"5000\") was trivially satisfied by the realized value \"15000\" (substring), so it could not detect a dropped estimate leg.",
+      "evidence": "if !strings.Contains(out, \"5000\") { ... } // '5000' in '15000'",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Asserts the estimate low/high (2000/8000), values that are not substrings of any other rendered number.",
+      "id": "b2ab6dec92b37bd8"
+    },
+    {
+      "ts": "2026-08-28T04:04:34+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "cb68b8871bb84755fab4c73432cedea77d82724f",
+      "base_sha": "81621f6e54e148f0090a8ef21c74e081ca6fa110",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/render_test.go",
+      "line": 109,
+      "severity": "LOW",
+      "finding": "Forbidden realized+estimate sums were hardcoded (20000/17000/23000), going stale if the sample changed.",
+      "evidence": "forbidden := []string{\"20000\", \"17000\", \"23000\"}",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Sums now derived from the fixture (rz + Unrealized low/mid/high) so the guard tracks the sample.",
+      "id": "e587536bee719e27"
+    },
+    {
+      "ts": "2026-08-28T04:04:34+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "cb68b8871bb84755fab4c73432cedea77d82724f",
+      "base_sha": "81621f6e54e148f0090a8ef21c74e081ca6fa110",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/render.go",
+      "line": 1,
+      "severity": "LOW",
+      "finding": "Duplicate, divergent package doc in both doc.go and render.go.",
+      "evidence": "doc.go and render.go both had '// Package report ...' with different text",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Consolidated the richer doc into doc.go; render.go now starts with a plain 'package report' clause.",
+      "id": "5636868b2211d691"
+    }
+  ]
+}
