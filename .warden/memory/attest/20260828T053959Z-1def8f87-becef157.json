@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "1def8f87d44b31a390b0b4d992affd597ca52c4f",
+  "base_sha": "9cde7cd53cdfac32248990f7ff095a346c5a7c45",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T05:39:59+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), SECURITY-focused \u2014 verified against stripe-go v79 source that the HMAC check runs independent of IgnoreAPIVersionMismatch, replay tolerance is enforced, no unverified mapping path, body cap before verify, no secret leak; confirmed all 8 event mappings + exponents"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 the two findings (a forward-reference doc and a missing replay test) are low-risk; the security core was verified against the SDK source and the replay fix is proven by a new test"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T05:39:59+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "1def8f87d44b31a390b0b4d992affd597ca52c4f",
+      "base_sha": "9cde7cd53cdfac32248990f7ff095a346c5a7c45",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "adapters/payment",
+      "file": "adapters/payment/stripe/stripe.go",
+      "line": 3,
+      "severity": "MEDIUM",
+      "finding": "Package doc referenced a client.go / wrapped client not present in this module (it is pt2).",
+      "evidence": "'...and (in the wrapped client, see client.go) synchronous auth-stage outcomes.'",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Reworded to describe this file as the inbound webhook path and mark the wrapped client as M5.6.2 pt2, not yet in the module.",
+      "id": "af70d8d232ddebaa"
+    },
+    {
+      "ts": "2026-08-28T05:39:59+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "1def8f87d44b31a390b0b4d992affd597ca52c4f",
+      "base_sha": "9cde7cd53cdfac32248990f7ff095a346c5a7c45",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/payment",
+      "file": "adapters/payment/stripe/stripe_test.go",
+      "line": 90,
+      "severity": "MEDIUM",
+      "finding": "No replay test: an event signed with a timestamp outside the tolerance window was never proven rejected, so an IgnoreTolerance:true regression would pass CI.",
+      "evidence": "all fixtures signed with time.Now(); failure cases covered only wrong-secret/tampered/empty/garbage",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added a 'replayed old timestamp' case (valid HMAC, ts = now-10m) asserting err!=nil and mapped=false. Security core (signature + tolerance) verified sound against stripe-go source.",
+      "id": "9c2709733a722888"
+    }
+  ]
+}
