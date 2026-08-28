@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -289,6 +290,65 @@ func TestUnrealizedAOVFromEventsIncludesEstimated(t *testing.T) {
 	wantMid := int64(math.Round(60 * float64(wantAOV) * 0.4))
 	if leg.MidMinor["USD"] != wantMid {
 		t.Fatalf("events-AOV mid = %d, want %d (AOV %d includes the estimated success)", leg.MidMinor["USD"], wantMid, wantAOV)
+	}
+}
+
+func TestUnrealizedRetentionGap(t *testing.T) {
+	// The querier serves only 4 weeks of history but invoice.pay's baseline needs
+	// 8. The report must show the gap and a warehouse suggestion, and must NOT
+	// silently compute a degraded baseline (workspace-tmw.8.3).
+	reg := unrealizedRegistry(t)
+	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	const hour = 10 * time.Hour
+	var pts []emit.MetricPoint
+	for w := 0; w < 8; w++ { // history is present, but the querier only PROMISES 4 weeks
+		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
+	}
+	incident := baseMon.Add(8*7*24*time.Hour + hour)
+	pts = append(pts, txnPoint("auth", "success", incident, 40), valuePoint("auth", "success", incident, 200000))
+	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true, MetricHistoryWeeks: 4}))
+	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
+	leg, err := Unrealized(context.Background(), reg, q, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasNoteContaining(leg.Notes, "RETENTION GAP") || !hasNoteContaining(leg.Notes, "warehouse") {
+		t.Fatalf("retention gap + suggestion must be shown, notes: %v", leg.Notes)
+	}
+	if len(leg.MidMinor) != 0 {
+		t.Fatalf("no silent degraded baseline: expected no valued currencies, got %+v", leg.MidMinor)
+	}
+}
+
+func TestUnrealizedRetentionNotAGap(t *testing.T) {
+	// No gap when the querier serves at least the lookback: 0 = undeclared (not
+	// "zero"), 8 = exactly the lookback (boundary — must stay no-gap, guarding
+	// the strict `<`), 12 = more than enough. All proceed with the estimate.
+	reg := unrealizedRegistry(t)
+	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	const hour = 10 * time.Hour
+	var pts []emit.MetricPoint
+	for w := 0; w < 8; w++ {
+		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
+	}
+	incident := baseMon.Add(8*7*24*time.Hour + hour)
+	pts = append(pts, txnPoint("auth", "success", incident, 40), valuePoint("auth", "success", incident, 200000))
+	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
+
+	for _, hw := range []int{0, 8, 12} { // 0 undeclared, 8 == lookback, 12 > lookback
+		t.Run(fmt.Sprintf("history_weeks_%d", hw), func(t *testing.T) {
+			q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true, MetricHistoryWeeks: hw}))
+			leg, err := Unrealized(context.Background(), reg, q, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasNoteContaining(leg.Notes, "RETENTION GAP") {
+				t.Fatalf("history_weeks=%d must not be a gap: %v", hw, leg.Notes)
+			}
+			if leg.MidMinor["USD"] != 120000 {
+				t.Fatalf("history_weeks=%d: estimate must proceed, mid = %d want 120000", hw, leg.MidMinor["USD"])
+			}
+		})
 	}
 }
 
