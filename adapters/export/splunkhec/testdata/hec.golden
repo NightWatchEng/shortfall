@@ -1,0 +1,47 @@
+{
+  "event": "metric",
+  "fields": {
+    "_value": 14900,
+    "currency": "USD",
+    "flow": "invoice.pay",
+    "kind": "fee",
+    "metric_name": "biz_value_total",
+    "outcome": "failed",
+    "segment": "smb",
+    "stage": "capture"
+  },
+  "source": "shortfall",
+  "time": 1787853600
+}
+{
+  "event": "metric",
+  "fields": {
+    "_value": 5568661,
+    "age_bucket": "5m-30m",
+    "currency": "USD",
+    "flow": "invoice.pay",
+    "metric_name": "biz_inflight_value",
+    "stage": "capture"
+  },
+  "source": "shortfall",
+  "time": 1787853600
+}
+{
+  "event": {
+    "biz.amount.est": false,
+    "biz.amount_minor": 14900,
+    "biz.currency": "USD",
+    "biz.customer.id": "h:c",
+    "biz.entity.id": "inv_1",
+    "biz.exponent": 2,
+    "biz.flow": "invoice.pay",
+    "biz.outcome": "failed",
+    "biz.segment": "smb",
+    "biz.stage": "capture",
+    "biz.value.kind": "fee",
+    "source_system": "stripe:webhook"
+  },
+  "source": "shortfall",
+  "sourcetype": "shortfall:outcome",
+  "time": 1787853600
+}

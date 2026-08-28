@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "c3129349c4203abdc3d1cd885412f7db7f846a3b",
+  "base_sha": "08d50b9ba535164f9f7e7f21a18e1d85190d6220",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T02:03:28+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified retry/backoff classification+doubling+ctx-cancel, HEC ADR-0004 mapping, chunking, go.mod replace paths, concurrency, capability honesty"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 a structural ADR-0007 finding on test organization with no failure scenario to adversarially refute"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T02:03:28+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "c3129349c4203abdc3d1cd885412f7db7f846a3b",
+      "base_sha": "08d50b9ba535164f9f7e7f21a18e1d85190d6220",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/splunkhec/splunkhec_test.go",
+      "line": 402,
+      "severity": "MEDIUM",
+      "finding": "TestAuthHeaderAndUnknownFamily bundled two distinct named behaviors (auth-header check; unknown-family error) in one non-table-driven test, the shape ADR-0007 flags.",
+      "evidence": "func TestAuthHeaderAndUnknownFamily(t *testing.T) { ... if d.auth != \"Splunk tok123\" ... if err := e.ExportMetrics(... biz_bogus ...); err == nil { t.Fatal(\"unknown family must error\") }",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Split into TestAuthHeaderIsSplunkToken (single purpose) and TestUnknownFamilyErrors (table-driven with bogus + empty name cases via t.Run).",
+      "id": "4a0011021af9c621"
+    }
+  ]
+}
