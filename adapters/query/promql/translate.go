@@ -14,9 +14,9 @@ import (
 var gaugeFamilies = map[string]bool{"biz_inflight_value": true, "biz_inflight_count": true}
 
 // promExpr is a translated PromQL instant query. This adapter issues only
-// instant queries (evaluated at `at`), because the exact translations below
-// use the @ modifier to pin evaluation times rather than a stepped range —
-// see translate for why stepped queries are refused.
+// instant queries (evaluated at `at`) — the exact translations use the @
+// modifier to pin evaluation times, and a stepped query becomes one instant
+// per bucket (translateStepped) rather than a Prometheus range query.
 type promExpr struct {
 	expr string
 	at   time.Time

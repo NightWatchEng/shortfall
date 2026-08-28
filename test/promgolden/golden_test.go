@@ -173,9 +173,14 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 					t.Fatalf("stepped query %d memq: %v", i, err)
 				}
 				// The stepped parity must not degenerate into the window
-				// case: the counter queries must see multiple buckets, or
-				// the per-bucket assertion proves nothing beyond Step==0.
-				if qy.Metric == "biz_txn_total" {
+				// case: wherever the scenario guarantees counter data —
+				// biz_txn_total always, the failed value sum in api-5xx
+				// (a stall delays captures but fails nothing) — memq must
+				// see multiple buckets, or the per-bucket assertion proves
+				// nothing beyond Step==0.
+				guaranteed := qy.Metric == "biz_txn_total" ||
+					(qy.Metric == "biz_value_total" && name == "api-5xx")
+				if guaranteed {
 					multi := false
 					for _, s := range want {
 						if len(s.Points) > 1 {
@@ -183,7 +188,7 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 						}
 					}
 					if !multi {
-						t.Fatalf("stepped query %d is vacuous: no memq series has more than one bucket", i)
+						t.Fatalf("stepped query %d (%s) is vacuous: no memq series has more than one bucket", i, qy.Metric)
 					}
 				}
 				got, err := pq.QueryMetric(ctx, qy)
