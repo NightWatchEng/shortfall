@@ -163,8 +163,13 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 		report.Customers = leg
 	}
 
+	if leg, err := Unrealized(ctx, reg, q, req); err != nil {
+		report.Unrealized = EstLeg{Evidence: EvidenceEstimate, LowMinor: map[string]int64{}, MidMinor: map[string]int64{}, HighMinor: map[string]int64{}, Notes: []string{"unavailable: " + err.Error()}}
+	} else {
+		report.Unrealized = leg
+	}
+
 	// Not yet landed — stated honestly rather than rendered as zero.
-	report.Unrealized = EstLeg{Evidence: EvidenceEstimate, Notes: []string{"counterfactual (unrealized) leg lands in M7 — not yet computed"}}
 	report.Coverage = CoverageLeg{Evidence: EvidenceTrust, Unavailable: "reconciliation lands in M8 — no coverage ratio computed yet"}
 
 	return report, nil
