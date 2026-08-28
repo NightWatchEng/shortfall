@@ -1,36 +1,35 @@
 # C4 Level 3 — capture and engine components
 
-The paths money takes through the code. **This is the TARGET design**:
-the shapes are the v0.1.0 frozen contracts, the internals are the plan of
-record for the emitter (M3) and engine legs (M6/M7). `Compute` assembles the
-legs that have landed and marks the rest unavailable on their own leg — a
-caveat on the money legs, a `NotAvailableReason` on customers, a note on the
-counterfactual/coverage legs — never a fabricated zero.
+The paths money takes through the code: what one `Record()` call does on
+the way in, and how one `Compute()` call assembles the report on the way
+out. A leg the backend cannot ground is marked unavailable on its own leg
+— a caveat on the money legs, a `NotAvailableReason` on customers, a note
+on the counterfactual and coverage legs — never a fabricated zero.
 
 ```mermaid
 flowchart LR
-    subgraph capture["emit — one Record() call (target design, lands M3)"]
-        CTX["ctx: biz.vc member<br/>(decoded ValueContext)"]
+    subgraph capture["emit — one Record() call"]
+        CTX["ctx — biz.vc member<br/>(decoded ValueContext)"]
         VAL["validate + PII guard<br/>(biz.CheckPII)"]
         DEDUP["in-process de-dup<br/>bounded, keyed (flow, entity, stage, result)<br/>so failed→success transitions always emit"]
-        LABELS["label enforcement<br/>segment ∈ registry enum<br/>flow/stage fallback: unregistered"]
-        MP["MetricPoint(s)<br/>biz_value_total · biz_txn_total<br/>delta @ observation time"]
+        LABELS["label enforcement<br/>segment ∈ registry enum ·<br/>flow/stage fallback — unregistered"]
+        MP["MetricPoint(s)<br/>biz_value_total · biz_txn_total<br/>delta at observation time"]
         OUT["biz.Outcome<br/>unsampled, trace-id linked"]
         DROP["biz_dropped_events_total{reason}<br/>never a silent drop"]
     end
     CTX --> VAL --> DEDUP --> LABELS
     LABELS --> MP
     LABELS --> OUT
-    VAL -->|rejected| DROP
+    VAL -->|"rejected"| DROP
 
-    subgraph engine["engine — one Compute() call (frozen shapes; legs land M6/M7)"]
+    subgraph engine["engine — one Compute() call"]
         REQ["Request<br/>window · scope · flows"]
         REAL["realized<br/>Σ failed, de-duped by entity<br/>(deterministic)"]
-        DEF["deferred<br/>in-flight by age bucket × currency<br/>SLA breaches → projected lost"]
+        DEF["deferred<br/>in-flight by age bucket × currency ·<br/>SLA breaches → projected lost"]
         UNREAL["unrealized<br/>baseline − actual, × recovery<br/>ALWAYS a range"]
         CUST["customers<br/>distinct · top-N by value<br/>or NotAvailable(reason)"]
-        COV["coverage<br/>telemetry Σ vs ledger"]
-        REP["Report + provenance<br/>evidence tags per leg<br/>realized NEVER summed with estimate"]
+        COV["coverage<br/>telemetry Σ at the value stage<br/>vs ledger (ADR-0016)"]
+        REP["Report + provenance<br/>evidence tags per leg ·<br/>realized NEVER summed with estimate"]
     end
     REQ --> REAL & DEF & UNREAL & CUST & COV --> REP
 ```

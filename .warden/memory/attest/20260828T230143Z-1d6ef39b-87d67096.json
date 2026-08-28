@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "1d6ef39b1af7637b04d589471f846005975cf955",
+  "base_sha": "80ed705efbfaf0f3f0cadaf198ea2d286e6b18bd",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T23:01:43+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5) \u2014 combined reviewer+examiner pass (docs-only diff), reviewer memory priors; re-rendered all six diagrams, ran all three README commands, reran all four benchmarks"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same combined pass; ~12 candidates refuted with cited evidence, zero confirmed"
+    }
+  ],
+  "records": []
+}

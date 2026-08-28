@@ -4,27 +4,28 @@ What an incident cost, who it hit, and how sure you are — where that
 answer sits among the people and systems that produce and consume it.
 
 ```mermaid
-C4Context
-    title shortfall — system context
-    Person(oncall, "On-call engineer", "needs $ impact in minutes, labelled by evidence")
-    Person(finance, "Finance", "co-signs the registry; trusts numbers that reconcile")
-    System_Boundary(org, "Your payment estate") {
-        System(services, "Instrumented services", "api, workers — emit biz.* signals via shortfall")
-        System(shortfall, "shortfall", "capture SDK + flow registry + impact engine + CLI")
-        SystemDb(ledger, "Ledger / payments DB", "the ground truth Finance believes")
-        SystemDb(backends, "Telemetry backends", "Prometheus, Loki, CloudWatch, Splunk, Datadog, warehouse")
-    }
-    System_Ext(stripe, "Payment providers", "Stripe et al: sync APIs + webhooks")
-    System_Ext(incident, "Incident tools", "Slack, incident.io, PagerDuty — consumers, not producers")
+flowchart TB
+    ONCALL(["On-call engineer<br/>needs $ impact in minutes,<br/>labelled by evidence"])
+    FINANCE(["Finance<br/>co-signs the registry once ·<br/>trusts numbers that reconcile"])
 
-    Rel(services, shortfall, "Record() per stage; biz.vc propagates")
-    Rel(shortfall, backends, "bounded metrics + outcome events via exporters")
-    Rel(shortfall, backends, "sum/count/group-by/range via queriers", "read")
-    Rel(stripe, shortfall, "webhooks + wrapped-client responses")
-    Rel(shortfall, ledger, "nightly reconciliation → coverage ratio")
-    Rel(shortfall, incident, "the four-leg report")
-    Rel(oncall, shortfall, "shortfall impact / /impact")
-    Rel(finance, shortfall, "reviews the registry once; audits coverage")
+    subgraph ORG["Your payment estate"]
+        SERVICES["Instrumented services<br/>api · workers —<br/>emit biz.* signals via shortfall"]
+        SHORTFALL["shortfall<br/>capture SDK · flow registry ·<br/>impact engine · CLI"]
+        LEDGER[("Ledger / payments DB<br/>the ground truth Finance believes")]
+        BACKENDS[("Telemetry backends<br/>Prometheus · Loki · CloudWatch ·<br/>Splunk · Datadog · warehouse")]
+    end
+
+    STRIPE["Payment providers<br/>Stripe et al — sync APIs + webhooks"]
+    INCIDENT["Incident tools<br/>Slack · incident.io · PagerDuty —<br/>consumers, not producers"]
+
+    SERVICES -->|"Record() per stage ·<br/>biz.vc propagates"| SHORTFALL
+    SHORTFALL -->|"bounded metrics +<br/>outcome events (exporters)"| BACKENDS
+    BACKENDS -.->|"sum · count · group-by · range<br/>(queriers, read)"| SHORTFALL
+    STRIPE -->|"webhooks +<br/>wrapped-client responses"| SHORTFALL
+    SHORTFALL -->|"nightly reconciliation →<br/>coverage ratio"| LEDGER
+    SHORTFALL -->|"the four-leg report"| INCIDENT
+    ONCALL -->|"shortfall impact · /impact"| SHORTFALL
+    FINANCE -->|"reviews the registry ·<br/>audits coverage"| SHORTFALL
 ```
 
 The two questions that shape everything: **Q1 attribution**
