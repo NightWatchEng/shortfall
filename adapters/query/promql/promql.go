@@ -21,6 +21,7 @@ package promql
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -29,6 +30,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/query"
@@ -95,26 +97,72 @@ func (q *Querier) QueryMetric(ctx context.Context, qy query.Query) (query.Series
 	return q.instant(ctx, ex)
 }
 
-// stepped executes one instant query per bucket and merges the per-bucket
-// vectors into Series: points stamped at each bucket's start (memq's stamp),
-// series ordered by their sorted label key (memq's canonical order).
-// Zero-difference counter buckets are dropped — memq omits sample-less
-// buckets — while gauge levels, zero included, are kept (translateStepped
-// documents the tolerance).
+// steppedConcurrency bounds the bucket fan-out: enough overlap to amortize
+// per-request latency over the engine's multi-week baseline queries without
+// stampeding the backend.
+const steppedConcurrency = 8
+
+// stepped executes one instant query per bucket — up to steppedConcurrency
+// in flight at once — and merges the per-bucket vectors into Series: points
+// stamped at each bucket's start (memq's stamp), series ordered by their
+// sorted label key (memq's canonical order), identical to a sequential
+// execution. Zero-difference counter buckets are dropped — memq omits
+// sample-less buckets — while gauge levels, zero included, are kept
+// (translateStepped documents the tolerance). On failure the remaining
+// buckets are cancelled and the failing bucket's own error surfaces, never
+// an induced cancellation.
 func (q *Querier) stepped(ctx context.Context, qy query.Query) (query.Series, error) {
 	buckets, err := translateStepped(qy)
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	vecs := make([]query.Series, len(buckets))
+	errs := make([]error, len(buckets))
+	sem := make(chan struct{}, steppedConcurrency)
+	var wg sync.WaitGroup
+	for i, b := range buckets {
+		wg.Add(1)
+		go func(i int, b steppedBucket) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				errs[i] = ctx.Err()
+				return
+			}
+			vec, err := q.instant(ctx, b.ex)
+			if err != nil {
+				errs[i] = err
+				cancel()
+				return
+			}
+			vecs[i] = vec
+		}(i, b)
+	}
+	wg.Wait()
+	// Prefer the first real failure over cancellations it induced.
+	var firstErr error
+	for _, err := range errs {
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err != nil && !errors.Is(err, context.Canceled) {
+			firstErr = err
+			break
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
 	gauge := gaugeFamilies[qy.Metric]
 	merged := map[string]*query.SeriesSlice{}
 	var keys []string
-	for _, b := range buckets {
-		vec, err := q.instant(ctx, b.ex)
-		if err != nil {
-			return nil, err
-		}
-		for _, ss := range vec {
+	for i, b := range buckets {
+		for _, ss := range vecs[i] {
 			if len(ss.Points) == 0 || (!gauge && ss.Points[0].Value == 0) {
 				continue
 			}

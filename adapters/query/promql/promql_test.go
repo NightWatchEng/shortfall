@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -198,19 +199,31 @@ func TestTranslateStepped(t *testing.T) {
 	}
 }
 
-// seqDoer serves one canned body per request, in order.
-type seqDoer struct {
-	bodies []string
-	urls   []string
+// bucketDoer serves one canned body per bucket, keyed by the request's
+// `time` parameter — stepped buckets execute concurrently, so bodies cannot
+// be served by arrival order.
+type bucketDoer struct {
+	bodies map[string]string // time param -> body
+
+	mu   sync.Mutex
+	urls []string
 }
 
-func (s *seqDoer) Do(req *http.Request) (*http.Response, error) {
+func (s *bucketDoer) Do(req *http.Request) (*http.Response, error) {
+	s.mu.Lock()
 	s.urls = append(s.urls, req.URL.String())
-	i := len(s.urls) - 1
-	if i >= len(s.bodies) {
-		return nil, errors.New("seqDoer: out of bodies")
+	s.mu.Unlock()
+	body, ok := s.bodies[req.URL.Query().Get("time")]
+	if !ok {
+		return nil, errors.New("bucketDoer: unexpected eval time " + req.URL.Query().Get("time"))
 	}
-	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(s.bodies[i]))}, nil
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+}
+
+// evalAt renders the eval-time param for a bucket ending at t, matching the
+// half-open boundary the translation pins (t-1ms).
+func evalAt(t time.Time) string {
+	return formatTime(t.Add(-time.Millisecond))
 }
 
 // TestSteppedQueryMergesBuckets pins the client-side assembly: one instant
@@ -221,10 +234,10 @@ func TestSteppedQueryMergesBuckets(t *testing.T) {
 	vec := func(rows string) string {
 		return `{"status":"success","data":{"resultType":"vector","result":[` + rows + `]}}`
 	}
-	d := &seqDoer{bodies: []string{
-		vec(`{"metric":{"currency":"USD"},"value":[1,"100"]}`),
-		vec(`{"metric":{"currency":"USD"},"value":[1,"0"]},{"metric":{"currency":"EUR"},"value":[1,"50"]}`),
-		vec(`{"metric":{"currency":"USD"},"value":[1,"25"]}`),
+	d := &bucketDoer{bodies: map[string]string{
+		evalAt(from.Add(20 * time.Minute)): vec(`{"metric":{"currency":"USD"},"value":[1,"100"]}`),
+		evalAt(from.Add(40 * time.Minute)): vec(`{"metric":{"currency":"USD"},"value":[1,"0"]},{"metric":{"currency":"EUR"},"value":[1,"50"]}`),
+		evalAt(to):                         vec(`{"metric":{"currency":"USD"},"value":[1,"25"]}`),
 	}}
 	q := New("http://prom", WithHTTPClient(d))
 	series, err := q.QueryMetric(context.Background(), query.Query{
@@ -261,9 +274,9 @@ func TestSteppedGaugeKeepsZeroLevels(t *testing.T) {
 	vec := func(rows string) string {
 		return `{"status":"success","data":{"resultType":"vector","result":[` + rows + `]}}`
 	}
-	d := &seqDoer{bodies: []string{
-		vec(`{"metric":{"age_bucket":"lt1m"},"value":[1,"0"]}`),
-		vec(`{"metric":{"age_bucket":"lt1m"},"value":[1,"700"]}`),
+	d := &bucketDoer{bodies: map[string]string{
+		evalAt(from.Add(30 * time.Minute)): vec(`{"metric":{"age_bucket":"lt1m"},"value":[1,"0"]}`),
+		evalAt(to):                         vec(`{"metric":{"age_bucket":"lt1m"},"value":[1,"700"]}`),
 	}}
 	q := New("http://prom", WithHTTPClient(d))
 	series, err := q.QueryMetric(context.Background(), query.Query{
@@ -322,5 +335,82 @@ func TestQueryMetricSurfacesErrorStatus(t *testing.T) {
 	q := New("http://prom", WithHTTPClient(d))
 	if _, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_txn_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}}); err == nil {
 		t.Fatal("a Prometheus error envelope must surface")
+	}
+}
+
+// gateDoer records the peak number of in-flight requests and serves one body.
+type gateDoer struct {
+	mu       sync.Mutex
+	inflight int
+	peak     int
+	body     string
+}
+
+func (g *gateDoer) Do(*http.Request) (*http.Response, error) {
+	g.mu.Lock()
+	g.inflight++
+	if g.inflight > g.peak {
+		g.peak = g.inflight
+	}
+	g.mu.Unlock()
+	time.Sleep(2 * time.Millisecond) // hold the slot so overlap is observable
+	g.mu.Lock()
+	g.inflight--
+	g.mu.Unlock()
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(g.body))}, nil
+}
+
+// TestSteppedFanOutBounded pins the bounded concurrency: bucket queries
+// overlap (more than one in flight) but never exceed the declared bound.
+func TestSteppedFanOutBounded(t *testing.T) {
+	d := &gateDoer{body: `{"status":"success","data":{"resultType":"vector","result":[]}}`}
+	q := New("http://prom", WithHTTPClient(d))
+	_, err := q.QueryMetric(context.Background(), query.Query{
+		Metric: "biz_txn_total", Agg: query.AggSum,
+		Range: query.TimeRange{From: from, To: from.Add(32 * time.Minute)},
+		Step:  time.Minute, // 32 buckets
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.peak <= 1 {
+		t.Fatalf("bucket queries never overlapped (peak %d) — the fan-out is sequential", d.peak)
+	}
+	if d.peak > steppedConcurrency {
+		t.Fatalf("peak in-flight %d exceeds the bound %d", d.peak, steppedConcurrency)
+	}
+}
+
+// errAtDoer fails the request whose eval time matches failAt; others succeed.
+type errAtDoer struct {
+	failAt string
+	mu     sync.Mutex
+	n      int
+}
+
+func (e *errAtDoer) Do(req *http.Request) (*http.Response, error) {
+	e.mu.Lock()
+	e.n++
+	e.mu.Unlock()
+	if req.URL.Query().Get("time") == e.failAt {
+		return &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("boom"))}, nil
+	}
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(
+		`{"status":"success","data":{"resultType":"vector","result":[]}}`))}, nil
+}
+
+// TestSteppedFanOutReportsRealError pins error semantics under concurrency:
+// the failing bucket's own error surfaces (never a cancellation induced by
+// it), and the fan-out stops issuing work after the failure.
+func TestSteppedFanOutReportsRealError(t *testing.T) {
+	d := &errAtDoer{failAt: evalAt(from.Add(20 * time.Minute))}
+	q := New("http://prom", WithHTTPClient(d))
+	_, err := q.QueryMetric(context.Background(), query.Query{
+		Metric: "biz_txn_total", Agg: query.AggSum,
+		Range: query.TimeRange{From: from, To: to},
+		Step:  20 * time.Minute,
+	})
+	if err == nil || !strings.Contains(err.Error(), "status 500") {
+		t.Fatalf("want the failing bucket's status 500 error, got %v", err)
 	}
 }
