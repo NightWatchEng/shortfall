@@ -12,16 +12,25 @@ import (
 // window and scope, de-duplicated so retries and cross-process duplicate
 // events never double-count.
 //
-// Events path (preferred, exact): for each flow it sums each failed
-// transaction's amount ONCE per entity, and excludes any entity that also
-// has a success in the window — a failed-then-recovered transaction is not a
-// loss. Grouping by (currency, entity) both de-dups duplicate failed events
-// for one entity and keeps sums within a single currency (ADR-0001). The
-// per-entity amount is the group sum divided by the group count, which is
-// exact under the emitter architecture's guarantee that a cross-process
-// duplicate is the same event redelivered (identical amount) and that entity
-// ids are unique per transaction; if that guarantee is ever violated the leg
-// says so in a caveat rather than passing an average off as a measurement.
+// Events path (preferred): for each flow it counts each failed entity once
+// and excludes any entity that also has a success in the window — a failed-
+// then-recovered transaction is not a loss. Grouping by (currency, entity)
+// collapses duplicate failed events for one entity and keeps sums within a
+// single currency (ADR-0001).
+//
+// De-dup and its limit, stated honestly. Under at-least-once delivery a
+// duplicate failed event is the SAME event redelivered, so its amount is
+// identical and collapsing the group as SumMinor/Count is exact. But the
+// frozen query.EventQuery returns only a per-group sum and count — not a
+// representative value — so when an entity legitimately has failed events
+// with DIFFERING amounts, the collapse yields their mean rather than a real
+// figure. The leg flags the DETECTABLE case (the group sum is not divisible
+// by its count) with a caveat; the even-division case (e.g. 100+300 over two
+// events) is not detectable through a sum-only query and is a documented
+// limitation. Exact per-entity de-dup independent of amount uniformity needs
+// a max/first-per-group query capability — a frozen-interface amendment
+// tracked in workspace-7y5, not worked around here. There is no "entity id
+// is unique per transaction" invariant in the library; do not assume one.
 //
 // Metrics-only path (fallback, when the backend serves no events): the failed
 // biz_value_total sums are real, but a time-series cannot de-dup by entity,
@@ -88,13 +97,12 @@ func realizedFromEvents(ctx context.Context, q query.Querier, req Request) (Leg,
 		}
 	}
 
-	// Precondition (emitter architecture): a cross-process duplicate is the
-	// SAME event redelivered, and entity ids are unique per transaction, so
-	// every failed event for one entity carries an identical amount. Under
-	// that guarantee SumMinor/Count is the exact per-entity amount. If it is
-	// ever violated (SumMinor not divisible by Count → the duplicates differ),
-	// the data is inconsistent: we still emit a best-effort figure but say so
-	// loudly rather than pass off an average as an exact measurement.
+	// Collapse duplicate failed events per entity to one amount. For a
+	// redelivered (identical) duplicate this mean is exact; when a group's
+	// sum is not divisible by its count the duplicates carry differing
+	// amounts, which the mean cannot represent — flag those loudly. (The
+	// even-division differing-amount case is undetectable through a sum-only
+	// query; see the package doc and workspace-7y5.)
 	inconsistent := 0
 	for _, filters := range flowFilters(req, "failed") {
 		groups, err := q.QueryEvents(ctx, query.EventQuery{
