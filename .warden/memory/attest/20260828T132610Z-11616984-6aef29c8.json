@@ -1,0 +1,156 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "11616984547d67fc69469055c99cbabc7412b8ce",
+  "base_sha": "3c70483f7c1684d434e1a66dbfdcc74c50235fd0",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T13:26:10+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8) \u2014 two rounds. R1 caught the vacuous gauge parity (in-flight snapshot stamped at exactly To is dropped by the half-open read on both sides) and two stale-doc mismatches; R2 (after fixes) caught the CI vacuous-skip on the HIGH-tier golden job and a stale memq package doc. Verified engine deferred-leg queries GroupBy stage so the memq gauge sum-fix is behavior-preserving for the engine while correctly fixing the collapsed-group case."
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Opus 4.8), separate context \u2014 R1 confirmed all three findings against the real code (verified links a-e of the vacuous-gauge chain: testkit stamps at res.Config.End, memq drops At>=To at memq.go:129/192, promql last_over_time@To-1ms excludes it). R2 verdicted both fixes addressed and found no new defect (only skip->fatal control flow and doc text changed; harness assertions unchanged)."
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T13:26:10+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "11616984547d67fc69469055c99cbabc7412b8ce",
+      "base_sha": "3c70483f7c1684d434e1a66dbfdcc74c50235fd0",
+      "rule_id": "unmapped:vacuous-pass",
+      "tags": [
+        "gauge-parity",
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/promgolden",
+      "file": "test/promgolden/golden_test.go",
+      "line": 149,
+      "severity": "MEDIUM",
+      "finding": "The gauge parity query {Metric:biz_inflight_value, GroupBy:[age_bucket,currency]} proved nothing: the only in-flight samples were stamped at res.Config.End == window.To, and a half-open [From,To) read excludes At==To on BOTH sides (memq drops At>=To; the promql adapter evaluates last_over_time at To-1ms), so sameSeries(empty,empty) passed while never exercising the gauge/last_over_time translation.",
+      "evidence": "points := testkit.MetricsFromResult(res)  // gauge snapshot at res.Config.End == window.To",
+      "status": "fixed",
+      "origin": "day",
+      "bead": "workspace-0ka",
+      "reason": "Added testkit.MetricsFromResultAt(res, gaugeAt); the harness now snapshots the gauge one minute inside the window, plus a stall-scenario non-emptiness guard so the assertion can never silently go vacuous again. Named regression test: testkit/querier_test.go TestInFlightGaugeSnapshotVisibleWithinWindow (at-To invisible vs interior visible). The live harness now compares real non-empty gauge series.",
+      "id": "0135221b7785f024"
+    },
+    {
+      "ts": "2026-08-28T13:26:10+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "11616984547d67fc69469055c99cbabc7412b8ce",
+      "base_sha": "3c70483f7c1684d434e1a66dbfdcc74c50235fd0",
+      "rule_id": "unmapped:memq-parity-gauge-sum",
+      "tags": [
+        "gauge",
+        "memq-parity"
+      ],
+      "dir_prefix": "query/memq",
+      "file": "query/memq/memq.go",
+      "line": 188,
+      "severity": "MEDIUM",
+      "finding": "memq's gauge aggregate() took the single last sample across a GroupBy-collapsed group, so a query grouping several series (stage=capture and stage=settle collapsing into one age_bucket/currency group) returned one series' level instead of their sum \u2014 diverging from a real backend's sum by(g)(last_over_time(m)). Exposed once the gauge parity became non-vacuous.",
+      "evidence": "var last *emit.MetricPoint; ... if last==nil || points[i].At.After(last.At) { last = &points[i] } // single sample, not per-series sum",
+      "status": "fixed",
+      "origin": "day",
+      "bead": "workspace-0ka",
+      "reason": "aggregate() now keys by canonical(full labels), carries each underlying series' last level before the boundary forward, and sums them (AggCount returns the series count). Single-series carry-forward (TestGaugeCarriesForward) is preserved. Named regression test: query/memq/memq_test.go TestGaugeSumsCollapsedSeries. Live Prometheus parity confirmed for both scenarios.",
+      "id": "1a7aa4a78c2202f9"
+    },
+    {
+      "ts": "2026-08-28T13:26:10+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "11616984547d67fc69469055c99cbabc7412b8ce",
+      "base_sha": "3c70483f7c1684d434e1a66dbfdcc74c50235fd0",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/promql/translate.go",
+      "line": 31,
+      "severity": "MEDIUM",
+      "finding": "The translate() doc comment described the pre-fix counter translation `sum by(g)(m @ To) - sum by(g)(m @ From)` and called one-end series an unhandled edge case, both untrue after this diff, which emits `<end> - (<start> or (<end>*0))` via last_over_time and handles one-end series with the or-fill.",
+      "evidence": "//     `sum by(g)(m @ To) - sum by(g)(m @ From)`. ... series present at only one end are edge cases tracked in workspace-0ka.",
+      "status": "fixed",
+      "origin": "day",
+      "bead": "workspace-0ka",
+      "reason": "Doc comment rewritten to describe the current `<end> - (<start> or (<end>*0))` last_over_time translation, the -1ms symmetric boundary eval, and that a one-end series is handled (filled to 0).",
+      "id": "b87170e8e8831f3e"
+    },
+    {
+      "ts": "2026-08-28T13:26:10+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "11616984547d67fc69469055c99cbabc7412b8ce",
+      "base_sha": "3c70483f7c1684d434e1a66dbfdcc74c50235fd0",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/promql/promql.go",
+      "line": 5,
+      "severity": "LOW",
+      "finding": "The package doc described the counter translation as `m @ To - m @ From`, contradicting the new last_over_time-based code.",
+      "evidence": "// window (m @ To \u2212 m @ From), the gauge family as last_over_time.",
+      "status": "fixed",
+      "origin": "day",
+      "bead": "workspace-0ka",
+      "reason": "Updated to 'each boundary read via last_over_time, one-end series filled to 0'.",
+      "id": "90520ae571335893"
+    },
+    {
+      "ts": "2026-08-28T13:26:10+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "11616984547d67fc69469055c99cbabc7412b8ce",
+      "base_sha": "3c70483f7c1684d434e1a66dbfdcc74c50235fd0",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "query/memq",
+      "file": "query/memq/memq.go",
+      "line": 11,
+      "severity": "LOW",
+      "finding": "The memq package-level doc said the gauge Point is 'the last observed level at its step boundary', stale after the gauge sum-fix in this same diff.",
+      "evidence": "//   - the gauge family (biz_inflight_value): each Point is the last observed //     level at its step boundary;",
+      "status": "fixed",
+      "origin": "day",
+      "bead": "workspace-0ka",
+      "reason": "Updated to describe per-series carry-forward then summed across a collapsed group, matching sum by(g)(last_over_time(m)).",
+      "id": "1cdc578841e1d0cd"
+    },
+    {
+      "ts": "2026-08-28T13:26:10+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "11616984547d67fc69469055c99cbabc7412b8ce",
+      "base_sha": "3c70483f7c1684d434e1a66dbfdcc74c50235fd0",
+      "rule_id": "unmapped:vacuous-pass",
+      "tags": [
+        "ci-gate",
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/promgolden",
+      "file": "test/promgolden/golden_test.go",
+      "line": 26,
+      "severity": "MEDIUM",
+      "finding": "The golden CI job (HIGH-tier .github enforcement surface) could go green having asserted nothing: with SHORTFALL_GOLDEN=1 set, the harness still t.Skip()ed when Docker was absent/not running, and a skipped Go test exits 0 \u2014 a silent gate-weakening if the runner ever lacked a Docker daemon.",
+      "evidence": "if _, err := exec.LookPath(\"docker\"); err != nil { t.Skip(\"docker not found; ...\") }",
+      "status": "fixed",
+      "origin": "day",
+      "bead": "workspace-0ka",
+      "reason": "With SHORTFALL_GOLDEN set (the explicit demand to run the gate), missing Docker or a dead daemon is now t.Fatal, not t.Skip; the no-env skip path (core CI, Docker-less dev) is preserved. The env-set path has no remaining reachable Skip, so the golden job cannot pass vacuously.",
+      "id": "b8620450d62b5f78"
+    }
+  ]
+}
