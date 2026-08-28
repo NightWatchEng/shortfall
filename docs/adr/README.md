@@ -20,3 +20,4 @@ that rewrites history.
 | [0012](0012-inflight-count-gauge.md) | biz_inflight_count: companion count gauge for exact deferred breach/txn counts | accepted |
 | [0013](0013-severity-suggestion.md) | Suggested severity from a registry $/min-at-risk ladder, worst currency | accepted |
 | [0014](0014-go-readability-conventions.md) | Go readability conventions: line breaks, comment density, doc style | accepted |
+| [0015](0015-go-performance-guidelines.md) | Go performance guidelines: reviewed reference checklist for hot paths | accepted |
