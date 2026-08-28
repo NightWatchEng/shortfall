@@ -74,17 +74,24 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 		t.Fatal("harness produced an empty ledger")
 	}
 
-	// Ground truth: count terminal txns and their failed value, by hand.
-	var wantTerminal int
+	// Ground truth by hand: terminal txns and their failed value, plus the
+	// flow entries (txns that authed — each adds one entry-stage point).
+	var wantTerminal, wantEntered, wantAuthFailed int
 	var wantFailedValueUSD int64
 	var currencies = map[string]bool{}
 	for _, txn := range res.Ledger.Txns {
+		if !txn.AuthedAt.IsZero() {
+			wantEntered++
+		}
 		_, result, _, visible := telemetryOutcome(txn)
 		if !visible {
 			continue
 		}
 		wantTerminal++
 		currencies[txn.Currency] = true
+		if txn.State == checkout.StateAuthFail {
+			wantAuthFailed++
+		}
 		if result == biz.Result("failed") && txn.Currency == "USD" {
 			wantFailedValueUSD += txn.AmountMinor
 		}
@@ -94,20 +101,30 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	ctx := context.Background()
 	full := query.TimeRange{From: start, To: start.Add(24 * time.Hour)}
 
-	// Events: total terminal count via distinct entity ids... simpler: sum
-	// biz_txn_total over the window equals the terminal count.
-	series, err := q.QueryMetric(ctx, query.Query{Metric: "biz_txn_total", Agg: query.AggSum, Range: full})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var gotTxn float64
-	for _, s := range series {
-		for _, p := range s.Points {
-			gotTxn += p.Value
+	// Metrics: the total biz_txn_total is one terminal point per terminal
+	// txn plus one entry-stage point per txn that entered the flow, and the
+	// entry-stage sum (over outcomes) counts every entry — successes via
+	// their entry point, auth failures via their terminal point.
+	sumTxn := func(filters map[string]string) int {
+		series, err := q.QueryMetric(ctx, query.Query{
+			Metric: "biz_txn_total", Agg: query.AggSum, Filters: filters, Range: full,
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
+		var got float64
+		for _, s := range series {
+			for _, p := range s.Points {
+				got += p.Value
+			}
+		}
+		return int(got)
 	}
-	if int(gotTxn) != wantTerminal {
-		t.Fatalf("biz_txn_total sum = %d, want %d terminal txns", int(gotTxn), wantTerminal)
+	if got := sumTxn(nil); got != wantTerminal+wantEntered {
+		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d)", got, wantTerminal+wantEntered, wantTerminal, wantEntered)
+	}
+	if got := sumTxn(map[string]string{"stage": "auth"}); got != wantEntered+wantAuthFailed {
+		t.Fatalf("entry-stage biz_txn_total sum = %d, want %d entries (entered %d + auth-failed %d)", got, wantEntered+wantAuthFailed, wantEntered, wantAuthFailed)
 	}
 
 	// Events: failed USD value via a currency-pinned, outcome-filtered event

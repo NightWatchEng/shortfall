@@ -14,7 +14,9 @@ import (
 // real telemetry could observe, so the engine can be exercised end to end
 // with no backend process. Each telemetry-visible terminal transaction
 // becomes one outcome event and its counter metric points (biz_txn_total,
-// and biz_value_total carrying the exact amount).
+// and biz_value_total carrying the exact amount); every transaction that
+// entered the flow also counts once at the entry stage (see
+// MetricsFromResultAt).
 //
 // Excluded, because a real emitter never records them:
 //   - abandoned transactions (checkout.StateAbandoned) — telemetry never saw
@@ -53,10 +55,11 @@ func EventsFromResult(res checkout.Result) []biz.Outcome {
 
 // MetricsFromResult returns the metric points a real emitter would have shipped
 // for a harness run: biz_txn_total + biz_value_total per telemetry-visible
-// terminal transaction, plus the biz_inflight_value gauge snapshot at the run's
-// end instant (res.Config.End) — the level a live scrape would publish "now".
-// The golden harness feeds these to both memq and a real Prometheus, which
-// must return identical Series.
+// terminal transaction, an entry-stage biz_txn_total per transaction that
+// entered the flow (see MetricsFromResultAt), plus the biz_inflight_value
+// gauge snapshot at the run's end instant (res.Config.End) — the level a live
+// scrape would publish "now". The golden harness feeds these to both memq and
+// a real Prometheus, which must return identical Series.
 func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
 	return MetricsFromResultAt(res, res.Config.End)
 }
@@ -66,6 +69,18 @@ func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
 // stamped at their own event times; only the biz_inflight_value gauge is
 // snapshotted at gaugeAt.
 //
+// Entry-stage counts: every transaction telemetry saw enter the flow — auth
+// succeeded, whatever happened later — additionally gets one
+// biz_txn_total{stage=auth, outcome=success} point at its AuthedAt, so the
+// counterfactual leg's entry basis (biz_txn_total at Stages[0], summed over
+// outcomes) observes successful and in-flight transactions, not just
+// terminal failures. Auth-failed transactions already count at the entry
+// stage through their terminal point; abandoned ones stay invisible — that
+// gap is the signal the counterfactual leg measures. No entry-stage
+// biz_value_total point rides along: the engine's coverage and AOV readers
+// sum success value across stages, and a per-stage value emission would
+// multiply-count it.
+//
 // gaugeAt must lie strictly inside the query window: a sample stamped exactly
 // at the window end To is invisible to a half-open [From, To) read on both
 // sides (memq drops At >= To; the promql adapter reads last_over_time at
@@ -73,6 +88,17 @@ func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
 func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPoint {
 	var metrics []emit.MetricPoint
 	for _, txn := range res.Ledger.Txns {
+		if !txn.AuthedAt.IsZero() {
+			metrics = append(metrics, emit.MetricPoint{
+				Name: "biz_txn_total",
+				Labels: map[string]string{
+					"flow": "invoice.pay", "stage": "auth", "outcome": string(biz.ResultSuccess),
+					"currency": txn.Currency, "segment": string(txn.Segment),
+				},
+				Value: 1,
+				At:    txn.AuthedAt,
+			})
+		}
 		stage, result, at, visible := telemetryOutcome(txn)
 		if !visible {
 			continue
