@@ -23,3 +23,5 @@ use ./adapters/query/promql
 use ./adapters/query/sql
 
 use ./cmd/shortfall
+
+use ./adapters/payment/stripe
