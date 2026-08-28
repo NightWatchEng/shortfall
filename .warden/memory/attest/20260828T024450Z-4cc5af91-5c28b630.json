@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "4cc5af91c9a3c51fc7df04ba2ddc01c7186ba470",
+  "base_sha": "92bf4cd098d4301109eff1826cfe0b282c722f3c",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T02:44:50+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), combined docs-accuracy hunt+verify \u2014 checked every cited symbol/signature/import and behavioral claim against source"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 a compile-correctness fact verified against real test callers (emitter_test.go &reg, httpmw_test.go &reg); no failure scenario to refute"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T02:44:50+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "4cc5af91c9a3c51fc7df04ba2ddc01c7186ba470",
+      "base_sha": "92bf4cd098d4301109eff1826cfe0b282c722f3c",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "docs",
+      "file": "docs/inhouse.md",
+      "line": 90,
+      "severity": "LOW",
+      "finding": "Code samples passed reg (a registry.Registry value from Load/Parse) to emit.New, httpmw.Middleware, and httpmw.NewTransport, which take *registry.Registry \u2014 they would not compile as written, defeating the doc's AC.",
+      "evidence": "doc: reg, err := registry.Load(...) then emit.New(reg, exp); source: registry.Load returns (Registry, error); emit.New(reg *registry.Registry, ...); real callers use &reg (emitter_test.go, httpmw_test.go).",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Pass &reg at all three call sites and added a note that Load/Parse return a value while the constructors take a pointer. The reviewer verified every other symbol and behavioral claim (emitter/tracker/httpmw/biz/propagate/registry APIs, metric names, no-hashing-helper, checkout-uninstrumented framing, M6-marked forward reference) as accurate.",
+      "id": "81a4fd35879e45d1"
+    }
+  ]
+}
