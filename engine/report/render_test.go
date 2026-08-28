@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,20 +103,30 @@ func TestNoRendererSumsRealizedWithEstimate(t *testing.T) {
 	}
 	renders["json"] = string(j)
 
-	// Forbidden sums: realized + {mid, low, high} of the estimate.
-	forbidden := []string{"20000", "17000", "23000"}
+	// Forbidden sums derived FROM the fixture (not hardcoded), so the guard
+	// tracks the sample: realized + each of the estimate low/mid/high.
+	rz := r.Realized.ByCurrency["USD"]
+	forbidden := []string{
+		fmt.Sprint(rz + r.Unrealized.LowMinor["USD"]),
+		fmt.Sprint(rz + r.Unrealized.MidMinor["USD"]),
+		fmt.Sprint(rz + r.Unrealized.HighMinor["USD"]),
+	}
 	for name, out := range renders {
 		for _, sum := range forbidden {
 			if strings.Contains(out, sum) {
 				t.Fatalf("%s renderer contains %q — realized must never be summed with an estimate", name, sum)
 			}
 		}
-		// Sanity: the separate figures ARE present.
+		// Sanity: the separate figures ARE present. Use the realized value and
+		// the estimate low/high (2000/8000) — values that are NOT substrings
+		// of any other rendered number, so a dropped estimate leg is caught
+		// (the mid 5000 would be a substring of realized 15000 and prove
+		// nothing).
 		if !strings.Contains(out, "15000") {
 			t.Fatalf("%s renderer missing the realized figure 15000", name)
 		}
-		if !strings.Contains(out, "5000") {
-			t.Fatalf("%s renderer missing the estimate mid 5000", name)
+		if !strings.Contains(out, "2000") || !strings.Contains(out, "8000") {
+			t.Fatalf("%s renderer missing the estimate range 2000…8000", name)
 		}
 	}
 }
