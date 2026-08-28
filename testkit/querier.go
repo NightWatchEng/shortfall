@@ -18,9 +18,11 @@ import (
 //
 // Deliberately excluded, because a real emitter never records them:
 //   - abandoned transactions — the user gave up before the request landed;
-//     "telemetry never saw it" (checkout.StateAbandoned). This invisible
-//     demand is the counterfactual leg's concern, reasoned about from
-//     res.Suppressed and the baseline, never from a telemetry querier.
+//     "telemetry never saw it" (checkout.StateAbandoned). Abandoned rows stay
+//     in res.Ledger as ground truth; this invisible loss is the
+//     counterfactual leg's concern (baseline expected-vs-observed), never a
+//     telemetry querier. (res.Suppressed separately holds blackout-suppressed
+//     demand, a distinct invisible-loss source.)
 //   - non-terminal (still in-flight) transactions — the deferred leg reads
 //     these from biz_inflight_value, which a deferred-leg test seeds.
 //
