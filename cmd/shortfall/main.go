@@ -1,6 +1,6 @@
 // Command shortfall is the CLI: validate a flow registry, compute an
 // impact report for an incident window, reconcile telemetry against a
-// ledger, and simulate scenarios. The arg surface stays hand-rolled
+// ledger. The arg surface stays hand-rolled
 // until the verb set outgrows it.
 package main
 

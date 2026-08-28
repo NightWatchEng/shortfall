@@ -1,11 +1,8 @@
 # Architecture — diagrams as code
 
 C4 model plus the three money-path sequences, all Mermaid, rendering
-natively on github.com. Two kinds of truth here, marked per diagram: the
-FROZEN CONTRACT (the v0.1.0 type and interface surface, which exists) and
-the TARGET ARCHITECTURE (implementations landing per milestone M3–M7 —
-the code refuses loudly until each lands). ADRs 0001–0007 carry the
-decisions behind both.
+natively on github.com. ADRs 0001–0016 carry the decisions behind them
+([docs/adr](../adr/README.md)).
 
 **Definition of Done rule:** a PR that changes the architecture updates
 the affected diagram in the same PR (see CONTRIBUTING).
@@ -18,6 +15,27 @@ the affected diagram in the same PR (see CONTRIBUTING).
 | [Sequence — record & propagate](seq-record-propagate.md) | api → queue → worker with `biz.vc`, the fix for "correlation_id sometimes isn't there" |
 | [Sequence — Stripe webhook](seq-stripe-webhook.md) | provider events becoming outcomes, hours-late deliveries included |
 | [Sequence — impact query](seq-impact-query.md) | `shortfall impact` from question to four-leg report |
+
+## Repository layout
+
+One git repo, multiple Go modules: the core module has no heavy
+dependencies; every adapter under `adapters/` is a nested module, so
+depending on the Prometheus exporter never pulls a payments SDK into
+your build.
+
+```
+biz/          value types: Money, ValueContext, Outcome
+registry/     the YAML flow registry: schema, loader, validation
+emit/         stage transitions -> bounded metrics + outcome events
+propagate/    HTTP middleware and queue header carriers for ValueContext
+engine/       the four legs, baseline, report renderers
+query/        the query AST and Querier boundary
+cmd/shortfall CLI: validate, impact, reconcile
+adapters/     export, query, payment, incident — each its own module
+examples/     synthetic checkout app used as the ground-truth harness
+testkit/      scenario runner and exporter conformance suite
+docs/adr/     one ADR per design decision
+```
 
 Viewing: GitHub renders Mermaid in the private repo natively. Do NOT
 enable GitHub Pages here — depending on plan, Pages on a private repo is

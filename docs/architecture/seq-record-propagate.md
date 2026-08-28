@@ -9,19 +9,19 @@ sequenceDiagram
     autonumber
     participant U as Client
     participant API as api service<br/>(httpmw server middleware)
-    participant K as capture.q<br/>(Kafka/SQS/AMQP)
+    participant K as capture.q<br/>(Kafka / SQS / AMQP)
     participant W as capture-worker<br/>(carrier + httpmw hook)
     participant X as Exporter → backend
 
     U->>API: POST /pay
-    Note over API: ingress stamping: first hop that recognizes<br/>the flow builds ValueContext<br/>(flow, entity, hashed customer, amount)
-    API->>API: ctx, err = WithValueContext(ctx, vc)<br/>(encode failures reject loudly: oversize, PII)
+    Note over API: ingress stamping — the first hop that recognizes<br/>the flow builds ValueContext<br/>(flow, entity, hashed customer, amount)
+    API->>API: ctx, err = WithValueContext(ctx, vc)<br/>(encode failures reject loudly — oversize, PII)
     API->>X: Record("auth", success)<br/>MetricPoints + Outcome (unsampled)
-    API->>K: publish msg<br/>carrier copies ONE header: biz.vc
-    Note over K: minutes pass; trace context may be<br/>re-rooted or dropped — biz.vc survives
+    API->>K: publish msg<br/>carrier copies ONE header — biz.vc
+    Note over K: minutes pass — trace context may be<br/>re-rooted or dropped, biz.vc survives
     K->>W: consume msg
     W->>W: vc, ok, err = decode biz.vc header
-    Note over W: err ≠ absent: a corrupted header is<br/>counted loudly, never mistaken for missing
+    Note over W: err is not "absent" — a corrupted header is<br/>counted loudly, never mistaken for missing
     W->>X: Record("capture", failed, WithErr(...))
     Note over X: the failing hop already carries flow,<br/>entity, amount — attribution needs no lookup
 ```

@@ -2,8 +2,9 @@
 
 **What an incident cost, who it hit, and how sure you are.**
 
-A vendor-neutral Go library and reference engine for incident dollar impact.
-For any incident window and scope, shortfall answers with four numbers, each
+A vendor-neutral Go library for incident dollar impact. Instrument once —
+attach context where a request enters, call `Record()` per stage — and
+for any incident window shortfall answers with four numbers, each
 labelled by the kind of evidence behind it:
 
 | Leg | What it is | Evidence |
@@ -13,62 +14,38 @@ labelled by the kind of evidence behind it:
 | **Unrealized loss** | Value that never happened, from a seasonal baseline — always a range | estimate |
 | **Customer impact** | Distinct entities, segments, top accounts | deterministic |
 
-plus a **coverage ratio** — telemetry sums reconciled against the ledger —
+plus a **coverage ratio** — telemetry reconciled against your ledger —
 because a number Finance cannot audit is a number Finance will not use.
 
-## The two questions
+## Why it's easy to adopt
 
-"Dollar impact of an incident" conflates two different questions, which is why
-it feels unsolvable:
+- **Your backend, not a new one.** Signals ship through export adapters
+  (OTLP, Prometheus, CloudWatch EMF, Datadog, StatsD, Splunk HEC, Loki)
+  and reports read back through query adapters — no new datastore, no
+  agent, no service to run.
+- **No dependency bloat.** The core module has no heavy deps; every
+  adapter is its own nested Go module, so a Prometheus user never pulls
+  a payments SDK.
+- **Cheap on the hot path.** One `Record()` is ~650 ns / 3 allocs
+  (benchmarks below) and money accounting never depends on trace
+  sampling.
+- **Numbers you can defend.** Money is `int64` minor units (never
+  float), realized and estimated value are never merged, PII is guarded
+  by code, and coverage tells you how much telemetry actually saw.
 
-- **Q1 — Attribution (deterministic).** Which specific transactions and
-  customers were affected, and what were they worth? Needs per-transaction
-  business context attached to the failing telemetry. Auditable. Required for
-  refunds, SLA credits, and calling the top-20 accounts.
-- **Q2 — Counterfactual (statistical).** How much value did not happen because
-  of the degradation? The lost transactions never existed, so no correlation
-  id will ever find them. Only a baseline forecast minus actuals can answer
-  it, with error bars.
-
-A tool that only does Q1 is silent for upstream outages. A tool that only does
-Q2 cannot tell you who to refund. shortfall does both and labels which is
-which.
-
-## How it works
-
-Four layers; only the top one knows your vendors:
-
-1. **Capture** — `biz.*` OpenTelemetry attributes, `ValueContext` propagation
-   (W3C Baggage over HTTP, headers over queues), and unsampled outcome events:
-   money accounting never depends on trace sampling.
-2. **Flow registry** — versioned YAML, co-signed by Finance once: what counts
-   as money, where the stages live, when deferred becomes lost, what an
-   unknown amount is worth, how much demand returns after recovery.
-3. **Export adapters** — OTLP by default; Prometheus, StatsD, CloudWatch EMF,
-   Splunk HEC, Datadog, Loki natively.
-4. **Impact engine** — query-time, over query adapters (PromQL, SQL, LogQL,
-   CloudWatch Insights, SPL). The engine only ever asks a backend for
-   sum, count, group-by, and time range — so nothing vendor-specific leaks
-   past the adapter boundary.
-
-Design invariants, enforced in review and by the library itself:
-
-- Money is `int64` minor units + currency + exponent. Never float.
-- Amounts and entity ids ride on **events only**; metrics carry sums with a
-  fixed, bounded label set. Cardinality protection is a library guarantee.
-- No PAN or PII ever appears in `biz.*` attributes (guarded, not promised).
-- Realized and estimated value are never merged into one headline number.
-
-## Getting started
+## Get started
 
 ```sh
-go get github.com/NightWatchEng/shortfall          # core: biz, emit, engine, registry, query
-go get github.com/NightWatchEng/shortfall/adapters/export/prometheus  # adapters are separate modules
+go build -o shortfall ./cmd/shortfall
+./shortfall validate registry/testdata/registry.yaml
+./shortfall impact --registry registry/testdata/registry.yaml \
+  --from 2026-08-27T14:00:00Z --to 2026-08-27T15:00:00Z --sql "file:demo.db" --sql-driver sqlite
 ```
 
-Attach business context where a request enters, record every stage
-transition, and the library does the rest — bounded metrics, unsampled
-outcome events, cardinality fences:
+The third command wants a few outcome rows to read — the
+[Quickstart](docs/quickstart.md) walks from nothing to a rendered report
+in 10 minutes with zero external services. In your own services,
+instrumentation is:
 
 ```go
 ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
@@ -79,64 +56,34 @@ ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
     Kind:       biz.KindFee,
 })
 // ...
-em.Record(ctx, "auth", biz.ResultSuccess)     // once per stage transition
-em.Record(ctx, "capture", biz.ResultFailed)
+em.Record(ctx, "auth", biz.ResultSuccess) // once per stage transition
 ```
 
-At incident time, ask the engine for the report over any window and scope
-— from your own code or the CLI:
+Runnable examples live in the `biz`, `emit`, and `engine` packages
+(`go doc`, and pkg.go.dev once the repo is public).
 
-```go
-report, err := engine.Compute(ctx, &reg, querier, engine.Request{
-    Window: query.TimeRange{From: incidentStart, To: incidentEnd},
-    Flows:  []string{"invoice.pay"},
-})
-```
+## Benchmarks
 
-```sh
-shortfall impact --registry registry.yaml --prometheus http://prom:9090 \
-  --from 2026-08-25T09:00:00Z --to 2026-08-25T12:00:00Z
-```
+Performance is part of the contract — shortfall runs inside your request
+path. Apple M-class laptop, Go defaults; CI tracks every PR with
+benchstat:
 
-Runnable versions of these snippets live in the package examples —
-`go doc github.com/NightWatchEng/shortfall/biz`, `emit`, and `engine`
-render them locally (and on pkg.go.dev once the repo is public); the full
-path from `go get` to a rendered report is the
-[Quickstart](docs/quickstart.md).
+| Path | ns/op | allocs/op |
+|---|---:|---:|
+| `emit.Record` (accepted) | 647 | 3 |
+| `biz.vc` encode / decode | 128 / 187 | 3 / 1 |
+| In-flight age bucketing | 0.23 | 0 |
+| `engine.Compute`, 200k events | 0.75 s | — |
 
 ## Documentation
 
 - [Quickstart](docs/quickstart.md) — `go get` to a rendered impact report in 10 minutes.
-- [Adapters & capability matrix](docs/adapters.md) — which backend grounds which leg.
+- [Adapters & capability matrix](docs/adapters.md) — which backend grounds which leg, with wiring snippets.
+- [Architecture](docs/architecture/README.md) — C4 diagrams, the money-path sequences, and the repository layout.
 - [Registry reference](docs/registry.md) — every field of the flow registry.
 - [What is a "dollar" here](docs/money.md) — kind semantics, lost vs delayed, why ranges (for Finance).
 - [Semantic conventions (draft)](docs/semconv.md) — the `biz.*` attribute and metric shapes.
-
-## Layout
-
-One git repo, multiple Go modules: the core module has no heavy dependencies;
-every adapter under `adapters/` is a nested module, so depending on the
-Prometheus exporter never pulls a payments SDK into your build.
-
-```
-biz/          value types: Money, ValueContext, Outcome
-registry/     the YAML flow registry: schema, loader, validation
-emit/         stage transitions -> bounded metrics + outcome events
-propagate/    HTTP middleware and queue header carriers for ValueContext
-engine/       the four legs, baseline, report renderers
-query/        the query AST and Querier boundary
-cmd/shortfall CLI: validate, impact, reconcile, simulate
-adapters/     export, query, payment, incident — each its own module
-examples/     synthetic checkout app used as the ground-truth harness
-testkit/      scenario runner and exporter conformance suite
-docs/adr/     one ADR per design decision
-```
-
-## Architecture
-
-C4 diagrams and the three money-path sequences live in
-[docs/architecture](docs/architecture/README.md), rendered natively by
-GitHub. Decisions live in [docs/adr](docs/adr/README.md).
+- [Design decisions](docs/adr/README.md) — one ADR per irreversible choice.
 
 ## Status
 

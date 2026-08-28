@@ -29,9 +29,19 @@ See [registry.md](registry.md) for every field.
 
 ## 3. Seed a tiny outcomes table (3 min)
 
-`shortfall impact` reads terminal outcome events from your telemetry backend.
-For this demo, put a few rows in a SQLite table matching the adapter's schema
-(see [adapters.md](adapters.md) for the columns):
+**Why SQLite here?** In production, shortfall reads whatever telemetry
+backend you already run — your services emit `biz_*` signals through an
+export adapter (CloudWatch EMF, Prometheus, OTLP, Datadog, …) and the
+engine reads them back through a query adapter. You never install a new
+datastore. This walkthrough uses a local SQLite file **only** so the demo
+needs zero external services: it stands in for your real event store.
+Today's query adapters are `promql` (metrics) and `sql` (events — any
+`database/sql` backend, including a warehouse); a CloudWatch Insights
+querier is on the roadmap, and a CloudWatch shop already gets the export
+side via `adapters/export/cloudwatch` (see
+[adapters.md](adapters.md) for exactly which backend grounds which leg).
+
+Put a few rows in a SQLite table matching the sql adapter's schema:
 
 ```sh
 sqlite3 demo.db <<'SQL'
