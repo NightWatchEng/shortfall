@@ -74,6 +74,17 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			notes = append(notes, fmt.Sprintf("flow %q has no baseline lookback — skipped", flowName))
 			continue
 		}
+		// Retention gap (workspace-tmw.8.3): if the querier declares less metric
+		// history than the baseline lookback needs, do NOT silently compute a
+		// baseline from too little data — flag the gap and suggest a
+		// longer-retention source. A querier that declares 0 weeks means
+		// "unknown/undeclared" (not "zero"), so it is not treated as a gap.
+		if hw := q.Capabilities().MetricHistoryWeeks; hw > 0 && hw < flow.Baseline.LookbackWeeks {
+			notes = append(notes, fmt.Sprintf(
+				"flow %q: RETENTION GAP — the querier serves %d week(s) of metric history but the baseline needs %d; not estimated, to avoid a counterfactual built from too little history. Point the counterfactual at a longer-retention (e.g. warehouse) querier.",
+				flowName, hw, flow.Baseline.LookbackWeeks))
+			continue
+		}
 		if flow.Baseline.Holidays != "" {
 			notes = append(notes, fmt.Sprintf("flow %q declares holiday calendar %q, which v0 does not yet apply", flowName, flow.Baseline.Holidays))
 		}
