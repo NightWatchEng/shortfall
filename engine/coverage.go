@@ -82,14 +82,18 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		}
 		// Telemetry is read at the flow's value stage so per-stage success
 		// emission is counted once per transaction (a cross-stage sum
-		// multiply-counts, and the clamp would mask exporter drops). A flow
-		// the registry does not know — or a nil registry — falls back to
-		// the unfiltered read.
+		// multiply-counts, and the clamp would mask exporter drops). A
+		// ledger flow the registry does not know fails loudly: an
+		// unanchored read would silently reintroduce the masked clamp for
+		// exactly the misconfigured flows most likely to hit it. A nil
+		// registry (test convenience) reads unfiltered.
 		valueStage := ""
 		if reg != nil {
-			if f, ok := reg.Flow(flow); ok {
-				valueStage = f.ValueStage()
+			f, ok := reg.Flow(flow)
+			if !ok {
+				return CoverageLeg{}, nil, fmt.Errorf("engine: coverage: flow %q is not in the registry — an unanchored read could clamp-mask exporter drops", flow)
 			}
+			valueStage = f.ValueStage()
 		}
 		tel, err := telemetrySuccessValue(ctx, q, flow, valueStage, req.Window)
 		if err != nil {

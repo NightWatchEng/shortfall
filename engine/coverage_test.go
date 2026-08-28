@@ -344,3 +344,23 @@ flows:
 		})
 	}
 }
+
+// TestCoverageUnknownFlowFailsLoudly pins the fail-loud contract: a ledger
+// flow the registry does not know errors rather than reading unanchored — a
+// silently unfiltered ratio could clamp-mask exporter drops (ADR-0016).
+func TestCoverageUnknownFlowFailsLoudly(t *testing.T) {
+	window := query.TimeRange{From: time.Unix(0, 0).UTC(), To: time.Unix(3600, 0).UTC()}
+	reg, err := registry.Load("../registry/testdata/registry.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := memq.New(memq.WithMetrics(nil), memq.WithCaps(query.Caps{Metrics: true}))
+	ledger := []biz.LedgerRow{{
+		Flow: "invoice.pya", Outcome: biz.ResultSuccess, // ledger/registry name drift
+		Money: biz.Money{Amount: 100, Currency: "USD", Exponent: 2}, Count: 1,
+	}}
+	_, _, err = Coverage(context.Background(), &reg, q, Request{Window: window}, ledger, "test")
+	if err == nil || !strings.Contains(err.Error(), "invoice.pya") {
+		t.Fatalf("unknown ledger flow must fail loudly naming the flow, got %v", err)
+	}
+}

@@ -25,9 +25,12 @@ stage filter:
   the flow's value once per transaction. The registry declares it as optional
   `reconcile.stage` (validated against the declared stages); undeclared, it
   defaults to the flow's **last stage**.
-- **Coverage** reads telemetry success value at the value stage only. A flow
-  the registry does not know — or a nil registry — falls back to the
-  unfiltered read (the pre-amendment behavior).
+- **Coverage** reads telemetry success value at the value stage only. A
+  ledger flow the registry does not know is an error, never an unanchored
+  read — a silently unfiltered ratio could clamp-mask exporter drops for
+  exactly the misconfigured flows most likely to hit it. Only a nil
+  registry (a test convenience; every production caller loads one) reads
+  unfiltered.
 - The **AOV** fallback reads both the value and count sums, and the events
   query, at the value stage.
 - The entries basis for the counterfactual leg is unchanged: `biz_txn_total`
