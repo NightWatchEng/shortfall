@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "cef2bd1ac3f09385260728b3fe520905fb7e8f0a",
+  "base_sha": "04dfd4d0c8f3c49ffbedf0dc50af51f25a1fd916",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T03:04:49+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified frozen temporal semantics, currency invariant, ordering/limit/distinct, feeder fidelity"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude), separate context \u2014 confirmed all three findings valid and all three fixes correct against the frozen contract + checkout docs; no regressions"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T03:04:49+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "cef2bd1ac3f09385260728b3fe520905fb7e8f0a",
+      "base_sha": "04dfd4d0c8f3c49ffbedf0dc50af51f25a1fd916",
+      "rule_id": "unmapped:gauge-missing-carry-forward",
+      "tags": [],
+      "dir_prefix": "query/memq",
+      "file": "query/memq/memq.go",
+      "line": 206,
+      "severity": "MEDIUM",
+      "finding": "memq returned nil for a gauge (biz_inflight_value) bucket with no in-bucket sample, diverging from real backends' last_over_time carry-forward and from memq's own doc ('last observed level at its step boundary'). Cross-backend drift.",
+      "evidence": "old: QueryMetric filtered all points via !inRange(p.At, Range); aggregate gauge used '!p.At.Before(from) && p.At.Before(to)' -> nil for gapped buckets.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Gauge samples are kept whenever At < Range.To (including before From); each bucket reports the last sample with At < boundary, carried forward; nil only when no level was ever set. Counters keep the [From,To) increase filter (no regression). Regression test TestGaugeCarriesForward (pre-window 200 -> bucket 0; 800 -> later buckets). Cross-examiner: fix_correct.",
+      "id": "b075d663d21eba54"
+    },
+    {
+      "ts": "2026-08-28T03:04:49+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "cef2bd1ac3f09385260728b3fe520905fb7e8f0a",
+      "base_sha": "04dfd4d0c8f3c49ffbedf0dc50af51f25a1fd916",
+      "rule_id": "unmapped:abandoned-not-telemetry-visible",
+      "tags": [],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier.go",
+      "line": 660,
+      "severity": "MEDIUM",
+      "finding": "The feeder emitted outcome events + counter metrics for abandoned txns, but 'telemetry never saw it' (checkout.StateAbandoned) \u2014 a real backend has zero abandoned rows, so the querier made the invisible visible and inflated counts/sums.",
+      "evidence": "old terminalOf: 'case checkout.StateAbandoned: return \"auth\", biz.ResultAbandoned, ..., true'; checkout.go:46 '// telemetry never saw it'.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "telemetryOutcome (renamed from terminalOf) models a telemetry backend: visible=true only for settled/cap_fail/auth_fail (request genuinely landed); abandoned + all in-flight states are not-visible. Abandoned rows remain in res.Ledger for the counterfactual leg. Cross-examiner: fix_correct, all 7 states covered.",
+      "id": "da8d2c681270ed22"
+    },
+    {
+      "ts": "2026-08-28T03:04:49+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "cef2bd1ac3f09385260728b3fe520905fb7e8f0a",
+      "base_sha": "04dfd4d0c8f3c49ffbedf0dc50af51f25a1fd916",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier.go",
+      "line": 652,
+      "severity": "MEDIUM",
+      "finding": "The state->outcome mapping branches were untested \u2014 the fault-free harness run yields only settled/in-flight, leaving fail/abandoned branches and the timestamp fallbacks unexercised.",
+      "evidence": "terminalOf switch arms StateCapFail/StateAuthFail/StateAbandoned + firstNonZero; test config had no Faults.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added table-driven TestTelemetryOutcomeMapping over all 7 states, both firstNonZero fallbacks, and the invisible (abandoned/in-flight) cases. Cross-examiner: table-driven per ADR-0007, passes.",
+      "id": "e56923432b5fc2ba"
+    }
+  ]
+}
