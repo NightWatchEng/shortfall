@@ -84,7 +84,8 @@ of typical yield:
 ## Consequences
 
 - No code changes from this ADR itself; the existing benchmarks and the
-  benchstat CI job remain the only performance gate.
+  advisory benchstat CI job remain the only performance check (a review
+  convention, not a mechanical gate — Decision item 3).
 - Optimization discussions gain a fixed vocabulary and burden of proof:
   the technique list is pre-agreed, so PR review argues numbers, not
   folklore.
