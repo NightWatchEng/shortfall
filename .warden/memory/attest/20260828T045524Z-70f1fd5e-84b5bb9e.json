@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "70f1fd5e97cb20a052748d5eb6b4a2ab138b0983",
+  "base_sha": "0a4cf1b23f0c62936c699e32281b2b9834bc528a",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T04:55:24+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 audited the SQL-injection surface (clean: allowlisted columns, bound values, validated table name, %d limit), memq parity, money-int64, NULL handling; empirically confirmed the empty-GroupBy distinct-count divergence"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 the HIGH distinct-count divergence was empirically demonstrated by the reviewer (SQL 3 vs memq 1) and the fix is verified by the new parity case; the others are a documented parity gap (kind), a name-sort tiebreak, and test coverage"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T04:55:24+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "70f1fd5e97cb20a052748d5eb6b4a2ab138b0983",
+      "base_sha": "0a4cf1b23f0c62936c699e32281b2b9834bc528a",
+      "rule_id": "unmapped:memq-parity-distinct-count",
+      "tags": [],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/sql/sql.go",
+      "line": 110,
+      "severity": "HIGH",
+      "finding": "Empty-GroupBy distinct count returned the matching row count (SELECT 1 -> COUNT(*)=3) instead of 1, breaking memq parity.",
+      "evidence": "inner := \"SELECT 1\"; SELECT COUNT(*) FROM (SELECT 1 FROM tbl WHERE ...) = row count; memq canonicalizes the empty key -> len(seen)==1",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Empty case now uses SELECT DISTINCT 1 (collapses matching rows to one -> COUNT 1, or 0 if none), matching memq. New parity case asserts it.",
+      "id": "95ea8052dc99b11f"
+    },
+    {
+      "ts": "2026-08-28T04:55:24+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "70f1fd5e97cb20a052748d5eb6b4a2ab138b0983",
+      "base_sha": "0a4cf1b23f0c62936c699e32281b2b9834bc528a",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/sql/sql.go",
+      "line": 35,
+      "severity": "MEDIUM",
+      "finding": "The allowlist omitted the 'kind' label that memq exposes, an undisclosed parity gap (group/filter by kind errored here, worked in memq).",
+      "evidence": "memq.eventLabels includes 'kind'; labelColumns had no kind",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added a kind column to the documented schema, the allowlist, and the test seed; parity case group-by [currency,kind] added.",
+      "id": "2b89a9aeb47133c9"
+    },
+    {
+      "ts": "2026-08-28T04:55:24+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "70f1fd5e97cb20a052748d5eb6b4a2ab138b0983",
+      "base_sha": "0a4cf1b23f0c62936c699e32281b2b9834bc528a",
+      "rule_id": "unmapped:memq-parity-order-tiebreak",
+      "tags": [],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/sql/sql.go",
+      "line": 222,
+      "severity": "LOW",
+      "finding": "Ordered multi-key ties broke by GroupBy order while memq tiebreaks by canonical (label name sorted), so a Limit could keep a different set.",
+      "evidence": "orderClause appended cols in GroupBy order vs memq canonical() name-sorted",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "tiebreakCols now sorts group labels by name and maps to columns, matching memq's canonical tiebreak; ordered multi-key parity case added.",
+      "id": "f52a7a2ecb3e8337"
+    },
+    {
+      "ts": "2026-08-28T04:55:24+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "70f1fd5e97cb20a052748d5eb6b4a2ab138b0983",
+      "base_sha": "0a4cf1b23f0c62936c699e32281b2b9834bc528a",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/sql/sql_test.go",
+      "line": 100,
+      "severity": "MEDIUM",
+      "finding": "The parity test omitted empty-GroupBy distinct_count (the bug), OrderCountDesc, and ordered multi-key \u2014 the divergence paths.",
+      "evidence": "the four original queries covered none of these",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added parity cases for empty-GroupBy distinct_count, OrderCountDesc+Limit, ordered multi-key (segment,customer), and kind grouping.",
+      "id": "60244d1e3de6ba0f"
+    }
+  ]
+}
