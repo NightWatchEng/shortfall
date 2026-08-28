@@ -38,17 +38,29 @@ func startPrometheus(t *testing.T) (string, func()) {
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Fatalf("SHORTFALL_GOLDEN is set but the docker daemon is not running; the parity gate cannot run: %v", err)
 	}
+	// Pull the image EXPLICITLY first. On a cold runner (CI) `docker run -d`
+	// would otherwise interleave image-pull progress with the container id on
+	// its output, so the id we parse below would be the whole blob and every
+	// `docker port` lookup would fail. A warm local cache hid this.
+	if out, err := exec.Command("docker", "pull", promImage).CombinedOutput(); err != nil {
+		t.Fatalf("docker pull %s: %v: %s", promImage, err, out)
+	}
 	run := exec.Command("docker", "run", "-d", "--rm", "-p", "9090",
 		promImage,
 		"--config.file=/etc/prometheus/prometheus.yml",
 		"--web.enable-remote-write-receiver",
 		"--storage.tsdb.retention.time=1y",
 	)
-	out, err := run.CombinedOutput()
+	// Output() is stdout only (the container id); any residual noise goes to
+	// stderr. Guard anyway by taking the last whitespace-delimited token.
+	out, err := run.Output()
 	if err != nil {
 		t.Fatalf("docker run: %v: %s", err, out)
 	}
 	id := strings.TrimSpace(string(out))
+	if fields := strings.Fields(id); len(fields) > 0 {
+		id = fields[len(fields)-1]
+	}
 	cleanup := func() { _ = exec.Command("docker", "rm", "-f", id).Run() }
 
 	// The published host port may not be queryable the instant `docker run -d`
@@ -65,8 +77,11 @@ func startPrometheus(t *testing.T) (string, func()) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	if hostPort == "" {
+		// Surface why: container status + logs make a CI-only failure debuggable.
+		status, _ := exec.Command("docker", "inspect", "-f", "{{.State.Status}} {{.State.Error}}", id).CombinedOutput()
+		logs, _ := exec.Command("docker", "logs", id).CombinedOutput()
 		cleanup()
-		t.Fatal("could not resolve the published Prometheus port")
+		t.Fatalf("could not resolve the published Prometheus port (id=%q status=%q logs=%s)", id, strings.TrimSpace(string(status)), logs)
 	}
 	base := "http://127.0.0.1:" + hostPort
 
