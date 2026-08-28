@@ -138,6 +138,17 @@ func TestParityWithMemq(t *testing.T) {
 		// so MaxMinor must be 14900, not the mean — parity across both backends.
 		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, GroupBy: []string{"customer"}, Agg: query.EventAggMaxPerGroup},
 		{Range: rng(), Filters: map[string]string{"outcome": "failed"}, GroupBy: []string{"currency"}, Agg: query.EventAggMaxPerGroup, OrderBy: query.OrderSumDesc},
+		// Empty GroupBy + zero matches: no groups, not one zero row (an
+		// aggregate without GROUP BY always yields a row; the adapter must
+		// drop it to match the reference).
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "JPY"}},
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "JPY"}, Agg: query.EventAggMaxPerGroup},
+		// Empty GroupBy with matches: exactly one all-events group.
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}},
+		// Grouped + zero matches: empty on both backends.
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "JPY"}, GroupBy: []string{"customer"}},
+		// Distinct count + zero matches: one {Count: 0} group on both backends.
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "JPY"}, Agg: query.EventAggDistinctCount},
 	}
 	for i, qy := range queries {
 		sgroups, err := sq.QueryEvents(ctx, qy)

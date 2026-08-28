@@ -168,6 +168,11 @@ func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []s
 		if err := rows.Scan(scanTargets...); err != nil {
 			return nil, fmt.Errorf("sql: scan: %w", err)
 		}
+		// An aggregate without GROUP BY yields one row even over zero
+		// matches; the reference returns no groups — drop the empty row.
+		if len(groupCols) == 0 && count == 0 {
+			continue
+		}
 		key := map[string]string{}
 		for i, col := range qy.GroupBy {
 			key[col] = keyVals[i].String
