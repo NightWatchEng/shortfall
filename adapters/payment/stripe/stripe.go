@@ -1,7 +1,10 @@
-// Package stripe adapts Stripe to shortfall: a webhook receiver that
-// verifies the signature and maps events to biz.Outcome, and (in the wrapped
-// client, see client.go) synchronous auth-stage outcomes. It is a nested
-// module — a non-Stripe user never pulls stripe-go.
+// Package stripe adapts Stripe to shortfall. This file is the INBOUND path: a
+// webhook receiver that verifies the signature and maps events to biz.Outcome.
+// The wrapped client — synchronous auth-stage outcomes from Stripe API
+// responses (the 5xx/timeouts webhooks never report) plus
+// biz_provider_calls_total — is the second part of this milestone (M5.6.2 pt2)
+// and is not in this module yet. It is a nested module — a non-Stripe user
+// never pulls stripe-go.
 //
 // Signature verification is not optional and not hand-rolled: every webhook
 // payload goes through stripe-go's webhook.ConstructEvent, which checks the

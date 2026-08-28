@@ -98,6 +98,8 @@ func TestSignatureFailureIsRejected(t *testing.T) {
 		{"tampered payload", goodSig}, // valid sig, but we mutate the payload below
 		{"empty signature", ""},
 		{"garbage signature", "t=123,v1=deadbeef"},
+		{"replayed old timestamp", sign(payload, testSecret, time.Now().Add(-10*time.Minute))}, // valid HMAC, outside the tolerance window
+
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
