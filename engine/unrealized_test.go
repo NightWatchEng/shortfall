@@ -47,13 +47,14 @@ func TestUnrealizedSuppressionWithinInterval(t *testing.T) {
 		at := baseMon.Add(time.Duration(w)*7*24*time.Hour + hour)
 		pts = append(pts, txnPoint("auth", "success", at, c)) // stage-entry count
 	}
-	// Incident hour: the 9th Monday 10:00. Only 40 entries observed (60 suppressed).
-	// The emitter records value and count together (paired), so AOV = 200000/40 =
-	// 5000 regardless of how many stages a txn touches.
+	// Incident hour: the 9th Monday 10:00. Only 40 entries observed (60
+	// suppressed). The AOV ratio reads at the flow's value stage (settle),
+	// where the paired count/value give AOV = 200000/40 = 5000.
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	pts = append(pts,
 		txnPoint("auth", "success", incident, 40),
-		valuePoint("auth", "success", incident, 200000),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
 	)
 	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
 
@@ -180,7 +181,11 @@ func TestUnrealizedNonHourAlignedWindow(t *testing.T) {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+eleven), 100))
 	}
 	incidentHour := baseMon.Add(8*7*24*time.Hour + eleven) // Monday 11:00
-	pts = append(pts, txnPoint("auth", "success", incidentHour, 40), valuePoint("auth", "success", incidentHour, 200000))
+	pts = append(pts,
+		txnPoint("auth", "success", incidentHour, 40),
+		txnPoint("settle", "success", incidentHour, 40),
+		valuePoint("settle", "success", incidentHour, 200000),
+	)
 	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
 
 	// Window 10:30 → 11:30: only the 11:00 hour begins inside it.
@@ -217,9 +222,20 @@ func TestUnrealizedMultiCurrency(t *testing.T) {
 		pts = append(pts, pt("USD", at, 100), pt("EUR", at, 50))
 	}
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
-	// USD: 40 observed, AOV 5000 -> shortfall 60. EUR: 20 observed, AOV 3000 -> shortfall 30.
-	pts = append(pts, pt("USD", incident, 40), val("USD", incident, 200000),
-		pt("EUR", incident, 20), val("EUR", incident, 60000))
+	// USD: 40 observed, AOV 5000 -> shortfall 60. EUR: 20 observed, AOV 3000 ->
+	// shortfall 30. The AOV pairs read at the value stage (settle).
+	settle := func(cur string, at time.Time, v int64) emit.MetricPoint {
+		p := pt(cur, at, v)
+		p.Labels["stage"] = "settle"
+		return p
+	}
+	settleVal := func(cur string, at time.Time, v int64) emit.MetricPoint {
+		p := val(cur, at, v)
+		p.Labels["stage"] = "settle"
+		return p
+	}
+	pts = append(pts, pt("USD", incident, 40), settle("USD", incident, 40), settleVal("USD", incident, 200000),
+		pt("EUR", incident, 20), settle("EUR", incident, 20), settleVal("EUR", incident, 60000))
 	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
 	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
 	leg, err := Unrealized(context.Background(), reg, q, req)
@@ -277,7 +293,7 @@ func TestUnrealizedAOVFromEventsIncludesEstimated(t *testing.T) {
 	// (10000) — mean 6666.67 -> AOV 6667. The value counter (which omits the
 	// estimated one) would give (4000+6000)/3 = 3333, understated.
 	ev := func(amt int64, estimated bool) biz.Outcome {
-		return biz.Outcome{At: incident.Add(time.Minute), Stage: "capture", Result: biz.ResultSuccess,
+		return biz.Outcome{At: incident.Add(time.Minute), Stage: "settle", Result: biz.ResultSuccess,
 			VC: biz.ValueContext{Flow: "invoice.pay", CustomerID: "h:c", Segment: "smb", Estimated: estimated,
 				Money: biz.Money{Amount: amt, Currency: "USD", Exponent: 2}}}
 	}
@@ -308,7 +324,13 @@ func TestUnrealizedRetentionGap(t *testing.T) {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
-	pts = append(pts, txnPoint("auth", "success", incident, 40), valuePoint("auth", "success", incident, 200000))
+	// Entries are observed at the entry stage; the AOV ratio reads at the
+	// flow's value stage (settle), so the value/count pair lives there.
+	pts = append(pts,
+		txnPoint("auth", "success", incident, 40),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
+	)
 	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true, MetricHistoryWeeks: 4}))
 	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
 	leg, err := Unrealized(context.Background(), reg, q, req)
@@ -335,7 +357,13 @@ func TestUnrealizedRetentionNotAGap(t *testing.T) {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
-	pts = append(pts, txnPoint("auth", "success", incident, 40), valuePoint("auth", "success", incident, 200000))
+	// Entries are observed at the entry stage; the AOV ratio reads at the
+	// flow's value stage (settle), so the value/count pair lives there.
+	pts = append(pts,
+		txnPoint("auth", "success", incident, 40),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
+	)
 	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
 
 	for _, hw := range []int{0, 8, 12} { // 0 undeclared, 8 == lookback, 12 > lookback
@@ -378,7 +406,13 @@ func TestUnrealizedDisclosesEventsFailure(t *testing.T) {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
-	pts = append(pts, txnPoint("auth", "success", incident, 40), valuePoint("auth", "success", incident, 200000))
+	// Entries are observed at the entry stage; the AOV ratio reads at the
+	// flow's value stage (settle), so the value/count pair lives there.
+	pts = append(pts,
+		txnPoint("auth", "success", incident, 40),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
+	)
 	q := eventsFailQuerier{inner: memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true, Events: true}))}
 	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
 	leg, err := Unrealized(context.Background(), reg, q, req)
@@ -402,4 +436,41 @@ func hasNoteContaining(notes []string, sub string) bool {
 		}
 	}
 	return false
+}
+
+// TestAOVMinorStageFiltered pins the AOV metric fallback to the flow's value
+// stage: entry-stage counts (biz_txn_total at the entry stage with no
+// companion value point) must not inflate the denominator and silently
+// halve the AOV.
+func TestAOVMinorStageFiltered(t *testing.T) {
+	window := query.TimeRange{From: time.Unix(0, 0).UTC(), To: time.Unix(3600, 0).UTC()}
+	at := window.From.Add(time.Minute)
+	txn := func(stage string) emit.MetricPoint {
+		return emit.MetricPoint{Name: "biz_txn_total", Value: 1, At: at, Labels: map[string]string{
+			"flow": "invoice.pay", "stage": stage, "outcome": "success", "currency": "USD", "segment": "smb"}}
+	}
+	val := func(stage string, v int64) emit.MetricPoint {
+		return emit.MetricPoint{Name: "biz_value_total", Value: v, At: at, Labels: map[string]string{
+			"flow": "invoice.pay", "stage": stage, "outcome": "success", "currency": "USD", "kind": "fee", "segment": "smb"}}
+	}
+	// Four entries, two of which settled at 100 each: true AOV 100. The
+	// stage-unfiltered ratio would read 200/(4+2) = 33.
+	q := memq.New(memq.WithMetrics([]emit.MetricPoint{
+		txn("auth"), txn("auth"), txn("auth"), txn("auth"),
+		txn("settle"), val("settle", 100),
+		txn("settle"), val("settle", 100),
+	}), memq.WithCaps(query.Caps{Metrics: true}))
+	f := registry.Flow{
+		Name: "invoice.pay",
+		Stages: []registry.Stage{
+			{Name: "auth"}, {Name: "capture"}, {Name: "settle"},
+		},
+	}
+	aov, source, warn, ok := aovMinor(context.Background(), q, "invoice.pay", "USD", f, window)
+	if !ok || source != "metric" {
+		t.Fatalf("aov unavailable or wrong source (ok=%v source=%q warn=%q)", ok, source, warn)
+	}
+	if aov != 100 {
+		t.Fatalf("aov = %d, want 100 (value-stage anchored, entries excluded)", aov)
+	}
 }

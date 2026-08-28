@@ -124,9 +124,12 @@ type Recovery struct {
 	Within            time.Duration
 }
 
-// Reconcile names the ledger source coverage is measured against.
+// Reconcile names the ledger source coverage is measured against, and
+// optionally the stage whose success observations telemetry is compared at
+// (the flow's value stage; the last stage when undeclared).
 type Reconcile struct {
 	Source string
+	Stage  string
 }
 
 // Flow returns a deep copy of a flow by name — callers can never mutate
@@ -179,6 +182,21 @@ func (r Registry) SegmentValid(s string) bool {
 func (f Flow) StageValid(name string) bool {
 	_, ok := f.stageSet[name]
 	return ok
+}
+
+// ValueStage is the stage whose success observations carry the flow's value
+// once per transaction: the declared reconcile stage, or the last stage when
+// undeclared. The emitter records every stage transition, so any
+// cross-stage success sum multiply-counts; readers that need value seen
+// once (coverage, the AOV fallback) anchor here.
+func (f Flow) ValueStage() string {
+	if f.Reconcile.Stage != "" {
+		return f.Reconcile.Stage
+	}
+	if n := len(f.Stages); n > 0 {
+		return f.Stages[n-1].Name
+	}
+	return ""
 }
 
 // EstimateMinor returns the estimator amount for a segment: the
@@ -319,6 +337,7 @@ type recoveryDoc struct {
 
 type reconcileDoc struct {
 	Source string `yaml:"source"`
+	Stage  string `yaml:"stage,omitempty"`
 }
 
 // Load reads and validates a registry file.
@@ -577,7 +596,12 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 	if !ok || (scheme != "sql" && scheme != "stripe") {
 		return fail("reconcile source %q must use a known scheme (sql: or stripe:)", src)
 	}
-	f.Reconcile = Reconcile{Source: src}
+	if s := fd.Reconcile.Stage; s != "" {
+		if _, ok := f.stageSet[s]; !ok {
+			return fail("reconcile stage %q is not a declared stage", s)
+		}
+	}
+	f.Reconcile = Reconcile{Source: src, Stage: fd.Reconcile.Stage}
 
 	return f, nil
 }

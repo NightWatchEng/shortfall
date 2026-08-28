@@ -1,6 +1,6 @@
 # ADR-0011 — Coverage ratio: worst-slice value coverage; per-slice deltas attributed
 
-Status: accepted (2026-08-28)
+Status: accepted (2026-08-28); amended by [ADR-0016](0016-value-stage-anchoring.md) (value-stage anchoring of the telemetry read)
 Date: 2026-08-28
 
 ## Context

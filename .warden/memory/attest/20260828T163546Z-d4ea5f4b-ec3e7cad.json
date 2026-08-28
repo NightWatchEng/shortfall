@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "d4ea5f4b8a03b2f77bc24732cae9595378adc91e",
+  "base_sha": "5f9cdf1da1d72d59262830ed6c9b96c4f7a6ee2a",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T16:35:46+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; verified registry validation ordering, consumer wiring, and that both regression tests fail pre-fix"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context, examiner precedents; traced the fallback's production reachability and weighed three dispositions against the frozen CoverageLeg surface"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T16:35:46+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "d4ea5f4b8a03b2f77bc24732cae9595378adc91e",
+      "base_sha": "5f9cdf1da1d72d59262830ed6c9b96c4f7a6ee2a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier.go",
+      "line": 80,
+      "severity": "MEDIUM",
+      "finding": "The tmw.8.4-era doc comment still described the stage-unfiltered engine contract this diff removes ('readers sum success value across stages\u2026 roughly halving the fallback AOV\u2026 tracked separately' \u2014 the tracked item being this very diff).",
+      "evidence": "testkit/querier.go:79-88 vs the diff's ValueStage anchoring in coverage.go and unrealized.go.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Comment rewritten for the new contract: terminal-only harness emission is exactly what the value-stage readers consume (ADR-0016).",
+      "id": "96106299f082ec8d"
+    },
+    {
+      "ts": "2026-08-28T16:35:46+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "d4ea5f4b8a03b2f77bc24732cae9595378adc91e",
+      "base_sha": "5f9cdf1da1d72d59262830ed6c9b96c4f7a6ee2a",
+      "rule_id": "unmapped:silent-unfiltered-fallback",
+      "tags": [
+        "ci-gate",
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/coverage.go",
+      "line": 88,
+      "severity": "MEDIUM",
+      "finding": "The unknown-flow fallback silently reintroduced the clamp-masked unfiltered read for misconfigured flows (ledger Flow strings come from external metadata; --flow omitted derives flows from the ledger), with no disclosure channel on the frozen CoverageLeg.",
+      "evidence": "reconcile.go flow derivation; stripe Metadata Flow stamping; CoverageLeg has no notes field.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Per examiner disposition (loud error over silent skip or frozen-surface caveat): Coverage now errors naming the unknown flow; nil registry narrowed to a test convenience in ADR-0016's wording; TestCoverageUnknownFlowFailsLoudly pins the drift case.",
+      "id": "8392fc840440151c"
+    },
+    {
+      "ts": "2026-08-28T16:35:46+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "d4ea5f4b8a03b2f77bc24732cae9595378adc91e",
+      "base_sha": "5f9cdf1da1d72d59262830ed6c9b96c4f7a6ee2a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0011-coverage-ratio-semantics.md",
+      "line": 3,
+      "severity": "LOW",
+      "finding": "ADR-0011 carried no forward pointer to its amendment; readers landing on the ADR the coverage code cites would not discover ADR-0016.",
+      "evidence": "Status line vs ADR-0002's established amended-annotation precedent.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Status line now reads 'amended by ADR-0016 (value-stage anchoring of the telemetry read)' \u2014 an annotation, not a history rewrite, per the ADR-0002 precedent.",
+      "id": "8bcdb04ccd43eb98"
+    }
+  ]
+}

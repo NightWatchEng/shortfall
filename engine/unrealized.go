@@ -198,7 +198,10 @@ func hourlyEntriesByCurrency(ctx context.Context, q query.Querier, flow, entrySt
 }
 
 // aovMinor is the observed average order value in minor units for a currency,
-// with a source label for the notes. Preference order:
+// with a source label for the notes. Both observed sources read at the
+// flow's value stage: the emitter records every stage transition, so an
+// unfiltered success ratio would divide value by a cross-stage (entries
+// included) count and understate. Preference order:
 //  1. events: sum of success amounts / count of success events. Estimated
 //     amounts ride the event, so this is unbiased where the biz_value_total
 //     counter, which omits estimated successes, would understate.
@@ -212,10 +215,14 @@ func hourlyEntriesByCurrency(ctx context.Context, q query.Querier, flow, entrySt
 // is a non-empty disclosure the caller must surface (e.g. an events-backend
 // failure that silently degraded AOV to the counter).
 func aovMinor(ctx context.Context, q query.Querier, flow, currency string, f registry.Flow, window query.TimeRange) (aov int64, source, warn string, ok bool) {
+	filters := map[string]string{"flow": flow, "outcome": "success", "currency": currency}
+	if vs := f.ValueStage(); vs != "" {
+		filters["stage"] = vs
+	}
 	if q.Capabilities().Events {
 		groups, err := q.QueryEvents(ctx, query.EventQuery{
 			Range:   window,
-			Filters: map[string]string{"flow": flow, "outcome": "success", "currency": currency},
+			Filters: filters,
 		})
 		switch {
 		case err != nil:
@@ -234,7 +241,6 @@ func aovMinor(ctx context.Context, q query.Querier, flow, currency string, f reg
 		}
 	}
 	if q.Capabilities().Metrics {
-		filters := map[string]string{"flow": flow, "outcome": "success", "currency": currency}
 		value := sumMetric(ctx, q, "biz_value_total", filters, window)
 		count := sumMetric(ctx, q, "biz_txn_total", filters, window)
 		if count > 0 && value > 0 {

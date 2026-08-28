@@ -77,15 +77,10 @@ func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
 // terminal failures. Auth-failed transactions already count at the entry
 // stage through their terminal point; abandoned ones stay invisible — that
 // gap is the signal the counterfactual leg measures. No entry-stage
-// biz_value_total point rides along: the engine's coverage and AOV readers
-// sum success value across stages, and a per-stage value emission would
-// multiply-count it. Known consequence of that asymmetry: a metrics-only
-// consumer of these points inflates the engine's stage-unfiltered AOV
-// denominator (value stays terminal-only, count gains the entries), roughly
-// halving the fallback AOV — feed the events too (QuerierFromResult does)
-// so the AOV comes from the unbiased events path. The real emitter ships
-// value at every stage transition; the engine's stage-unfiltered readers
-// are the deeper mismatch, tracked separately.
+// biz_value_total point rides along: the harness emits success value only
+// at the terminal stage, and the engine's coverage/AOV readers anchor at
+// the flow's value stage (ADR-0016) — for the reference registry that is
+// settle, so the terminal-only emission is exactly what they read.
 //
 // gaugeAt must lie strictly inside the query window: a sample stamped exactly
 // at the window end To is invisible to a half-open [From, To) read on both
