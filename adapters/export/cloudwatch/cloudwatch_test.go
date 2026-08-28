@@ -1,0 +1,259 @@
+package cloudwatch
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+
+	"github.com/NightWatchEng/shortfall/biz"
+	"github.com/NightWatchEng/shortfall/emit"
+)
+
+var update = flag.Bool("update", false, "update golden files")
+
+var at = time.Date(2026, 8, 27, 16, 0, 0, 0, time.UTC)
+
+func vc() biz.ValueContext {
+	return biz.ValueContext{
+		Flow: "invoice.pay", EntityID: "inv_1", CustomerID: "h:c", Segment: "smb",
+		Money: biz.Money{Amount: 14900, Currency: "USD", Exponent: 2}, Kind: biz.KindFee,
+	}
+}
+
+func valueLbls(cur string) map[string]string {
+	return map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": cur, "kind": "fee", "segment": "smb"}
+}
+
+// decode splits the buffer into per-line JSON records.
+func decode(t *testing.T, b []byte) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range bytes.Split(bytes.TrimSpace(b), []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal(line, &m); err != nil {
+			t.Fatalf("record is not valid JSON: %v\n%s", err, line)
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+func TestExportMetricsEMFShape(t *testing.T) {
+	cases := []struct {
+		name      string
+		point     emit.MetricPoint
+		wantErr   bool
+		wantDims  []string
+		wantValue float64
+	}{
+		{
+			name:      "value_total carries six dimensions",
+			point:     emit.MetricPoint{Name: "biz_value_total", Labels: valueLbls("USD"), Value: 14900, At: at},
+			wantDims:  valueDims,
+			wantValue: 14900,
+		},
+		{
+			name:      "inflight gauge carries four dimensions",
+			point:     emit.MetricPoint{Name: "biz_inflight_value", Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": "USD"}, Value: 5568661, At: at},
+			wantDims:  inflightDims,
+			wantValue: 5568661,
+		},
+		{
+			name:    "unknown family errors",
+			point:   emit.MetricPoint{Name: "biz_bogus", Labels: map[string]string{}, Value: 1, At: at},
+			wantErr: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			e := New(WithWriter(&buf))
+			err := e.ExportMetrics(context.Background(), []emit.MetricPoint{c.point})
+			if c.wantErr {
+				if err == nil {
+					t.Fatal("want error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := e.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			recs := decode(t, buf.Bytes())
+			if len(recs) != 1 {
+				t.Fatalf("want 1 record, got %d", len(recs))
+			}
+			r := recs[0]
+			if got := r[c.point.Name]; got != c.wantValue {
+				t.Fatalf("metric value = %v, want %v", got, c.wantValue)
+			}
+			aws := r["_aws"].(map[string]any)
+			if int64(aws["Timestamp"].(float64)) != at.UnixMilli() {
+				t.Fatalf("timestamp = %v, want %d", aws["Timestamp"], at.UnixMilli())
+			}
+			cwm := aws["CloudWatchMetrics"].([]any)[0].(map[string]any)
+			gotDims := toStrings(cwm["Dimensions"].([]any)[0].([]any))
+			if !equalStrings(gotDims, c.wantDims) {
+				t.Fatalf("dimensions = %v, want %v", gotDims, c.wantDims)
+			}
+			// Every declared dimension must also be a top-level field (EMF rule).
+			for _, d := range c.wantDims {
+				if _, ok := r[d]; !ok {
+					t.Fatalf("dimension %q missing as top-level field", d)
+				}
+			}
+			// No amount/id may appear as a dimension (ADR-0004).
+			for _, d := range gotDims {
+				if d == "amount_minor" || d == "entity.id" || d == "customer.id" {
+					t.Fatalf("forbidden dimension %q", d)
+				}
+			}
+		})
+	}
+}
+
+func TestExportEventsCarryAmountsAsFieldsNotMetrics(t *testing.T) {
+	var buf bytes.Buffer
+	e := New(WithWriter(&buf))
+	if err := e.ExportEvents(context.Background(), []biz.Outcome{
+		{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed, Source: "stripe:webhook"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r := decode(t, buf.Bytes())[0]
+	if r["biz.amount_minor"].(float64) != 14900 {
+		t.Fatalf("amount = %v", r["biz.amount_minor"])
+	}
+	if r["biz.entity.id"] != "inv_1" || r["biz.customer.id"] != "h:c" {
+		t.Fatalf("ids missing: %v", r)
+	}
+	// The event record must NOT declare a metric (no double-count with the
+	// metric path): its _aws block has a Timestamp but no CloudWatchMetrics.
+	aws := r["_aws"].(map[string]any)
+	if _, ok := aws["CloudWatchMetrics"]; ok {
+		t.Fatal("event record must not declare metrics")
+	}
+}
+
+func TestCapabilitiesBothSignals(t *testing.T) {
+	e := New(WithWriter(&bytes.Buffer{}))
+	if c := e.Capabilities(); !c.Metrics || !c.Events {
+		t.Fatalf("caps = %+v", c)
+	}
+}
+
+// fakePutter records PutMetricData calls.
+type fakePutter struct {
+	inputs []*cloudwatch.PutMetricDataInput
+}
+
+func (f *fakePutter) PutMetricData(_ context.Context, in *cloudwatch.PutMetricDataInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.PutMetricDataOutput, error) {
+	f.inputs = append(f.inputs, in)
+	return &cloudwatch.PutMetricDataOutput{}, nil
+}
+
+func TestPutMetricDataPathSendsDatums(t *testing.T) {
+	fp := &fakePutter{}
+	var buf bytes.Buffer
+	e := New(WithWriter(&buf), WithMetricPutter(fp))
+	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{
+		{Name: "biz_value_total", Labels: valueLbls("USD"), Value: 14900, At: at},
+		{Name: "biz_txn_total", Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": "USD", "segment": "smb"}, Value: 1, At: at},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fp.inputs) != 1 {
+		t.Fatalf("want 1 PutMetricData call, got %d", len(fp.inputs))
+	}
+	if n := len(fp.inputs[0].MetricData); n != 2 {
+		t.Fatalf("want 2 datums, got %d", n)
+	}
+	// EMF records are also written (both paths run).
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(decode(t, buf.Bytes())) != 2 {
+		t.Fatal("EMF records must be written even with a putter")
+	}
+}
+
+// TestEMFGolden pins the exact EMF exposition for a fixed batch.
+func TestEMFGolden(t *testing.T) {
+	var buf bytes.Buffer
+	e := New(WithWriter(&buf))
+	ctx := context.Background()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(e.ExportMetrics(ctx, []emit.MetricPoint{
+		{Name: "biz_value_total", Labels: valueLbls("USD"), Value: 14900, At: at},
+		{Name: "biz_inflight_value", Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": "USD"}, Value: 5568661, At: at},
+	}))
+	must(e.ExportEvents(ctx, []biz.Outcome{{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed, Source: "stripe:webhook"}}))
+	must(e.Shutdown(ctx))
+
+	// Re-marshal each record with sorted keys for a stable golden (Go map
+	// marshalling already sorts keys, but normalise defensively).
+	got := normalizeJSONL(t, buf.Bytes())
+	golden := filepath.Join("testdata", "emf.golden")
+	if *update {
+		must(os.WriteFile(golden, got, 0o644))
+	}
+	want, err := os.ReadFile(golden)
+	must(err)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("EMF does not match golden.\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+func normalizeJSONL(t *testing.T, b []byte) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	for _, r := range decode(t, b) {
+		enc, err := json.MarshalIndent(r, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out.Write(enc)
+		out.WriteByte('\n')
+	}
+	return out.Bytes()
+}
+
+func toStrings(a []any) []string {
+	out := make([]string, len(a))
+	for i, v := range a {
+		out[i] = v.(string)
+	}
+	return out
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
