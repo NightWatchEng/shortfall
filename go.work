@@ -7,3 +7,5 @@ use ./adapters/export/otlp
 use ./adapters/export/prometheus
 
 use ./adapters/export/cloudwatch
+
+use ./adapters/export/statsd
