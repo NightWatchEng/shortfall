@@ -24,4 +24,7 @@ use ./adapters/query/sql
 
 use ./cmd/shortfall
 
-use ./adapters/payment/stripe
+use (
+	./adapters/incident/slack
+	./adapters/payment/stripe
+)

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "372f9ab10050bd53631e3726ae6565183597df95",
+  "base_sha": "71efd337e5084683b46f36aa68095c572c488df1",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T10:29:57+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8) \u2014 verified token never leaks (Authorization header only, absent from URL/body/errors), Slack ok:false + non-200 handling, refresh loop (ticker stopped, no update-after-close, ctx honored), module setup (replace + go.work, builds standalone and in-workspace)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T10:29:57+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "372f9ab10050bd53631e3726ae6565183597df95",
+      "base_sha": "71efd337e5084683b46f36aa68095c572c488df1",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/incident",
+      "file": "adapters/incident/slack/slack_test.go",
+      "line": 113,
+      "severity": "MEDIUM",
+      "finding": "TestHTTPErrorSurfaced asserted only that an error occurred, not that the non-200 branch produced it \u2014 an empty 500 body would also fail JSON decode, so deleting the status guard in call() would still pass the test.",
+      "evidence": "The test only checked err != nil; the status branch was not pinned.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "The test now asserts the error contains 'HTTP 500', pinning the non-200 branch specifically (the ADR-0007 rejection-assertion clause the other error test already satisfies).",
+      "id": "a51361369e6f003a"
+    }
+  ]
+}
