@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "69c5410c84d68528dabd4b93c4be0d663236b092",
+  "base_sha": "9f640aeb34ef52961bdcb83f4d4ced0787ace7f9",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T01:49:54+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified wire formats, ADR-0004 label safety, gauge At-ordering guard, UDP dial, discard-default"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude), separate context \u2014 confirmed the sanitizers are COMPLETE (no injection hole; finding is coverage-only) and the doc claim is imprecise"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T01:49:54+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "69c5410c84d68528dabd4b93c4be0d663236b092",
+      "base_sha": "9f640aeb34ef52961bdcb83f4d4ced0787ace7f9",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/statsd/statsd.go",
+      "line": 235,
+      "severity": "MEDIUM",
+      "finding": "sanitizeTag/sanitizePlain (the StatsD-injection defense) had no test feeding a reserved byte \u2014 every fixture value was clean, so the reserved-byte branches were unexercised. Cross-examiner confirmed the sanitizers are complete (no real hole); this is a coverage gap on security-relevant logic.",
+      "evidence": "func sanitizeTag(s string) string { ... case '|', ',', ':', '\\n', '\\r', ' ', '\\t', '@', '#': return '_' ... } \u2014 no test passed a value containing any of these bytes.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added TestSanitizationBlocksInjection (table-driven, both formats): a value packed with \\n | , : # @ space . cannot break line framing, inject a second metric or tag, change the type marker, or add a sample rate. Asserts exactly one line, one type marker, one tag section, and the value's framing bytes replaced.",
+      "id": "4a90c803e1a7a952"
+    },
+    {
+      "ts": "2026-08-28T01:49:54+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "69c5410c84d68528dabd4b93c4be0d663236b092",
+      "base_sha": "9f640aeb34ef52961bdcb83f4d4ced0787ace7f9",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/statsd/statsd.go",
+      "line": 5,
+      "severity": "MEDIUM",
+      "finding": "Package doc claimed 'no third-party dependencies (net + stdlib only)', but the nested module's go.mod lists the shortfall core's transitive deps (otel, yaml, xxhash, kr/text) as indirect. The accurate statement is about imports in this package, not the module dependency graph.",
+      "evidence": "// nested module with no third-party dependencies (net + stdlib only). vs go.mod indirect requires (go.opentelemetry.io/otel v1.46.0, gopkg.in/yaml.v3 v3.0.1, ...)",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Narrowed the doc to: own code imports only net + stdlib over the shortfall core, and wraps no StatsD client library, noting the core's transitive deps appear as indirect in go.mod.",
+      "id": "474898642ea98b47"
+    }
+  ]
+}
