@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "66815548366108cf88f2e0cda7528db45a8fa2de",
+  "base_sha": "e5e373d0cc97607d91d45c6c36d3e54de3bddd2b",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T05:23:56+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), combined hunt+verify \u2014 confirmed the benchmark exercises all four legs, checked the baseline numbers against the measured host figures, and found+reproduced the int64 overflow dropping ~47% of the 200k dataset"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 the overflow was reproduced by the reviewer (firstBad i=106752, 93248/200000 dropped) and the fix (stride-before-multiply) is verified by re-measuring all 200k in-window"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T05:23:56+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "66815548366108cf88f2e0cda7528db45a8fa2de",
+      "base_sha": "e5e373d0cc97607d91d45c6c36d3e54de3bddd2b",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "engine",
+      "file": "engine/compute_bench_test.go",
+      "line": 39,
+      "severity": "MEDIUM",
+      "finding": "int64(i)*int64(span) overflowed (span=24h ~8.6e13 ns): past ~107k events the product wrapped negative, placing events before the window where memq drops them. The events=200000 run measured only ~107k, mislabeling the baseline and faking sub-linear growth.",
+      "evidence": "At: benchWindow.From.Add(time.Duration(int64(i) * int64(span) / int64(nEvents))); reproduced: 93248/200000 events out-of-window",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Compute the per-event stride (span/nEvents) BEFORE multiplying by i, so no overflow (200k*432M ns = 8.6e13, in range). Re-measured the true baseline (~730 ms/op, ~646 MB/op, ~10M allocs at 200k) and corrected the documented numbers + growth description (roughly linear). 50k was unaffected.",
+      "id": "0df7b261f30c652c"
+    }
+  ]
+}
