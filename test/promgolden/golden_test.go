@@ -167,6 +167,33 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 					t.Fatalf("query %d (%s) parity mismatch:\n memq=%v\nprom=%v", i, qy.Metric, want, got)
 				}
 			}
+			for i, qy := range steppedQueries(window) {
+				want, err := mq.QueryMetric(ctx, qy)
+				if err != nil {
+					t.Fatalf("stepped query %d memq: %v", i, err)
+				}
+				// The stepped parity must not degenerate into the window
+				// case: the counter queries must see multiple buckets, or
+				// the per-bucket assertion proves nothing beyond Step==0.
+				if qy.Metric == "biz_txn_total" {
+					multi := false
+					for _, s := range want {
+						if len(s.Points) > 1 {
+							multi = true
+						}
+					}
+					if !multi {
+						t.Fatalf("stepped query %d is vacuous: no memq series has more than one bucket", i)
+					}
+				}
+				got, err := pq.QueryMetric(ctx, qy)
+				if err != nil {
+					t.Fatalf("stepped query %d promql: %v", i, err)
+				}
+				if !samePointSeries(want, got) {
+					t.Fatalf("stepped query %d (%s) per-bucket parity mismatch:\n memq=%v\nprom=%v", i, qy.Metric, want, got)
+				}
+			}
 		})
 	}
 }
@@ -181,5 +208,19 @@ func goldenQueries(w query.TimeRange) []query.Query {
 		{Metric: "biz_txn_total", Agg: query.AggSum, GroupBy: []string{"stage", "outcome"}, Range: w},
 		// Gauge: in-flight value by age bucket (last_over_time translation).
 		{Metric: "biz_inflight_value", GroupBy: []string{"age_bucket", "currency"}, Range: w},
+	}
+}
+
+// steppedQueries are the Step>0 parity cases: per-bucket values must match
+// memq's forward buckets point-for-point, not just in window totals. A
+// 10-minute step over the 50-minute scenario window yields 5 buckets.
+func steppedQueries(w query.TimeRange) []query.Query {
+	return []query.Query{
+		// Stepped counter, grouped (multi-label per-bucket differences).
+		{Metric: "biz_txn_total", Agg: query.AggSum, GroupBy: []string{"stage", "outcome"}, Range: w, Step: 10 * time.Minute},
+		// Stepped counter with a filter (the failed value sum per currency).
+		{Metric: "biz_value_total", Agg: query.AggSum, Filters: map[string]string{"outcome": "failed"}, GroupBy: []string{"currency"}, Range: w, Step: 10 * time.Minute},
+		// Stepped gauge: the carried level per bucket.
+		{Metric: "biz_inflight_value", GroupBy: []string{"age_bucket", "currency"}, Range: w, Step: 10 * time.Minute},
 	}
 }

@@ -46,16 +46,18 @@ type promExpr struct {
 // Both boundaries are evaluated one millisecond inside the window (To-1ms,
 // From-1ms) to realize the half-open [From, To) window; see the body.
 //
-// Only Step==0 (one bucket over the whole range) is supported: Prometheus
-// range-step increase() buckets look backward from each step boundary while
-// memq buckets forward from each start, so a stepped translation would be
-// one step misaligned. The engine issues only Step==0 metric queries.
+// translate handles Step==0 (one bucket over the whole range); stepped
+// queries go through translateStepped, which emits one instant expr per
+// forward bucket rather than a Prometheus range query (range-step
+// increase() buckets look backward from each step boundary while memq
+// buckets forward from each start — a native stepped translation would be
+// one step misaligned).
 func translate(q query.Query) (promExpr, error) {
 	if q.Agg == query.AggCount {
 		return promExpr{}, fmt.Errorf("promql: AggCount is not supported; the engine reads counts as AggSum over biz_txn_total")
 	}
 	if q.Step > 0 {
-		return promExpr{}, fmt.Errorf("promql: stepped (Step>0) queries are not supported yet (bucket alignment vs the memq reference); the engine uses Step==0 window queries — see workspace-0ka")
+		return promExpr{}, fmt.Errorf("promql: translate handles Step==0 only; stepped queries use translateStepped")
 	}
 	matchers := labelMatchers(q.Filters)
 	by := groupBy(q.GroupBy)
@@ -98,6 +100,66 @@ func translate(q query.Query) (promExpr, error) {
 		expr: fmt.Sprintf("%s - (%s or (%s * 0))", end, start, end),
 		at:   at,
 	}, nil
+}
+
+// steppedBucket is one bucket of a stepped query: an instant expr whose
+// result is the bucket's value, stamped at the bucket's start (memq's stamp).
+type steppedBucket struct {
+	ex    promExpr
+	start time.Time
+}
+
+// translateStepped turns a Step>0 query into one instant expr per forward
+// bucket [S, min(S+Step, To)) — the same per-boundary shapes translate uses,
+// evaluated at each bucket's boundaries. Every boundary's lookback range is
+// anchored at From minus the window length, so it reaches at least as far
+// back as the Step==0 translation's From-boundary lookback and last_over_time
+// always finds the same latest sample (a wider range never changes which
+// sample is latest).
+//
+// Known tolerance: a counter bucket whose in-bucket samples sum to exactly
+// zero is indistinguishable at the boundaries from a bucket with no samples;
+// both yield a zero difference, which the assembly drops the way memq omits
+// sample-less buckets. Every consumer sums points, so the numbers agree
+// either way. Gauge zero levels are real observations and are kept.
+func translateStepped(q query.Query) ([]steppedBucket, error) {
+	if q.Agg == query.AggCount {
+		return nil, fmt.Errorf("promql: AggCount is not supported; the engine reads counts as AggSum over biz_txn_total")
+	}
+	if q.Step <= 0 {
+		return nil, fmt.Errorf("promql: translateStepped needs Step>0; window queries use translate")
+	}
+	matchers := labelMatchers(q.Filters)
+	by := groupBy(q.GroupBy)
+	gauge := gaugeFamilies[q.Metric]
+	lookbackStart := q.Range.From.Add(-q.Range.To.Sub(q.Range.From))
+
+	boundary := func(at time.Time) string {
+		return fmt.Sprintf(
+			"sum %s(last_over_time(%s%s[%s] @ %s))",
+			by, q.Metric, matchers, promDuration(at.Sub(lookbackStart)), promTime(at.Add(-time.Millisecond)),
+		)
+	}
+
+	var out []steppedBucket
+	for start := q.Range.From; start.Before(q.Range.To); start = start.Add(q.Step) {
+		end := start.Add(q.Step)
+		if end.After(q.Range.To) {
+			end = q.Range.To
+		}
+		var expr string
+		if gauge {
+			expr = boundary(end)
+		} else {
+			e, s := boundary(end), boundary(start)
+			expr = fmt.Sprintf("%s - (%s or (%s * 0))", e, s, e)
+		}
+		out = append(out, steppedBucket{
+			ex:    promExpr{expr: expr, at: end.Add(-time.Millisecond)},
+			start: start,
+		})
+	}
+	return out, nil
 }
 
 // labelMatchers renders sorted PromQL label matchers, e.g. {flow="invoice.pay",stage="capture"}.
