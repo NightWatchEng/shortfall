@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "53ede1bc67a38c8ad34c8df875556560c8ec5aa8",
+  "base_sha": "8b60475f22c7445c7e1a9d5c4c740968d5171dc4",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T09:45:52+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8) \u2014 verified the nested-module goreleaser pattern; author validated via `goreleaser check` + snapshot build"
+    }
+  ],
+  "records": []
+}
