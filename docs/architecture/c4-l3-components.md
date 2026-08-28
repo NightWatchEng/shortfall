@@ -2,8 +2,10 @@
 
 The paths money takes through the code. **This is the TARGET design**:
 the shapes are the v0.1.0 frozen contracts, the internals are the plan of
-record for the emitter (M3) and engine legs (M6/M7) — the code refuses
-loudly (`engine.ErrNotImplemented`) until each lands.
+record for the emitter (M3) and engine legs (M6/M7). `Compute` assembles the
+legs that have landed and marks the rest unavailable on their own leg — a
+caveat on the money legs, a `NotAvailableReason` on customers, a note on the
+counterfactual/coverage legs — never a fabricated zero.
 
 ```mermaid
 flowchart LR
