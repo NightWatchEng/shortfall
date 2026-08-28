@@ -215,7 +215,9 @@ func TestInflightGaugeHonorsAtOrdering(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			e.Shutdown(context.Background())
+			if err := e.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
 			got := lines(t, buf.Bytes())
 			// Only the fresh sample is sent; the stale one is dropped.
 			if len(got) != 1 || got[0] != c.wantLast {
@@ -242,7 +244,7 @@ func TestUDPCaptureBothFormats(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			addr := conn.LocalAddr().String()
 
 			e, err := New(WithAddress(addr), WithFormat(c.format), WithLogger(slog.New(slog.NewTextHandler(&buf2{}, nil))))
