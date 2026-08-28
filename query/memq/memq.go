@@ -112,10 +112,24 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 		labels map[string]string
 		points []emit.MetricPoint
 	}
+	gauge := gaugeFamilies[qy.Metric]
 	groups := map[string]*bucketed{}
 	order := []string{}
 	for _, p := range q.metrics {
-		if p.Name != qy.Metric || !inRange(p.At, qy.Range) || !matchFilters(p.Labels, qy.Filters) {
+		if p.Name != qy.Metric || !matchFilters(p.Labels, qy.Filters) {
+			continue
+		}
+		// A counter contributes only its in-window increase, so it is
+		// filtered to [From, To). A gauge is a persistent LEVEL: a sample
+		// set before the window still defines the level inside it, so gauge
+		// samples are kept whenever they precede the window's end and the
+		// bucket reader carries the last one forward (matching a real
+		// backend's last_over_time).
+		if gauge {
+			if !p.At.Before(qy.Range.To) {
+				continue
+			}
+		} else if !inRange(p.At, qy.Range) {
 			continue
 		}
 		key := groupKey(p.Labels, qy.GroupBy)
@@ -130,7 +144,6 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 	}
 	sort.Strings(order)
 
-	gauge := gaugeFamilies[qy.Metric]
 	out := make(query.Series, 0, len(order))
 	for _, ck := range order {
 		g := groups[ck]
@@ -165,16 +178,19 @@ func bucketPoints(points []emit.MetricPoint, qy query.Query, gauge bool) []query
 	return out
 }
 
-// aggregate reduces the points whose At is in [from, to) to a single value:
-// for a gauge, the last observed level; for a counter, the increase (sum of
-// delta values) or, under AggCount, the number of points.
+// aggregate reduces a group's points to a single bucket value. For a gauge
+// it is the last observed level AT the bucket boundary — the most recent
+// sample with At < to, carried forward from before the bucket (and before
+// the whole window) if the level has not changed, matching a real backend's
+// last_over_time; nil only when no level has ever been set. For a counter it
+// is the increase within [from, to) (sum of delta values), or under AggCount
+// the number of points.
 func aggregate(points []emit.MetricPoint, from, to time.Time, agg query.Agg, gauge bool) *float64 {
 	if gauge {
 		var last *emit.MetricPoint
 		for i := range points {
-			p := points[i]
-			if !p.At.Before(from) && p.At.Before(to) {
-				if last == nil || p.At.After(last.At) {
+			if points[i].At.Before(to) { // carry the last level ≤ boundary forward
+				if last == nil || points[i].At.After(last.At) {
 					last = &points[i]
 				}
 			}

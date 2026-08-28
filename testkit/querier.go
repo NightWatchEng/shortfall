@@ -10,12 +10,19 @@ import (
 )
 
 // QuerierFromResult builds an in-memory query.Querier from a harness run's
-// ground-truth ledger, so the engine can be exercised end to end with no
-// backend process. Each TERMINAL transaction becomes one outcome event and
-// its counter metric points (biz_txn_total, and biz_value_total carrying the
-// exact amount); non-terminal transactions (still in flight at the snapshot)
-// are the deferred leg's concern and are read from biz_inflight_value, which
-// a deferred-leg test seeds directly.
+// ground-truth ledger, modelling a TELEMETRY backend: it contains only what
+// real telemetry could observe, so the engine can be exercised end to end
+// with no backend process. Each telemetry-visible terminal transaction
+// becomes one outcome event and its counter metric points (biz_txn_total,
+// and biz_value_total carrying the exact amount).
+//
+// Deliberately excluded, because a real emitter never records them:
+//   - abandoned transactions — the user gave up before the request landed;
+//     "telemetry never saw it" (checkout.StateAbandoned). This invisible
+//     demand is the counterfactual leg's concern, reasoned about from
+//     res.Suppressed and the baseline, never from a telemetry querier.
+//   - non-terminal (still in-flight) transactions — the deferred leg reads
+//     these from biz_inflight_value, which a deferred-leg test seeds.
 //
 // The mapping uses the flow name "invoice.pay" (the reference registry's
 // flow) and the checkout lifecycle stages auth/capture/settle.
@@ -24,8 +31,8 @@ func QuerierFromResult(res checkout.Result) *memq.Querier {
 	var metrics []emit.MetricPoint
 
 	for _, txn := range res.Ledger.Txns {
-		stage, result, at, terminal := terminalOf(txn)
-		if !terminal {
+		stage, result, at, visible := telemetryOutcome(txn)
+		if !visible {
 			continue
 		}
 		vc := biz.ValueContext{
@@ -54,10 +61,12 @@ func QuerierFromResult(res checkout.Result) *memq.Querier {
 	return memq.New(memq.WithEvents(events), memq.WithMetrics(metrics))
 }
 
-// terminalOf maps a transaction's terminal state to (stage, result, time,
-// terminal?). A non-terminal (still in-flight) transaction returns false.
-// The event time is the most recent stage timestamp the state reached.
-func terminalOf(txn checkout.Txn) (stage string, result biz.Result, at time.Time, terminal bool) {
+// telemetryOutcome maps a transaction's state to the outcome real telemetry
+// would have recorded: (stage, result, time, visible?). A transaction that
+// telemetry could not see — still in-flight, or abandoned before the request
+// landed — returns visible=false. The event time is the most recent stage
+// timestamp the state reached.
+func telemetryOutcome(txn checkout.Txn) (stage string, result biz.Result, at time.Time, visible bool) {
 	switch txn.State {
 	case checkout.StateSettled:
 		return "settle", biz.ResultSuccess, txn.SettledAt, true
@@ -65,10 +74,11 @@ func terminalOf(txn checkout.Txn) (stage string, result biz.Result, at time.Time
 		return "capture", biz.ResultFailed, firstNonZero(txn.CapturedAt, txn.AuthedAt, txn.CreatedAt), true
 	case checkout.StateAuthFail:
 		return "auth", biz.ResultFailed, firstNonZero(txn.AuthedAt, txn.CreatedAt), true
-	case checkout.StateAbandoned:
-		return "auth", biz.ResultAbandoned, firstNonZero(txn.AuthedAt, txn.CreatedAt), true
 	default:
-		// created / authed / captured — still in flight at the snapshot.
+		// StateAbandoned: telemetry never saw it (counterfactual leg's
+		// concern). created / authed / captured: still in flight at the
+		// snapshot (deferred leg reads biz_inflight_value). Neither is a
+		// telemetry-visible terminal outcome.
 		return "", "", time.Time{}, false
 	}
 }

@@ -91,6 +91,42 @@ func TestQueryMetricAggregation(t *testing.T) {
 	}
 }
 
+// TestGaugeCarriesForward pins that a gauge level persists into later step
+// buckets (and into the window from before it), matching a real backend's
+// last_over_time — a bucket with no fresh sample must report the carried
+// level, not a gap.
+func TestGaugeCarriesForward(t *testing.T) {
+	lbl := map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": "USD"}
+	metrics := []emit.MetricPoint{
+		mp("biz_inflight_value", base.Add(-time.Hour), 200, lbl), // set BEFORE the window
+		mp("biz_inflight_value", base.Add(90*time.Second), 800, lbl),
+	}
+	q := New(WithMetrics(metrics))
+	full := query.TimeRange{From: base, To: base.Add(5 * time.Minute)}
+	series, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_inflight_value", Range: full, Step: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("series = %d, want 1", len(series))
+	}
+	// 5 one-minute buckets. Bucket 0 (00:00-01:00): carries the pre-window
+	// 200. Buckets 1-4: after the 800 sample at 01:30, all carry 800.
+	got := make([]float64, len(series[0].Points))
+	for i, p := range series[0].Points {
+		got[i] = p.Value
+	}
+	want := []float64{200, 800, 800, 800, 800}
+	if len(got) != len(want) {
+		t.Fatalf("points = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("bucket[%d] = %v, want %v (all %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
 func TestQueryMetricGroupsByLabel(t *testing.T) {
 	full := query.TimeRange{From: base, To: base.Add(time.Hour)}
 	metrics := []emit.MetricPoint{
