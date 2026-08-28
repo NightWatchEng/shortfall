@@ -7,9 +7,14 @@ project_name: shortfall
 
 builds:
   - id: shortfall
-    main: ./cmd/shortfall
+    # cmd/shortfall is its OWN module (M6.7.7) so the CLI's promql/sql adapter
+    # deps stay out of the core library. Build it as a nested module: `dir`
+    # cd's into it and `main: .` builds from its own go.mod — independent of
+    # the root go.work (a release checkout must not depend on workspace mode).
+    dir: ./cmd/shortfall
+    main: .
     binary: shortfall
-    env: [CGO_ENABLED=0]
+    env: [CGO_ENABLED=0, GOWORK=off]
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
