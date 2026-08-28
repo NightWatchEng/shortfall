@@ -11,7 +11,7 @@ import (
 
 // gaugeFamilies read as a level (last sample) rather than a delta increase —
 // must match the memq reference and the emitter's families.
-var gaugeFamilies = map[string]bool{"biz_inflight_value": true}
+var gaugeFamilies = map[string]bool{"biz_inflight_value": true, "biz_inflight_count": true}
 
 // promExpr is a translated PromQL instant query. This adapter issues only
 // instant queries (evaluated at `at`), because the exact translations below

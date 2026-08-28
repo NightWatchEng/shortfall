@@ -104,6 +104,54 @@ func TestTrackerBucketsByAge(t *testing.T) {
 	}
 }
 
+// countTotals is gaugeTotals for the companion biz_inflight_count gauge.
+func countTotals(t *testing.T, exp *captureExporter, em *Std) map[string]int64 {
+	t.Helper()
+	if err := em.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	metrics, _ := exp.snapshot()
+	latest := map[string]MetricPoint{}
+	for _, p := range metrics {
+		if p.Name != "biz_inflight_count" {
+			continue
+		}
+		k := p.Labels["flow"] + "|" + p.Labels["stage"] + "|" + p.Labels["age_bucket"] + "|" + p.Labels["currency"]
+		latest[k] = p
+	}
+	out := map[string]int64{}
+	for k, p := range latest {
+		out[k] = p.Value
+	}
+	return out
+}
+
+func TestTrackerPublishesCountAlongsideValue(t *testing.T) {
+	// Three messages in the same (stage, bucket, currency) publish value 600 and
+	// count 3 together (ADR-0012); a vacated bucket zeroes both.
+	tr, em, exp, clk := newTrackerHarness(t)
+	base := clk.now
+	tr.Track("invoice.pay", "capture", "a", usd(100), base.Add(-10*time.Minute)) // 5m-30m
+	tr.Track("invoice.pay", "capture", "b", usd(200), base.Add(-11*time.Minute)) // 5m-30m
+	tr.Track("invoice.pay", "capture", "c", usd(300), base.Add(-12*time.Minute)) // 5m-30m
+	tr.Publish()
+	key := "invoice.pay|capture|" + Age5mTo30m + "|USD"
+	if v := gaugeTotals(t, exp, em)[key]; v != 600 {
+		t.Fatalf("value = %d, want 600", v)
+	}
+	if c := countTotals(t, exp, em)[key]; c != 3 {
+		t.Fatalf("count = %d, want 3", c)
+	}
+	// Complete all three; the bucket must zero BOTH value and count.
+	tr.Done("invoice.pay", "capture", "a")
+	tr.Done("invoice.pay", "capture", "b")
+	tr.Done("invoice.pay", "capture", "c")
+	tr.Publish()
+	if c := countTotals(t, exp, em)[key]; c != 0 {
+		t.Fatalf("vacated bucket count = %d, want 0", c)
+	}
+}
+
 func TestTrackerAgesAcrossPublishes(t *testing.T) {
 	tr, em, exp, clk := newTrackerHarness(t)
 	tr.Track("invoice.pay", "capture", "m1", usd(100), clk.now)

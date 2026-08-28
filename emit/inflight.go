@@ -204,7 +204,11 @@ func (t *InFlightTracker) Publish() {
 
 	now := t.clock()
 
-	type comboBuckets map[string]int64 // bucket -> minor units
+	type bucketAgg struct {
+		minor int64 // summed minor units
+		count int64 // number of in-flight transactions
+	}
+	type comboBuckets map[string]*bucketAgg // bucket -> value+count
 	t.mu.Lock()
 	sums := map[comboKey]comboBuckets{}
 	for k, item := range t.items {
@@ -214,7 +218,14 @@ func (t *InFlightTracker) Publish() {
 			cb = comboBuckets{}
 			sums[ck] = cb
 		}
-		cb[AgeBucketFor(now.Sub(item.enqueuedAt))] += item.money.Amount
+		bucket := AgeBucketFor(now.Sub(item.enqueuedAt))
+		a := cb[bucket]
+		if a == nil {
+			a = &bucketAgg{}
+			cb[bucket] = a
+		}
+		a.minor += item.money.Amount
+		a.count++
 	}
 	// Every combo with items stays live; every live combo without items
 	// gets one zeroing pass and retires.
@@ -247,8 +258,12 @@ func (t *InFlightTracker) Publish() {
 		for _, bucket := range AgeBuckets {
 			// The combo carries its currency's true exponent — a
 			// hardcoded one would misstate zero-exponent currencies.
-			money := biz.Money{Amount: cb[bucket], Currency: ck.currency, Exponent: ck.exponent}
-			t.em.SetInFlight(ck.flow, ck.stage, bucket, money)
+			var minor, count int64
+			if a := cb[bucket]; a != nil {
+				minor, count = a.minor, a.count
+			}
+			money := biz.Money{Amount: minor, Currency: ck.currency, Exponent: ck.exponent}
+			t.em.SetInFlight(ck.flow, ck.stage, bucket, money, count)
 		}
 	}
 }

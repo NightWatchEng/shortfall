@@ -63,7 +63,7 @@ func labelsFor(name string) []string {
 		return valueLabels
 	case "biz_txn_total":
 		return txnLabels
-	case "biz_inflight_value":
+	case "biz_inflight_value", "biz_inflight_count":
 		return inflightLabels
 	case "biz_provider_calls_total":
 		return providerLabels
@@ -76,7 +76,9 @@ func labelsFor(name string) []string {
 
 // isGauge reports whether a family is a gauge (a level) rather than a
 // counter (a delta).
-func isGauge(name string) bool { return name == "biz_inflight_value" }
+func isGauge(name string) bool {
+	return name == "biz_inflight_value" || name == "biz_inflight_count"
+}
 
 // sink writes one metric line. writerSink is line-delimited (files, tests);
 // packetSink sends one UDP datagram per line.

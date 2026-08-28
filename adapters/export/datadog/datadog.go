@@ -37,6 +37,7 @@ var familyTags = map[string][]string{
 	"biz_value_total":          {"flow", "stage", "outcome", "currency", "kind", "segment"},
 	"biz_txn_total":            {"flow", "stage", "outcome", "currency", "segment"},
 	"biz_inflight_value":       {"flow", "stage", "age_bucket", "currency"},
+	"biz_inflight_count":       {"flow", "stage", "age_bucket", "currency"},
 	"biz_provider_calls_total": {"provider", "op", "outcome"},
 	"biz_dropped_events_total": {"reason"},
 }
@@ -133,8 +134,8 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 			return fmt.Errorf("datadog: unknown metric family %q", p.Name)
 		}
 		typ := "count"
-		if p.Name == "biz_inflight_value" {
-			typ = "gauge"
+		if p.Name == "biz_inflight_value" || p.Name == "biz_inflight_count" {
+			typ = "gauge" // both in-flight family gauges are levels
 		}
 		items = append(items, seriesItem{
 			Metric: p.Name,

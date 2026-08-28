@@ -26,7 +26,7 @@ import (
 )
 
 // gaugeFamilies are the metric names read as a level rather than a delta.
-var gaugeFamilies = map[string]bool{"biz_inflight_value": true}
+var gaugeFamilies = map[string]bool{"biz_inflight_value": true, "biz_inflight_count": true}
 
 // Querier serves QueryMetric/QueryEvents from in-memory data.
 type Querier struct {
