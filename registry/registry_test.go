@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -177,6 +178,75 @@ func TestNegativeFixtures(t *testing.T) {
 			}
 			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(c.wantMsg)) {
 				t.Fatalf("error %q does not name %q", err, c.wantMsg)
+			}
+		})
+	}
+}
+
+func TestSeverityLadder(t *testing.T) {
+	base := `version: 1
+segments: [smb]
+%s
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    currencies: [USD]
+    stages: [{ name: capture, signals: ["q:c"] }]
+    sla: { capture: { deadline: PT30M, on_breach: lost } }
+    estimator: { default_minor: 100 }
+    baseline: { seasonality: hour_of_week, lookback_weeks: 8 }
+    recovery: { model: usage_loss_curve, recovered_fraction: 0.5, within: PT2H }
+    reconcile: { source: "sql:x" }
+`
+	t.Run("valid ladder parses, ordered most-severe first", func(t *testing.T) {
+		reg, err := Parse([]byte(fmt.Sprintf(base, `severity:
+  - { sev: SEV1, min_per_minute: 100000 }
+  - { sev: SEV2, min_per_minute: 10000 }`)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(reg.Severity) != 2 || reg.Severity[0].Sev != "SEV1" || reg.Severity[0].MinPerMinuteMinor != 100000 || reg.Severity[1].Sev != "SEV2" {
+			t.Fatalf("ladder = %+v", reg.Severity)
+		}
+	})
+	t.Run("absent ladder is allowed (no suggestion)", func(t *testing.T) {
+		reg, err := Parse([]byte(fmt.Sprintf(base, "")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(reg.Severity) != 0 {
+			t.Fatalf("expected no ladder, got %+v", reg.Severity)
+		}
+	})
+	neg := []struct{ name, sev, want string }{
+		{"non-descending floors", `severity:
+  - { sev: SEV2, min_per_minute: 10000 }
+  - { sev: SEV1, min_per_minute: 100000 }`, "strictly less"},
+		{"equal floors", `severity:
+  - { sev: SEV1, min_per_minute: 10000 }
+  - { sev: SEV2, min_per_minute: 10000 }`, "strictly less"},
+		{"duplicate sev", `severity:
+  - { sev: SEV1, min_per_minute: 100000 }
+  - { sev: SEV1, min_per_minute: 10000 }`, "twice"},
+		{"non-positive floor", `severity:
+  - { sev: SEV1, min_per_minute: 0 }`, "positive"},
+		{"empty sev", `severity:
+  - { sev: "", min_per_minute: 100000 }`, "non-empty"},
+		{"sev with whitespace", `severity:
+  - { sev: "SEV 1", min_per_minute: 100000 }`, "whitespace"},
+		{"sev too long", `severity:
+  - { sev: SEV1thisnameiswaytoolongtobeapagerlabel, min_per_minute: 100000 }`, "32 characters"},
+		{"unknown field in a severity entry", `severity:
+  - { sev: SEV1, min_per_min: 100000 }`, "min_per_min"},
+	}
+	for _, c := range neg {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse([]byte(fmt.Sprintf(base, c.sev)))
+			if err == nil {
+				t.Fatal("accepted an invalid ladder")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(c.want)) {
+				t.Fatalf("error %q does not name %q", err, c.want)
 			}
 		})
 	}

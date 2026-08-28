@@ -5,6 +5,10 @@ version: 1
 segments: [smb, enterprise]
 propagation:
   allow_hosts: ["*.internal.example.com", "api.example.com"]
+severity:
+  - { sev: SEV1, min_per_minute: 100000 }
+  - { sev: SEV2, min_per_minute: 10000 }
+  - { sev: SEV3, min_per_minute: 1000 }
 flows:
   invoice.pay:
     money: { kind: fee }
