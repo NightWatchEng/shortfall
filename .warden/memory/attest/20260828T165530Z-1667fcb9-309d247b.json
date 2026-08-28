@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "1667fcb926a5722fdd67d45d8278b9bed449c870",
+  "base_sha": "453a271c589991ce605d65c8c14956344c6961ae",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T16:55:30+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5) \u2014 combined reviewer+examiner pass (docs-only diff), adversarial self-verification of every snippet identifier against the tree"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same combined pass; refuted 4 candidates (ADR-0010 phrasing, promexport alias, CLI elision, signature claims) with cited evidence"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T16:55:30+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "1667fcb926a5722fdd67d45d8278b9bed449c870",
+      "base_sha": "453a271c589991ce605d65c8c14956344c6961ae",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/adapters.md",
+      "line": 50,
+      "severity": "LOW",
+      "finding": "The read-boundary snippet could not compile as written: q redeclared via := across two querier types, an invented sqladapter alias never shown (real package name sql, shadowed by database/sql two lines above; repo convention aliases it sqlq), and a dangling unused emitter in the export block.",
+      "evidence": "adapters/query/sql/sql.go:19 package sql; cmd/shortfall/impact.go:15 sqlq alias; promql.New returns a different type.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Split into two alternative blocks with the sqlq alias shown as an import comment (matching the CLI's real wiring); the export block now uses its emitter with a Record call.",
+      "id": "c4582a689b0aed72"
+    }
+  ]
+}
