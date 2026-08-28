@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "6328e21d8d90a16b3d4cfc90531859d6ae003b32",
+  "base_sha": "4d9210fa301dc7147578dc71b7200cf853c84506",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T08:47:12+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8) \u2014 docs-accuracy verification of ADR-0010 against the webhook and reconciler code"
+    }
+  ],
+  "records": []
+}
