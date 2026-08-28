@@ -96,6 +96,47 @@ func TestRealizedLegEventsPath(t *testing.T) {
 	}
 }
 
+func TestRealizedLegInconsistentDuplicatesCaveated(t *testing.T) {
+	// One entity with two DIFFERENT failed amounts violates the identical-
+	// duplicate precondition: the leg must flag it, not silently average an
+	// exact-looking figure. 100 + 101 over 2 events → SumMinor 201, Count 2,
+	// not divisible, so the caveat fires.
+	events := []biz.Outcome{
+		evAt(1, "invoice.pay", "inv_1", biz.ResultFailed, 100, "USD"),
+		evAt(2, "invoice.pay", "inv_1", biz.ResultFailed, 101, "USD"),
+	}
+	q := memq.New(memq.WithEvents(events))
+	leg, err := RealizedLeg(context.Background(), nil, q, Request{Window: win, Flows: []string{"invoice.pay"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(leg.Caveats) == 0 {
+		t.Fatal("inconsistent duplicate amounts must produce a caveat")
+	}
+	if leg.Count != 1 {
+		t.Fatalf("count = %d, want 1 (still one entity)", leg.Count)
+	}
+}
+
+func TestRealizedLegScopeDoesNotOverrideOutcome(t *testing.T) {
+	// A Scope carrying a reserved key must not hijack the leg's own filter.
+	events := []biz.Outcome{
+		evAt(1, "invoice.pay", "inv_1", biz.ResultFailed, 500, "USD"),
+		evAt(2, "invoice.pay", "inv_2", biz.ResultSuccess, 900, "USD"),
+	}
+	q := memq.New(memq.WithEvents(events))
+	leg, err := RealizedLeg(context.Background(), nil, q, Request{
+		Window: win, Flows: []string{"invoice.pay"}, Scope: Scope{"outcome": "success"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// outcome=failed still wins, so only the failed 500 is realized.
+	if leg.ByCurrency["USD"] != 500 {
+		t.Fatalf("USD = %d, want 500 (scope must not override outcome)", leg.ByCurrency["USD"])
+	}
+}
+
 func TestRealizedLegMetricsOnlyCarriesCaveat(t *testing.T) {
 	metrics := []emit.MetricPoint{{
 		Name:   "biz_value_total",
@@ -171,12 +212,15 @@ func TestRealizedLegMatchesGoldenScenario(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The events path is an exact integer sum, so it must match ground truth
+	// EXACTLY (well within the AC's 0.5%). This test covers the sum/feeder/
+	// memq integration on realistic data; the de-dup and recovery-exclusion
+	// branches (which the harness never triggers — one terminal state per
+	// unique txn) are covered by TestRealizedLegEventsPath with synthetic
+	// events.
 	got := leg.ByCurrency["USD"]
-	diff := float64(got-wantUSD) / float64(wantUSD)
-	if diff < 0 {
-		diff = -diff
-	}
-	if diff > 0.005 {
-		t.Fatalf("realized USD = %d, want ~%d (%.3f%% off, tolerance 0.5%%)", got, wantUSD, diff*100)
+	if got != wantUSD {
+		diff := float64(got-wantUSD) / float64(wantUSD) * 100
+		t.Fatalf("realized USD = %d, want exactly %d (%.3f%% off)", got, wantUSD, diff)
 	}
 }
