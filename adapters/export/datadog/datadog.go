@@ -4,11 +4,21 @@
 // this package maps payloads and holds two clients, one per intake endpoint.
 //
 // Nested module — a non-Datadog user pulls neither this nor its plumbing.
-// Both signals are honest (Capabilities Metrics+Events). Metric tags and log
-// ddtags carry only the ADR-0004 bounded dimensions; amounts and ids ride in
-// the log message, never as a metric tag or a log tag. Metric points keep
-// their own timestamp (v1 series is timestamped), so a delayed batch is not
-// restamped to now.
+// Both signals are honest (Capabilities Metrics+Events). Amounts and ids ride
+// in the log message, never as a metric tag or a log ddtag. Metric points
+// keep their own timestamp (v1 series is timestamped), so a delayed batch is
+// not restamped to now.
+//
+// Tag cardinality, honestly. Metric tags come from emit.MetricPoint labels,
+// which the emitter has already fenced per ADR-0004 (an unregistered flow or
+// stage is collapsed to "unregistered"), so metric tag cardinality is
+// bounded. Log ddtags are different: they are built from the outcome EVENT,
+// which deliberately keeps the RAW flow/stage names for diagnosis, and this
+// exporter holds no registry to fence with. The ddtag KEYS are fixed
+// (flow/stage/outcome) and `outcome` is a bounded enum, but the flow/stage
+// VALUES are raw — an unregistered, typo'd, or dynamically-named flow mints a
+// new Datadog tag value. Keep your flow and stage namespaces bounded (as the
+// registry does). ADR-0004's cardinality guarantee is scoped to metrics.
 package datadog
 
 import (
@@ -158,8 +168,9 @@ type logItem struct {
 }
 
 // ExportEvents maps each outcome to a Datadog log whose message is the full
-// outcome JSON (amounts and ids included) and whose ddtags are the bounded
-// dimensions only.
+// outcome JSON (amounts and ids included) and whose ddtags are the fixed
+// flow/stage/outcome keys — raw event values, so bounded only insofar as the
+// caller's flows/stages are (see the package doc's tag-cardinality note).
 func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error {
 	if len(batch) == 0 {
 		return nil

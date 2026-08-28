@@ -165,6 +165,73 @@ func TestRetryPropagates(t *testing.T) {
 	}
 }
 
+// TestChunkingAtMaxBatch exercises the 500-item chunk boundary on both the
+// series and logs paths: a batch over the limit must split into multiple
+// posts with the total preserved (no dropped or duplicated item).
+func TestChunkingAtMaxBatch(t *testing.T) {
+	cases := []struct {
+		name  string
+		n     int
+		posts int
+	}{
+		{"exactly one chunk", maxBatch, 1},
+		{"one over", maxBatch + 1, 2},
+		{"several", maxBatch*2 + 7, 3},
+	}
+	for _, c := range cases {
+		t.Run("metrics/"+c.name, func(t *testing.T) {
+			d := &routeDoer{}
+			e := New("key", WithHTTPClient(d))
+			batch := make([]emit.MetricPoint, c.n)
+			for i := range batch {
+				batch[i] = emit.MetricPoint{Name: "biz_txn_total", Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "o", "currency": "USD", "segment": "smb"}, Value: 1, At: at}
+			}
+			if err := e.ExportMetrics(context.Background(), batch); err != nil {
+				t.Fatal(err)
+			}
+			if len(d.series) != c.posts {
+				t.Fatalf("series posts = %d, want %d", len(d.series), c.posts)
+			}
+			total := 0
+			for _, b := range d.series {
+				var p seriesPayload
+				if err := json.Unmarshal(b, &p); err != nil {
+					t.Fatal(err)
+				}
+				total += len(p.Series)
+			}
+			if total != c.n {
+				t.Fatalf("series items = %d, want %d (lost/dup)", total, c.n)
+			}
+		})
+		t.Run("logs/"+c.name, func(t *testing.T) {
+			d := &routeDoer{}
+			e := New("key", WithHTTPClient(d))
+			batch := make([]biz.Outcome, c.n)
+			for i := range batch {
+				batch[i] = biz.Outcome{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed}
+			}
+			if err := e.ExportEvents(context.Background(), batch); err != nil {
+				t.Fatal(err)
+			}
+			if len(d.logs) != c.posts {
+				t.Fatalf("logs posts = %d, want %d", len(d.logs), c.posts)
+			}
+			total := 0
+			for _, b := range d.logs {
+				var logs []logItem
+				if err := json.Unmarshal(b, &logs); err != nil {
+					t.Fatal(err)
+				}
+				total += len(logs)
+			}
+			if total != c.n {
+				t.Fatalf("log items = %d, want %d (lost/dup)", total, c.n)
+			}
+		})
+	}
+}
+
 func TestGoldenPayloads(t *testing.T) {
 	d := &routeDoer{}
 	e := New("key", WithHTTPClient(d))
