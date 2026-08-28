@@ -381,20 +381,22 @@ func TestSteppedFanOutBounded(t *testing.T) {
 	}
 }
 
-// errAtDoer fails the request whose eval time matches failAt immediately;
-// every other request blocks until its context is cancelled, modelling an
-// in-flight call aborted by the fan-out's cancel.
+// errAtDoer fails the first request to arrive immediately; every later
+// request blocks until its context is cancelled, modelling in-flight calls
+// aborted by the fan-out's cancel. Failing by arrival (not by bucket)
+// guarantees the failure is always issued, so the cancel always fires and
+// the test cannot deadlock on the semaphore.
 type errAtDoer struct {
-	failAt string
-	mu     sync.Mutex
-	n      int
+	mu sync.Mutex
+	n  int
 }
 
 func (e *errAtDoer) Do(req *http.Request) (*http.Response, error) {
 	e.mu.Lock()
 	e.n++
+	first := e.n == 1
 	e.mu.Unlock()
-	if req.URL.Query().Get("time") == e.failAt {
+	if first {
 		return &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("boom"))}, nil
 	}
 	<-req.Context().Done()
@@ -408,7 +410,7 @@ func (e *errAtDoer) Do(req *http.Request) (*http.Response, error) {
 // remaining buckets observe the cancelled context and never issue a
 // request, so at most steppedConcurrency requests exist.
 func TestSteppedFanOutReportsRealError(t *testing.T) {
-	d := &errAtDoer{failAt: evalAt(from.Add(time.Minute))} // first bucket fails
+	d := &errAtDoer{} // the first request to arrive fails
 	q := New("http://prom", WithHTTPClient(d))
 	_, err := q.QueryMetric(context.Background(), query.Query{
 		Metric: "biz_txn_total", Agg: query.AggSum,
