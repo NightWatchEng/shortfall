@@ -55,8 +55,8 @@ type Ledger struct {
 // eventMap uses the payload's `amount` field), so both sides of the coverage
 // comparison measure the same money and a partial capture does not read as a
 // telemetry drift. Surfacing captured-vs-intended shortfall on partial captures
-// is a separate concern (both sides currently use the intended amount) tracked
-// for a future ADR, not silently decided here.
+// is a separate concern (both sides currently use the intended amount), the
+// basis ratified in ADR-0010, not silently decided here.
 func Reconcile(ctx context.Context, fetch PageFunc, since time.Time) (Ledger, error) {
 	type key struct {
 		flow, currency string
