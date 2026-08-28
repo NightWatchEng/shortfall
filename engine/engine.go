@@ -12,7 +12,6 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/query"
@@ -122,16 +121,51 @@ type Report struct {
 	Severity        string
 }
 
-// ErrNotImplemented marks legs whose milestone has not landed. Compute
-// returns it rather than fabricating a zero-filled Report — a
-// plausible-looking empty report during an incident is worse than an
-// honest error.
-var ErrNotImplemented = errors.New("engine: not implemented yet (deterministic legs land in M6, counterfactual in M7)")
+// LibraryVersion identifies the engine's report contract for provenance.
+const LibraryVersion = "v0.1.0"
 
-// Compute answers a Request against whatever backend the Querier fronts.
+// defaultTopN is how many accounts the customers leg lists when Compute
+// assembles a report.
+const defaultTopN = 10
+
+// Compute assembles the impact report from the deterministic legs (realized,
+// deferred, customers) against whatever backend the Querier fronts. A leg
+// that its backend cannot ground is marked unavailable on that leg — a
+// caveat for the money legs, a NotAvailableReason for customers — rather than
+// failing the whole report or fabricating a zero. The counterfactual
+// (unrealized, M7) and trust (coverage, M8) legs are not yet computed and say
+// so explicitly.
 func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req Request) (Report, error) {
-	_ = ctx
-	_ = reg
-	_ = q
-	return Report{Request: req}, ErrNotImplemented
+	report := Report{
+		Request:        req,
+		GeneratedAt:    time.Now().UTC(),
+		LibraryVersion: LibraryVersion,
+	}
+	if reg != nil {
+		report.RegistryVersion = reg.Version
+	}
+
+	if leg, err := RealizedLeg(ctx, reg, q, req); err != nil {
+		report.Realized = Leg{Evidence: EvidenceDeterministic, ByCurrency: map[string]int64{}, Caveats: []string{"unavailable: " + err.Error()}}
+	} else {
+		report.Realized = leg
+	}
+
+	if leg, err := Deferred(ctx, reg, q, req); err != nil {
+		report.Deferred = DeferredLeg{Leg: Leg{Evidence: EvidenceDeterministic, ByCurrency: map[string]int64{}, Caveats: []string{"unavailable: " + err.Error()}}}
+	} else {
+		report.Deferred = leg
+	}
+
+	if leg, err := Customers(ctx, reg, q, req, defaultTopN); err != nil {
+		report.Customers = CustomersLeg{NotAvailableReason: "query failed: " + err.Error()}
+	} else {
+		report.Customers = leg
+	}
+
+	// Not yet landed — stated honestly rather than rendered as zero.
+	report.Unrealized = EstLeg{Evidence: EvidenceEstimate, Notes: []string{"counterfactual (unrealized) leg lands in M7 — not yet computed"}}
+	report.Coverage = CoverageLeg{Evidence: EvidenceTrust, Unavailable: "reconciliation lands in M8 — no coverage ratio computed yet"}
+
+	return report, nil
 }

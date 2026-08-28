@@ -44,6 +44,8 @@ func run(args []string) int {
 		}
 		fmt.Printf("%s: ok — %d flow(s), %d segment(s)\n", args[1], len(reg.FlowNames()), len(reg.Segments))
 		return 0
+	case "impact":
+		return runImpact(args[1:], os.Stdout, os.Stderr)
 	default:
 		usage()
 		return 2
@@ -54,5 +56,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `shortfall — incident $ impact
 usage:
   shortfall validate <registry.yaml>   validate a flow registry
+  shortfall impact --registry r.yaml --from <RFC3339> --to <RFC3339> [--flow f]...
+                   [--scope k=v]... [--prometheus URL] [--sql DSN] [--format text|json|markdown]
+                                       compute the impact ledger for a window
   shortfall version                    print build provenance`)
 }
