@@ -13,7 +13,7 @@
 //
 //	CREATE TABLE biz_outcomes (
 //	  flow TEXT, stage TEXT, outcome TEXT, currency TEXT, segment TEXT,
-//	  customer_id TEXT, entity_id TEXT, amount_minor INTEGER,
+//	  kind TEXT, customer_id TEXT, entity_id TEXT, amount_minor INTEGER,
 //	  at INTEGER  -- event time as Unix nanoseconds
 //	);
 package sql
@@ -38,6 +38,7 @@ var labelColumns = map[string]string{
 	"outcome":  "outcome",
 	"currency": "currency",
 	"segment":  "segment",
+	"kind":     "kind",
 	"customer": "customer_id",
 	"entity":   "entity_id",
 }
@@ -107,12 +108,15 @@ func (q *Querier) QueryEvents(ctx context.Context, qy query.EventQuery) (query.E
 }
 
 func (q *Querier) distinctCount(ctx context.Context, groupCols []string, whereSQL string, args []any) (query.EventGroups, error) {
-	inner := "SELECT 1"
+	// With no GroupBy the distinct count of empty tuples is 1 if any row
+	// matches, else 0 (memq canonicalizes every event's empty key to the same
+	// value). SELECT DISTINCT 1 collapses all matching rows to one, so
+	// COUNT(*) is 1/0 — NOT the row count. With GroupBy it is the count of
+	// distinct column combinations.
+	inner := "SELECT DISTINCT 1"
 	if len(groupCols) > 0 {
 		inner = "SELECT DISTINCT " + strings.Join(groupCols, ", ")
 	}
-	// With no GroupBy, distinct count over no columns is 1 if any row matches,
-	// else 0 — mirror memq (a single group counting distinct combinations).
 	sqlText := fmt.Sprintf("SELECT COUNT(*) FROM (%s FROM %s%s)", inner, q.table, whereSQL)
 	var n int64
 	if err := q.db.QueryRowContext(ctx, sqlText, args...).Scan(&n); err != nil {
@@ -130,7 +134,7 @@ func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []s
 	if len(groupCols) > 0 {
 		sqlText += " GROUP BY " + strings.Join(groupCols, ", ")
 	}
-	if ord := orderClause(qy.OrderBy, groupCols); ord != "" {
+	if ord := orderClause(qy.OrderBy, tiebreakCols(qy.GroupBy)); ord != "" {
 		sqlText += ord
 	} else if qy.Limit > 0 {
 		return nil, fmt.Errorf("sql: Limit requires an OrderBy (OrderNone + Limit>0 is undefined)")
@@ -205,10 +209,10 @@ func whereClause(qy query.EventQuery) (string, []any, error) {
 	return " WHERE " + strings.Join(conds, " AND "), args, nil
 }
 
-// orderClause renders the ORDER BY. A secondary sort by the group columns
-// gives a deterministic total order (matching memq's key tiebreak) so a Limit
-// keeps the same groups the reference would.
-func orderClause(o query.EventOrder, groupCols []string) string {
+// orderClause renders the ORDER BY. tiebreakCols is a deterministic secondary
+// sort that matches memq's key tiebreak, so a Limit keeps the same groups the
+// reference would.
+func orderClause(o query.EventOrder, tiebreakCols []string) string {
 	var primary string
 	switch o {
 	case query.OrderSumDesc:
@@ -219,10 +223,25 @@ func orderClause(o query.EventOrder, groupCols []string) string {
 		return ""
 	}
 	terms := []string{primary}
-	for _, c := range groupCols {
+	for _, c := range tiebreakCols {
 		terms = append(terms, c+" ASC")
 	}
 	return " ORDER BY " + strings.Join(terms, ", ")
+}
+
+// tiebreakCols returns the group columns ordered to match memq's canonical
+// key tiebreak, which sorts by label NAME (not GroupBy order). So a Limit on a
+// multi-key ordered query keeps the same groups the reference would.
+func tiebreakCols(groupBy []string) []string {
+	names := append([]string(nil), groupBy...)
+	sort.Strings(names)
+	cols := make([]string, 0, len(names))
+	for _, n := range names {
+		if c, ok := labelColumns[n]; ok {
+			cols = append(cols, c)
+		}
+	}
+	return cols
 }
 
 // currencyInvariant refuses a sum that could cross currencies unless currency

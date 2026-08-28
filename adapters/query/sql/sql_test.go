@@ -38,14 +38,14 @@ func seed(t *testing.T, events []biz.Outcome) *Querier {
 	t.Cleanup(func() { _ = db.Close() })
 	_, err = db.Exec(`CREATE TABLE biz_outcomes (
 		flow TEXT, stage TEXT, outcome TEXT, currency TEXT, segment TEXT,
-		customer_id TEXT, entity_id TEXT, amount_minor INTEGER, at INTEGER)`)
+		kind TEXT, customer_id TEXT, entity_id TEXT, amount_minor INTEGER, at INTEGER)`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, o := range events {
-		_, err := db.Exec(`INSERT INTO biz_outcomes VALUES (?,?,?,?,?,?,?,?,?)`,
+		_, err := db.Exec(`INSERT INTO biz_outcomes VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			o.VC.Flow, o.Stage, string(o.Result), o.VC.Money.Currency, o.VC.Segment,
-			o.VC.CustomerID, o.VC.EntityID, o.VC.Money.Amount, o.At.UnixNano())
+			string(o.VC.Kind), o.VC.CustomerID, o.VC.EntityID, o.VC.Money.Amount, o.At.UnixNano())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -126,6 +126,14 @@ func TestParityWithMemq(t *testing.T) {
 		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, GroupBy: []string{"customer"}, OrderBy: query.OrderSumDesc, Limit: 2},
 		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, GroupBy: []string{"customer", "segment"}},
 		{Range: rng(), Filters: map[string]string{"outcome": "failed"}, GroupBy: []string{"customer"}, Agg: query.EventAggDistinctCount},
+		// Empty-GroupBy distinct count: must be 1 (any match), not the row count.
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, Agg: query.EventAggDistinctCount},
+		// OrderCountDesc with a limit.
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, GroupBy: []string{"customer"}, OrderBy: query.OrderCountDesc, Limit: 2},
+		// Ordered multi-key (segment,customer): tiebreak must match memq's name-sorted canonical order.
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, GroupBy: []string{"segment", "customer"}, OrderBy: query.OrderSumDesc},
+		// Group/filter by kind (parity for the kind label).
+		{Range: rng(), Filters: map[string]string{"outcome": "failed"}, GroupBy: []string{"currency", "kind"}},
 	}
 	for i, qy := range queries {
 		sgroups, err := sq.QueryEvents(ctx, qy)
