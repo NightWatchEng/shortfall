@@ -172,5 +172,9 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 	// Not yet landed — stated honestly rather than rendered as zero.
 	report.Coverage = CoverageLeg{Evidence: EvidenceTrust, Unavailable: "reconciliation lands in M8 — no coverage ratio computed yet"}
 
+	// Suggested severity from the $/min-at-risk ladder (ADR-0013); "" when the
+	// registry declares no ladder or nothing clears the lowest threshold.
+	report.Severity = SuggestSeverity(reg, report)
+
 	return report, nil
 }

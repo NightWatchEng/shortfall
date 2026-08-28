@@ -33,9 +33,21 @@ type Registry struct {
 	Version     int
 	Segments    []string
 	Propagation Propagation
+	Severity    []SeverityThreshold // ordered most-severe first; empty = no suggestion
 	flows       map[string]Flow
 
 	segmentSet map[string]struct{}
+}
+
+// SeverityThreshold maps a dollars-per-minute-at-risk floor to a suggested
+// severity: a $/min rate at or above MinPerMinuteMinor suggests Sev. Thresholds
+// are ordered most-severe first (largest floor first). Floors are minor units
+// per minute, at the registry author's currency and exponent — e.g. a flow
+// losing $2M/hour is 200,000,000 minor/hour ÷ 60 ≈ 3,333,333 minor/min at
+// exponent 2 (USD cents).
+type SeverityThreshold struct {
+	Sev               string
+	MinPerMinuteMinor int64
 }
 
 // Propagation declares where biz.vc may be injected (deny by default).
@@ -245,7 +257,13 @@ type registryDoc struct {
 	Version     int                `yaml:"version"`
 	Segments    []string           `yaml:"segments"`
 	Propagation propagationDoc     `yaml:"propagation"`
+	Severity    []severityDoc      `yaml:"severity,omitempty"`
 	Flows       map[string]flowDoc `yaml:"flows"`
+}
+
+type severityDoc struct {
+	Sev          string `yaml:"sev"`
+	MinPerMinute int64  `yaml:"min_per_minute"`
 }
 
 type propagationDoc struct {
@@ -363,6 +381,31 @@ func Parse(raw []byte) (Registry, error) {
 		hosts = append(hosts, h)
 	}
 	r.Propagation = Propagation{AllowHosts: hosts}
+
+	// Severity thresholds (optional): a $/min-at-risk ladder, most-severe first.
+	// Each floor must be positive and STRICTLY DECREASING, so "the highest sev
+	// whose floor a rate clears" is unambiguous; a duplicate sev or an
+	// out-of-order floor is a config error, not a silent tie.
+	seen := map[string]struct{}{}
+	for i, sd := range doc.Severity {
+		// A severity name is a display label (SEV1, P1, Critical) — not a metric
+		// token — so it allows mixed case, but must be a single non-empty,
+		// bounded, whitespace-free word (it lands in the report and a pager).
+		if sd.Sev == "" || len(sd.Sev) > 32 || strings.ContainsFunc(sd.Sev, func(r rune) bool { return r <= ' ' || r == 127 }) {
+			return Registry{}, fmt.Errorf("severity[%d].sev %q must be a non-empty word of at most 32 characters with no whitespace", i, sd.Sev)
+		}
+		if _, dup := seen[sd.Sev]; dup {
+			return Registry{}, fmt.Errorf("severity[%d]: sev %q declared twice", i, sd.Sev)
+		}
+		seen[sd.Sev] = struct{}{}
+		if sd.MinPerMinute <= 0 {
+			return Registry{}, fmt.Errorf("severity[%d] (%s): min_per_minute %d must be positive minor units", i, sd.Sev, sd.MinPerMinute)
+		}
+		if i > 0 && sd.MinPerMinute >= doc.Severity[i-1].MinPerMinute {
+			return Registry{}, fmt.Errorf("severity[%d] (%s): min_per_minute %d must be strictly less than the previous threshold %d (order most-severe first)", i, sd.Sev, sd.MinPerMinute, doc.Severity[i-1].MinPerMinute)
+		}
+		r.Severity = append(r.Severity, SeverityThreshold{Sev: sd.Sev, MinPerMinuteMinor: sd.MinPerMinute})
+	}
 
 	if len(doc.Flows) == 0 {
 		return Registry{}, fmt.Errorf("no flows declared")
