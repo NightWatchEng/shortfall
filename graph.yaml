@@ -46,3 +46,11 @@ edges:
   - {from: cross-examiner, to: builder, payload: findings}
   - {from: builder, to: gate, payload: diff}
   - {from: gate, to: founder, payload: pr}
+# Split memory, declared as practiced by pre-pr-review: patterns feed the
+# finder, precedents feed the judge — never crossed, or the judges
+# re-correlate (retro 2026-08-28, workspace-95o).
+memory:
+  - {type: patterns, to: code-reviewer}
+  - {type: precedents, to: cross-examiner}
+verification:
+  independent_judges: [cross-examiner]

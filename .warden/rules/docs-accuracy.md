@@ -4,7 +4,7 @@ severity: MEDIUM
 engine: claude
 applies_to: ["**/*.md", "**/*.go"]
 excludes: [".warden/memory/**"]
-covers: [docs-drift, enforcement-claim-drift]
+covers: [docs-drift, enforcement-claim-drift, scope-misstatement]
 ---
 Documentation tells the truth (ADR-0008). For Markdown files and Go doc
 comments in this diff, flag when:
