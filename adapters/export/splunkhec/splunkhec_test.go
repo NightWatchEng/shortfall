@@ -50,7 +50,7 @@ func valueLbls(cur string) map[string]string {
 	return map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": cur, "kind": "fee", "segment": "smb"}
 }
 
-func TestAuthHeaderAndUnknownFamily(t *testing.T) {
+func TestAuthHeaderIsSplunkToken(t *testing.T) {
 	d := &captureDoer{}
 	e := New("https://splunk.example/services/collector", "tok123", WithHTTPClient(d))
 	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{
@@ -59,12 +59,25 @@ func TestAuthHeaderAndUnknownFamily(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d.auth != "Splunk tok123" {
-		t.Fatalf("auth header = %q", d.auth)
+		t.Fatalf("auth header = %q, want %q", d.auth, "Splunk tok123")
 	}
-	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{
-		{Name: "biz_bogus", Labels: map[string]string{}, Value: 1, At: at},
-	}); err == nil {
-		t.Fatal("unknown family must error")
+}
+
+func TestUnknownFamilyErrors(t *testing.T) {
+	cases := []struct {
+		name  string
+		point emit.MetricPoint
+	}{
+		{"bogus name", emit.MetricPoint{Name: "biz_bogus", Labels: map[string]string{}, Value: 1, At: at}},
+		{"empty name", emit.MetricPoint{Name: "", Labels: map[string]string{}, Value: 1, At: at}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := New("https://x/y", "t", WithHTTPClient(&captureDoer{}))
+			if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{c.point}); err == nil {
+				t.Fatal("unknown family must error")
+			}
+		})
 	}
 }
 
