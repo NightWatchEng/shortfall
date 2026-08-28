@@ -1,0 +1,48 @@
+=== series ===
+{
+  "series": [
+    {
+      "metric": "biz_value_total",
+      "points": [
+        [
+          1787860800,
+          14900
+        ]
+      ],
+      "tags": [
+        "currency:USD",
+        "flow:invoice.pay",
+        "kind:fee",
+        "outcome:failed",
+        "segment:smb",
+        "stage:capture"
+      ],
+      "type": "count"
+    },
+    {
+      "metric": "biz_inflight_value",
+      "points": [
+        [
+          1787860800,
+          5568661
+        ]
+      ],
+      "tags": [
+        "age_bucket:5m-30m",
+        "currency:USD",
+        "flow:invoice.pay",
+        "stage:capture"
+      ],
+      "type": "gauge"
+    }
+  ]
+}
+=== logs ===
+[
+  {
+    "ddsource": "shortfall",
+    "ddtags": "flow:invoice.pay,outcome:failed,stage:capture",
+    "message": "{\"biz.amount.est\":false,\"biz.amount_minor\":14900,\"biz.currency\":\"USD\",\"biz.customer.id\":\"h:c\",\"biz.entity.id\":\"inv_1\",\"biz.exponent\":2,\"biz.flow\":\"invoice.pay\",\"biz.outcome\":\"failed\",\"biz.segment\":\"smb\",\"biz.stage\":\"capture\",\"biz.value.kind\":\"fee\",\"source\":\"stripe:webhook\",\"timestamp\":1787860800000}",
+    "service": "shortfall"
+  }
+]
