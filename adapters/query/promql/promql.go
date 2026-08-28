@@ -1,11 +1,16 @@
 // Package promql is a metrics-only query.Querier backed by a Prometheus HTTP
-// API endpoint. It translates the frozen query AST into PromQL — counter
-// families as sum(increase(m[step])), the gauge family as the last level —
-// matching the in-memory reference (query/memq) so the engine reads the same
-// numbers from Prometheus that it reads from memq. It is events-incapable
-// (Prometheus has no event store) and returns query.ErrUnsupported for
-// QueryEvents, so the engine reports the customers leg NotAvailable rather
-// than a silent zero.
+// API endpoint. It translates the frozen query AST into PromQL chosen to match
+// the in-memory reference (query/memq) rather than PromQL's rate helpers:
+// counter families as a non-extrapolating cumulative difference across the
+// window (m @ To − m @ From), the gauge family as last_over_time. See
+// translate() for the exactness properties and their limits (monotonic-
+// counter assumption, sample-boundary alignment, Step==0 only) — numeric
+// parity against a live Prometheus is verified by the golden harness tracked
+// in workspace-0ka.
+//
+// It is events-incapable (Prometheus has no event store) and returns
+// query.ErrUnsupported for QueryEvents, so the engine reports the customers
+// leg NotAvailable rather than a silent zero.
 //
 // Nested module, stdlib only: the Prometheus HTTP API is JSON, so no client
 // library is pulled in.
@@ -16,9 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/query"
@@ -50,7 +57,7 @@ func WithMetricHistoryWeeks(w int) Option { return func(q *Querier) { q.metricHi
 // New builds a Querier for a Prometheus base URL, e.g.
 // "http://prometheus:9090".
 func New(baseURL string, opts ...Option) *Querier {
-	q := &Querier{base: baseURL, doer: &http.Client{Timeout: 30 * time.Second}, metricHistWeeks: 6}
+	q := &Querier{base: strings.TrimRight(baseURL, "/"), doer: &http.Client{Timeout: 30 * time.Second}, metricHistWeeks: 6}
 	for _, o := range opts {
 		o(q)
 	}
@@ -67,8 +74,8 @@ func (q *Querier) QueryEvents(context.Context, query.EventQuery) (query.EventGro
 	return nil, query.ErrUnsupported
 }
 
-// QueryMetric translates the query to PromQL and executes it against the
-// Prometheus HTTP API, returning the same shape the memq reference returns.
+// QueryMetric translates the query to PromQL and executes it as an instant
+// query against the Prometheus HTTP API, returning the memq Series shape.
 func (q *Querier) QueryMetric(ctx context.Context, qy query.Query) (query.Series, error) {
 	if !qy.Range.To.After(qy.Range.From) {
 		return nil, fmt.Errorf("promql: empty range [%s,%s)", qy.Range.From, qy.Range.To)
@@ -77,10 +84,7 @@ func (q *Querier) QueryMetric(ctx context.Context, qy query.Query) (query.Series
 	if err != nil {
 		return nil, err
 	}
-	if ex.instant {
-		return q.instant(ctx, ex)
-	}
-	return q.rangeQuery(ctx, ex)
+	return q.instant(ctx, ex)
 }
 
 // promResponse is the Prometheus HTTP API envelope.
@@ -102,21 +106,6 @@ func (q *Querier) instant(ctx context.Context, ex promExpr) (query.Series, error
 		return nil, err
 	}
 	return parseVector(body)
-}
-
-func (q *Querier) rangeQuery(ctx context.Context, ex promExpr) (query.Series, error) {
-	v := url.Values{}
-	v.Set("query", ex.expr)
-	v.Set("start", formatTime(ex.start))
-	// Prometheus range end is inclusive; the frozen range is half-open, so
-	// stop one step before To to avoid an extra boundary bucket.
-	v.Set("end", formatTime(ex.end.Add(-time.Second)))
-	v.Set("step", promDuration(ex.step))
-	body, err := q.get(ctx, "/api/v1/query_range", v)
-	if err != nil {
-		return nil, err
-	}
-	return parseMatrix(body)
 }
 
 func (q *Querier) get(ctx context.Context, path string, v url.Values) ([]byte, error) {
@@ -164,34 +153,6 @@ func parseVector(body []byte) (query.Series, error) {
 	return out, nil
 }
 
-// parseMatrix parses a range-query matrix into a Series (points per series).
-func parseMatrix(body []byte) (query.Series, error) {
-	env, err := decodeEnvelope(body)
-	if err != nil {
-		return nil, err
-	}
-	out := make(query.Series, 0, len(env.Data.Result))
-	for _, raw := range env.Data.Result {
-		var r struct {
-			Metric map[string]string    `json:"metric"`
-			Values [][2]json.RawMessage `json:"values"`
-		}
-		if err := json.Unmarshal(raw, &r); err != nil {
-			return nil, fmt.Errorf("promql: decode matrix series: %w", err)
-		}
-		pts := make([]query.Point, 0, len(r.Values))
-		for _, pair := range r.Values {
-			ts, val, err := sample(pair)
-			if err != nil {
-				return nil, err
-			}
-			pts = append(pts, query.Point{At: ts, Value: val})
-		}
-		out = append(out, query.SeriesSlice{Labels: r.Metric, Points: pts})
-	}
-	return out, nil
-}
-
 func decodeEnvelope(body []byte) (promResponse, error) {
 	var env promResponse
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -217,6 +178,11 @@ func sample(pair [2]json.RawMessage) (time.Time, float64, error) {
 	val, err := strconv.ParseFloat(valStr, 64)
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("promql: parse value %q: %w", valStr, err)
+	}
+	// Reject NaN/±Inf: Prometheus can return these as literal strings, and a
+	// non-finite value poisons every downstream sum. memq never produces one.
+	if math.IsNaN(val) || math.IsInf(val, 0) {
+		return time.Time{}, 0, fmt.Errorf("promql: non-finite value %q", valStr)
 	}
 	sec := int64(tsF)
 	nsec := int64((tsF - float64(sec)) * 1e9)

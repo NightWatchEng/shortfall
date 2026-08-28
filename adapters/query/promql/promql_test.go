@@ -18,32 +18,29 @@ var (
 )
 
 func TestTranslate(t *testing.T) {
+	tT, tF := promTime(to), promTime(from)
 	cases := []struct {
-		name        string
-		q           query.Query
-		wantExpr    string
-		wantInstant bool
-		wantErr     bool
+		name     string
+		q        query.Query
+		wantExpr string
+		wantErr  bool
 	}{
 		{
-			name: "counter, whole range, instant increase",
+			name: "counter is an exact cumulative difference, not increase()",
 			q: query.Query{Metric: "biz_value_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to},
 				Filters: map[string]string{"outcome": "failed", "flow": "invoice.pay"}, GroupBy: []string{"currency"}},
-			wantExpr:    `sum by (currency) (increase(biz_value_total{flow="invoice.pay",outcome="failed"}[3600s]))`,
-			wantInstant: true,
+			wantExpr: `sum by (currency) (biz_value_total{flow="invoice.pay",outcome="failed"} @ ` + tT +
+				`) - sum by (currency) (biz_value_total{flow="invoice.pay",outcome="failed"} @ ` + tF + `)`,
 		},
 		{
-			name:        "counter, stepped range",
-			q:           query.Query{Metric: "biz_txn_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}, Step: time.Minute},
-			wantExpr:    `sum (increase(biz_txn_total[60s]))`,
-			wantInstant: false,
+			name:     "gauge reads the carried-forward level via last_over_time",
+			q:        query.Query{Metric: "biz_inflight_value", Range: query.TimeRange{From: from, To: to}, GroupBy: []string{"age_bucket", "currency"}},
+			wantExpr: `sum by (age_bucket, currency) (last_over_time(biz_inflight_value[3600s] @ ` + tT + `))`,
 		},
 		{
-			name: "gauge reads the level, not increase",
-			q: query.Query{Metric: "biz_inflight_value", Range: query.TimeRange{From: from, To: to},
-				GroupBy: []string{"age_bucket", "currency"}},
-			wantExpr:    `sum by (age_bucket, currency) (biz_inflight_value)`,
-			wantInstant: true,
+			name:    "stepped queries are rejected (bucket alignment)",
+			q:       query.Query{Metric: "biz_txn_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}, Step: time.Minute},
+			wantErr: true,
 		},
 		{
 			name:    "AggCount is rejected",
@@ -65,9 +62,6 @@ func TestTranslate(t *testing.T) {
 			}
 			if ex.expr != c.wantExpr {
 				t.Fatalf("expr = %q\nwant   %q", ex.expr, c.wantExpr)
-			}
-			if ex.instant != c.wantInstant {
-				t.Fatalf("instant = %v, want %v", ex.instant, c.wantInstant)
 			}
 		})
 	}
@@ -114,23 +108,34 @@ func TestQueryMetricParsesInstantVector(t *testing.T) {
 	}
 }
 
-func TestQueryMetricParsesRangeMatrix(t *testing.T) {
-	body := `{"status":"success","data":{"resultType":"matrix","result":[
-		{"metric":{},"values":[[1787846400,"100"],[1787846460,"50"]]}
-	]}}`
-	d := &fakeDoer{body: body}
-	q := New("http://prom", WithHTTPClient(d))
-	series, err := q.QueryMetric(context.Background(), query.Query{
+func TestSteppedQueryRejected(t *testing.T) {
+	q := New("http://prom", WithHTTPClient(&fakeDoer{body: `{"status":"success","data":{"resultType":"vector","result":[]}}`}))
+	_, err := q.QueryMetric(context.Background(), query.Query{
 		Metric: "biz_txn_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}, Step: time.Minute,
 	})
-	if err != nil {
+	if err == nil {
+		t.Fatal("stepped query must be rejected until parity is proven (workspace-0ka)")
+	}
+}
+
+func TestNonFiniteValueRejected(t *testing.T) {
+	d := &fakeDoer{body: `{"status":"success","data":{"resultType":"vector","result":[
+		{"metric":{"currency":"USD"},"value":[1787846400,"NaN"]}
+	]}}`}
+	q := New("http://prom", WithHTTPClient(d))
+	if _, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_value_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}}); err == nil {
+		t.Fatal("a NaN value must be rejected, not flowed to the engine as money")
+	}
+}
+
+func TestBaseTrailingSlashNormalized(t *testing.T) {
+	d := &fakeDoer{body: `{"status":"success","data":{"resultType":"vector","result":[]}}`}
+	q := New("http://prom/", WithHTTPClient(d)) // trailing slash
+	if _, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_value_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(d.gotURL, "/api/v1/query_range?") {
-		t.Fatalf("stepped query must hit /api/v1/query_range, got %s", d.gotURL)
-	}
-	if len(series) != 1 || len(series[0].Points) != 2 || series[0].Points[0].Value != 100 || series[0].Points[1].Value != 50 {
-		t.Fatalf("parsed matrix = %+v", series)
+	if strings.Contains(d.gotURL, "prom//api") {
+		t.Fatalf("trailing slash must be normalized, got %s", d.gotURL)
 	}
 }
 
