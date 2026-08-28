@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "1ef2ace78bd76a69b3e5c357d141f6d89c945a02",
+  "base_sha": "9018eafe5a9047c671985931ab2ce5f5bcb954b0",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T17:23:43+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; verified concurrency bounds, error-preference tracing, benchmark honesty, doc freshness"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context; verified the n<=bound happens-before against the Go context source AND stress-found a reproducible deadlock in round 1's fix (3/3 hangs at -race -count=60)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T17:23:43+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "1ef2ace78bd76a69b3e5c357d141f6d89c945a02",
+      "base_sha": "9018eafe5a9047c671985931ab2ce5f5bcb954b0",
+      "rule_id": "tests-required",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/promql/promql_test.go",
+      "line": 405,
+      "severity": "MEDIUM",
+      "finding": "The claimed cancellation behavior had no test able to exercise it (3 buckets under the bound of 8; the ctx.Err() early-exit branch unreachable; the doer's request counter never asserted).",
+      "evidence": "Pre-fix range: Range 1h / Step 20m; errAtDoer.n unread.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Round 1: 40 buckets vs bound 8 with blocking non-failing requests and an n<=bound assertion. Round 2 (examiner found round 1's fix could deadlock \u2014 the failing bucket could lose the semaphore race, a circular wait hit in 3/3 stress runs): the doer now fails the first ARRIVING request, so the cancel always fires; happens-before soundness of the bound assertion examiner-verified against the context implementation; stress green (2x -race -count=60, GOMAXPROCS=1 count=50).",
+      "id": "5cf8a2cb6b9ef4a0"
+    },
+    {
+      "ts": "2026-08-28T17:23:43+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "1ef2ace78bd76a69b3e5c357d141f6d89c945a02",
+      "base_sha": "9018eafe5a9047c671985931ab2ce5f5bcb954b0",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/promql/promql_test.go",
+      "line": 402,
+      "severity": "MEDIUM",
+      "finding": "The test comment claimed it pins 'the fan-out stops issuing work after the failure' while the body asserted only the error string \u2014 an enforcement claim covered by nothing (same gap as finding 1, two framings).",
+      "evidence": "Pre-fix comment vs body.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "The comment now describes exactly the mechanism the strengthened test enforces, and the n<=bound assertion enforces it.",
+      "id": "81a08410281451d5"
+    }
+  ]
+}
