@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "a1c607253cc1f5e1166ba8edcbdc2fccc4ba4f7c",
+  "base_sha": "c230ab0fa2cdf7d4698846d4cdc13466d8c13b63",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T06:09:35+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8), independent context"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Opus 4.8), separate context \u2014 two adversarial rounds, ran the parser against 30+ real Stripe paths"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T06:09:35+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "a1c607253cc1f5e1166ba8edcbdc2fccc4ba4f7c",
+      "base_sha": "c230ab0fa2cdf7d4698846d4cdc13466d8c13b63",
+      "rule_id": "unmapped:unbounded-metric-label",
+      "tags": [],
+      "dir_prefix": "adapters/payment",
+      "file": "adapters/payment/stripe/client.go",
+      "line": 182,
+      "severity": "HIGH",
+      "finding": "deriveOp leaked unbounded Stripe object ids into the op label of biz_provider_calls_total (ADR-0004 bounded-cardinality violation). First surfaced for namespaced resources (/v1/checkout/sessions/cs_x -> checkout.cs_x); a fix by id-shape was then shown to still leak user-defined all-lowercase ids (/v1/coupons/summer -> coupons.summer.list), which are shape-indistinguishable from resource words.",
+      "evidence": "Round 1: deriveOp(GET,/v1/checkout/sessions/cs_test_abc123) = checkout.cs_test_abc123. Round 2 (against the shape-based fix): deriveOp(GET,/v1/coupons/summer) = coupons.summer.list; deriveOp(GET,/v1/products/my-custom-product) = products.my-custom-product.list.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Rewrote deriveOp to strip ids by POSITION (the segment after a resource is always an id, whatever its shape), with a namespace-aware resource span (stripeNamespaces set) so ids under /v1/<ns>/<resource>/<id> land on a drop position, plus an isIDShaped backstop for auto-generated ids from any future namespace not yet in the set. Final adversarial round returned [] across namespaced, user-defined-lowercase, hyphenated, collision, degenerate, and query-string attacks.",
+      "id": "63b139867e6fa8a3"
+    },
+    {
+      "ts": "2026-08-28T06:09:35+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "a1c607253cc1f5e1166ba8edcbdc2fccc4ba4f7c",
+      "base_sha": "c230ab0fa2cdf7d4698846d4cdc13466d8c13b63",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/payment",
+      "file": "adapters/payment/stripe/client_test.go",
+      "line": 34,
+      "severity": "MEDIUM",
+      "finding": "TestDeriveOp covered only single-segment resources with auto-generated prefix_<digit> ids, so it gave false green: it exercised neither namespaced resources nor user-defined all-lowercase ids \u2014 exactly the two path classes that leaked.",
+      "evidence": "Original table had only /v1/payment_intents, /v1/customers/cus_1, /v1/charges, /v1/refunds \u2014 no /v1/checkout/sessions/... and no /v1/coupons/<custom>.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added namespaced cases (checkout/sessions, billing_portal/sessions, issuing/cards, customers/sources) and user-defined-id boundedness guards (/v1/coupons/summer, /FREESHIP, /black_friday, /25off, /v1/products/my-custom-product, /v1/plans/gold), each asserting the id is stripped from op.",
+      "id": "3d74d040968f80d7"
+    },
+    {
+      "ts": "2026-08-28T06:09:35+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "a1c607253cc1f5e1166ba8edcbdc2fccc4ba4f7c",
+      "base_sha": "c230ab0fa2cdf7d4698846d4cdc13466d8c13b63",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "adapters/payment",
+      "file": "adapters/payment/stripe/client.go",
+      "line": 158,
+      "severity": "LOW",
+      "finding": "The deriveOp/isStripeID doc comment stated a false universal invariant \u2014 that a Stripe id's suffix always carries a digit or uppercase and a resource word never does \u2014 which is exactly the wrong assumption that produced the user-defined-id leak.",
+      "evidence": "Comment claimed ids are distinguishable by shape; coupon ids summer/black_friday are ids yet all-lowercase.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Comments rewritten to describe position-based stripping and to state honestly that isIDShaped is only a backstop for unknown namespaces, not the primary id test; the documented residual (a future unknown namespace addressing sub-items by a user-defined lowercase id) is accurate and bounded, not a current leak.",
+      "id": "2825c8e5be6941ba"
+    }
+  ]
+}
