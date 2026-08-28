@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "e96556775726ceadfcfa5a9cddf87c18467e28d2",
+  "base_sha": "e7b476180dd6222370912765cb9b434e785d077d",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T14:48:41+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context, examiner memory priors"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T14:48:41+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "e96556775726ceadfcfa5a9cddf87c18467e28d2",
+      "base_sha": "e7b476180dd6222370912765cb9b434e785d077d",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/vacuous-pass.md",
+      "line": 8,
+      "severity": "MEDIUM",
+      "finding": "Rule body claimed 'two of this repo's three known escapes shipped behind exactly this shape'; in fact only two escapes ever shipped (PRs #32, #37) and the vacuous shapes were findings in PR #55's own pre-merge review, fixed before merge \u2014 nothing shipped behind them.",
+      "evidence": "git log (test/promgolden first appears on PR #55's branch); findings.jsonl ids 0135221b7785f024, b8620450d62b5f78 (status fixed, base_sha 3c70483).",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Commit e965567: body rewritten to the true history \u2014 the draft gate was vacuous in two ways, would have hidden the #32/#37 escapes, both caught in #55's own review.",
+      "id": "9e6178d2444ce215"
+    },
+    {
+      "ts": "2026-08-28T14:48:41+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "e96556775726ceadfcfa5a9cddf87c18467e28d2",
+      "base_sha": "e7b476180dd6222370912765cb9b434e785d077d",
+      "rule_id": "unmapped:promotion-evidence-mismatch",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".warden/memory",
+      "file": ".warden/memory/backtests/docs-accuracy-promote-partial-20260828.json",
+      "line": 9,
+      "severity": "MEDIUM",
+      "finding": "Backtest record asserted 'Promotion bar met' using docs-accuracy's n=51/wilson_lb=0.897, but zero of those 51 judged findings concern bead ids in comments; the promoted pattern had n=0 judged cases.",
+      "evidence": "findings.jsonl scan: no bead-id findings among the 51; the 16 removed instances came from bulk sweep commit e7b4761.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Commit e965567: backtest record deleted; comment-hygiene reframed as a NEW prevention check carrying no corpus counts (body says so); bead workspace-iml corrected with a comment withdrawing the promote-partial framing.",
+      "id": "d6183fe0465cadc2"
+    },
+    {
+      "ts": "2026-08-28T14:48:41+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "e96556775726ceadfcfa5a9cddf87c18467e28d2",
+      "base_sha": "e7b476180dd6222370912765cb9b434e785d077d",
+      "rule_id": "unmapped:regex-over-fire-string-slashes",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/comment-hygiene.md",
+      "line": 8,
+      "severity": "LOW",
+      "finding": "Pattern '//.*\\bworkspace-...' matched '//' inside string literals; sanctioned bead-id-in-string lines were one URL away from a false MEDIUM.",
+      "evidence": "declarative engine runs re.search per added line with no comment/string awareness; translate.go:58, promql_test.go:125.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Commit e965567: pattern anchored to comment-position lines '^\\s*(//|/\\*)'; zero hits on the current tree.",
+      "id": "1bf8396dec78fe1e"
+    },
+    {
+      "ts": "2026-08-28T14:48:41+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "e96556775726ceadfcfa5a9cddf87c18467e28d2",
+      "base_sha": "e7b476180dd6222370912765cb9b434e785d077d",
+      "rule_id": "unmapped:rule-body-overstates-checker",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/comment-hygiene.md",
+      "line": 16,
+      "severity": "LOW",
+      "finding": "'This check keeps them from coming back' overstated a line-comment-only regex (block comments and trailing comments pass).",
+      "evidence": "pattern requires comment-position '//' or '/*'; '/* workspace-abc */' later lines match nothing.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Commit e965567: body gains an explicit honest-scope paragraph naming what the check cannot reach and who reviews it instead.",
+      "id": "9eee04678e4b8819"
+    },
+    {
+      "ts": "2026-08-28T14:48:41+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "e96556775726ceadfcfa5a9cddf87c18467e28d2",
+      "base_sha": "e7b476180dd6222370912765cb9b434e785d077d",
+      "rule_id": "unmapped:tag-vocabulary-covers-mismatch",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden/memory",
+      "file": ".warden/memory/tags.yaml",
+      "line": 3,
+      "severity": "LOW",
+      "finding": "Claimed docs-accuracy's covers: [enforcement-claim-drift] disagrees with the declared tag vocabulary.",
+      "evidence": "warden/attest.py: covers names candidate-class rule_id slugs, a different namespace from tags; 5 corpus records use unmapped:enforcement-claim-drift, so the entry is load-bearing.",
+      "status": "dismissed-with-reason",
+      "origin": "day",
+      "reason": "Refuted by the cross-examiner: covers entries and vocabulary tags are separate namespaces per the platform contract; no disagreement exists. Its two adjacent observations were acted on anyway (docs-accuracy covers += scope-misstatement; tags.yaml namespace note).",
+      "id": "b277bba86b3cb6fc"
+    }
+  ]
+}

@@ -6,6 +6,7 @@
 tags:
   ci-gate: a CI job or gate whose wiring weakens or skips enforcement
   docs-drift: documentation describing behavior the code does not have
+  enforcement-claim: a doc or comment claiming a check that does not exist
   gauge-parity: gauge semantics diverging between backends or from the reference
   memq-parity: the in-memory reference disagreeing with a real backend
   scope-misstatement: a doc or ADR misstating what a change or pass covers
