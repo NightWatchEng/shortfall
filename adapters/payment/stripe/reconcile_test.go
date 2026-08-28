@@ -16,8 +16,8 @@ import (
 )
 
 // pi builds a payment-intent fixture. received is the captured amount, set only
-// to model a partial capture (received < amount) — the reconciler deliberately
-// ignores it and reconciles on the intended amount, which these fixtures verify.
+// to model a partial capture (received < amount) — the reconciler ignores it
+// and reconciles on the intended amount (ADR-0010), which these fixtures verify.
 // withErr attaches a last_payment_error so a non-succeeded status maps to a
 // failed loss.
 func pi(id string, status stripe.PaymentIntentStatus, amount, received int64, currency, flow string, withErr bool) *stripe.PaymentIntent {

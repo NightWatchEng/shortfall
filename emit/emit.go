@@ -40,7 +40,7 @@ var AgeBuckets = []string{AgeLt1m, Age1mTo5m, Age5mTo30m, Age30mTo2h, AgeGt2h}
 type MetricPoint struct {
 	Name   string
 	Labels map[string]string
-	// Value is int64 by design: counters count, and value sums are minor
+	// Value is int64: counters count, and value sums are minor
 	// units (ADR-0001).
 	Value int64
 	At    time.Time

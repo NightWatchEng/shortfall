@@ -80,10 +80,12 @@ an inline essay duplicating an ADR, citing this ADR by number.
 
 ## Consequences
 
-- Comment density in core packages drops substantially; what remains is
-  contract and invariant, not narration. The first application pass
-  (same PR as this ADR) tidies the core packages as worked examples; a
-  follow-up sweep covers the remaining modules.
+- Comment density drops substantially; what remains is contract and
+  invariant, not narration. The application pass shipped with this ADR
+  swept every module repo-wide (core packages, adapters, testkit,
+  examples, cmd, and the test harness); files it left untouched were
+  already compliant. From here the convention holds through review, not
+  further sweeps.
 - ADR references in code become pointers (`ADR-0004`) rather than
   paraphrases, so an ADR revision no longer strands stale copies of its
   reasoning in comments.

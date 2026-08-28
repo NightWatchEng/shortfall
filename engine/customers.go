@@ -19,7 +19,7 @@ import (
 // counts are exact even across flows (a customer hit in two flows is one
 // account).
 //
-// The leg is deliberately recovery-agnostic: ByCurrency is the gross value of
+// The leg is recovery-agnostic: ByCurrency is the gross value of
 // a customer's failed transactions, not netted for later recoveries — outreach
 // wants everyone who experienced a failure. Net-of-recovery loss is the
 // realized leg's job; do not sum this leg's ByCurrency as company loss.

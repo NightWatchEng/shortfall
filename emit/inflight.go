@@ -168,8 +168,8 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 	t.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
 }
 
-// Done records a message leaving its stage. Unknown ids are a no-op —
-// Done is idempotent by design (consumer wrappers retry).
+// Done records a message leaving its stage. Unknown ids are a no-op, so
+// Done is idempotent (consumer wrappers retry).
 func (t *InFlightTracker) Done(flow, stage, id string) {
 	t.mu.Lock()
 	delete(t.items, inflightKey{flow, stage, id})

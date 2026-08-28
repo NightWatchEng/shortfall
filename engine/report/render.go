@@ -39,7 +39,8 @@ func money(byCur map[string]int64) string {
 }
 
 // RenderText renders the incident-channel ledger block. Realized and
-// unrealized are separate lines; there is deliberately no combined total.
+// unrealized stay separate lines with no combined total — realized and
+// estimated value never merge into one number.
 func RenderText(r engine.Report) string {
 	var b strings.Builder
 	flows := strings.Join(r.Request.Flows, ", ")
