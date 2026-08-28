@@ -49,12 +49,16 @@ func outcome(entity, result, stage string) biz.Outcome {
 	}
 }
 
-func TestMetricsAreNoopEventsOnly(t *testing.T) {
-	d := &captureDoer{}
-	e := New("https://loki/x", WithHTTPClient(d))
+func TestCapabilitiesEventsOnly(t *testing.T) {
+	e := New("https://loki/x", WithHTTPClient(&captureDoer{}))
 	if c := e.Capabilities(); c.Metrics || !c.Events {
 		t.Fatalf("caps = %+v, want events-only", c)
 	}
+}
+
+func TestExportMetricsIsNoop(t *testing.T) {
+	d := &captureDoer{}
+	e := New("https://loki/x", WithHTTPClient(d))
 	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{{Name: "biz_value_total", Value: 1, At: at}}); err != nil {
 		t.Fatal(err)
 	}

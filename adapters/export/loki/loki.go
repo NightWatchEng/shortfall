@@ -4,10 +4,22 @@
 // the customers leg from here and gets its metric families from a metrics
 // exporter (Prometheus, OTLP, ...).
 //
-// Cardinality discipline (the whole point of ADR-0004, and doubly so for
-// Loki): only the BOUNDED outcome dimensions become stream LABELS — an
-// unbounded label set is the classic way to melt a Loki cluster. Amounts,
-// entity ids and customer ids ride in the LOG LINE, never as labels.
+// Cardinality discipline: stream labels are the low-cardinality dimensions
+// flow, stage and outcome; amounts, entity ids, customer ids and currency
+// ride in the LOG LINE, never as labels — an unbounded label set is the
+// classic way to melt a Loki cluster.
+//
+// One honest caveat about that boundedness. `outcome` is a fixed enum, so it
+// is structurally bounded. `flow` and `stage` are NOT fenced here: ADR-0004's
+// "unregistered" collapse is applied by the emitter to METRIC points only —
+// the outcome EVENT deliberately keeps the raw flow/stage names for
+// diagnosis, and this exporter has no registry to fence against. So Loki
+// stream cardinality follows the CALLER's flow/stage discipline: with
+// registry-driven flows (the normal case) it is bounded, but an unregistered,
+// typo'd, or dynamically-named flow mints a new stream. Keep your flow and
+// stage namespaces bounded — the same rule every Loki operator already lives
+// by. ADR-0004's "cardinality is a library guarantee" is scoped to metrics,
+// not to this log adapter.
 //
 // Thin HTTP batcher over adapters/httpbatch, which supplies retry/backoff.
 package loki
@@ -24,7 +36,9 @@ import (
 	"github.com/NightWatchEng/shortfall/emit"
 )
 
-// streamLabelKeys are the BOUNDED dimensions used as Loki stream labels.
+// streamLabelKeys are the low-cardinality dimensions used as Loki stream
+// labels: outcome (a bounded enum) plus flow and stage (bounded when the
+// caller drives them from the registry — see the package doc's caveat).
 // Everything higher-cardinality (currency, amounts, ids) stays in the line.
 var streamLabelKeys = []string{"flow", "stage", "outcome"}
 
