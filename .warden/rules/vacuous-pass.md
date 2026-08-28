@@ -5,9 +5,12 @@ engine: claude
 applies_to: ["**/*_test.go", "testkit/**", "test/**", "scripts/**", ".github/**"]
 ---
 A check that can pass without checking anything is worse than no check: it
-reads as coverage while asserting nothing. Two of this repo's three known
-escapes shipped behind exactly this shape (an empty==empty parity
-comparison; a skip that exited 0 under an explicit opt-in).
+reads as coverage while asserting nothing. The first draft of this repo's
+live parity gate was vacuous in exactly two ways — an empty==empty gauge
+comparison, and an opt-in skip that exited 0 when Docker was missing — and
+either shape would have hidden the two known escapes (PRs #32, #37) the
+gate existed to catch. Both were caught in that PR's (#55) own review; the
+corpus carries 9 judged findings of this class.
 
 Flag when this diff adds or touches:
 

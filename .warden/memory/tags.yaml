@@ -1,5 +1,8 @@
 # Tag vocabulary — the recall index's declared keys (retro 2026-08-28,
 # workspace-fl5). Unknown tags warn, never reject; the retro proposes changes.
+# These keys govern record `tags` arrays only. Rule `covers:` entries live in
+# a different namespace (candidate-class rule_id slugs, warden/attest.py) and
+# are not required to appear here.
 tags:
   ci-gate: a CI job or gate whose wiring weakens or skips enforcement
   docs-drift: documentation describing behavior the code does not have
