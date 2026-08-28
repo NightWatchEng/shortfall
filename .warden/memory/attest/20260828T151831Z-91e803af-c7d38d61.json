@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "91e803af586cc35cc5032ed38ab7304e46c8bd8c",
+  "base_sha": "7d2364036f231a29ed2b3a6b1f6eb01a45725284",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T15:18:31+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; ran the suite under macOS sh and dash"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context; re-derived each finding empirically incl. a cap-neutralized lint"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T15:18:31+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "91e803af586cc35cc5032ed38ab7304e46c8bd8c",
+      "base_sha": "7d2364036f231a29ed2b3a6b1f6eb01a45725284",
+      "rule_id": "unmapped:nonportable-printf-hex-escape",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": "scripts",
+      "file": "scripts/commit-lint-test.sh",
+      "line": 40,
+      "severity": "HIGH",
+      "finding": "The em-dash fixture used \\xHH printf escapes dash does not interpret; the newly wired CI step would fail deterministically on ubuntu-latest, blocking every PR \u2014 a local-green/CI-red skew in the very suite meant to kill one.",
+      "evidence": "dash scripts/commit-lint-test.sh -> 'FAIL: hmb fixture is not 102 bytes', exit 1; bash passes.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "POSIX octal escapes in the printf format with %s for the filler; suite verified green under dash and bash separately (no || fallback masking).",
+      "id": "f159e89d03a2f234"
+    },
+    {
+      "ts": "2026-08-28T15:18:31+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "91e803af586cc35cc5032ed38ab7304e46c8bd8c",
+      "base_sha": "7d2364036f231a29ed2b3a6b1f6eb01a45725284",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "scripts",
+      "file": "scripts/commit-lint-test.sh",
+      "line": 34,
+      "severity": "MEDIUM",
+      "finding": "The 101-byte boundary case was shape-invalid ('xfeat:'), so it passed even with the byte cap deleted \u2014 the advertised boundary was unpinned on the fail side.",
+      "evidence": "Examiner ran it against a cap-neutralized lint (-gt 100000): still rejected via the convention regex.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Replaced with a shape-valid 101-byte header (with its own byte-count self-check) that fails only via the cap; examiner-proven to isolate the cap.",
+      "id": "f16125f2b593e8c2"
+    },
+    {
+      "ts": "2026-08-28T15:18:31+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "91e803af586cc35cc5032ed38ab7304e46c8bd8c",
+      "base_sha": "7d2364036f231a29ed2b3a6b1f6eb01a45725284",
+      "rule_id": "unmapped:misleading-comment",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "scripts",
+      "file": "scripts/commit-lint-test.sh",
+      "line": 19,
+      "severity": "LOW",
+      "finding": "Comment claimed 96 filler chars; the filler is 76 (the adjacent arithmetic comment used the correct 76).",
+      "evidence": "printf '%s' \"$filler\" | wc -c -> 76.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Figure corrected to 76. Refiled from unmapped:comment-hygiene per examiner guidance: the declared comment-hygiene rule covers bead ids in Go comments, a different class; misleading-comment is an existing corpus candidate (2/2 upheld).",
+      "id": "cd759a123fe0e28d"
+    }
+  ]
+}

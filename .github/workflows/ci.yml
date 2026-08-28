@@ -175,11 +175,16 @@ jobs:
       # PR's own copy runs only on the bootstrap PR that introduces it.
       - name: pin linter to the base ref
         run: |
-          if git cat-file -e "origin/${BASE_REF}:scripts/commit-lint.sh" 2>/dev/null; then
-            git checkout "origin/${BASE_REF}" -- scripts/commit-lint.sh
-          else
-            echo "linter absent on base ref (bootstrap PR): using this PR's copy"
-          fi
+          for f in scripts/commit-lint.sh scripts/commit-lint-test.sh; do
+            if git cat-file -e "origin/${BASE_REF}:${f}" 2>/dev/null; then
+              git checkout "origin/${BASE_REF}" -- "$f"
+            else
+              echo "${f} absent on base ref (bootstrap PR): using this PR's copy"
+            fi
+          done
+      # Regression suite first (multibyte byte-cap cases), then the PR
+      # title itself.
+      - run: ./scripts/commit-lint-test.sh
       - run: ./scripts/commit-lint.sh "$PR_TITLE"
 
   gitleaks:
