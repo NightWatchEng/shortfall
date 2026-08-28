@@ -41,14 +41,20 @@ backend grounds deferred + unrealized + a metrics realized upper bound; a
 | `adapters/query/sql` | — | ✅ | any `database/sql` outcomes table; the events source (and the ledger source for coverage) |
 
 Wiring a read boundary — each adapter is one constructor away from
-`engine.Compute`:
+`engine.Compute` (either querier alone grounds its legs; the CLI shows how
+to route both at once):
 
 ```go
-q := promql.New("http://prom:9090")            // metrics legs
+// metrics legs
+q := promql.New("http://prom:9090")
+report, err := engine.Compute(ctx, &reg, q, req)
+```
 
+```go
+// event legs — the adapter's package is named sql, so alias it:
+//   sqlq "github.com/NightWatchEng/shortfall/adapters/query/sql"
 db, _ := sql.Open("sqlite", "file:outcomes.db")
-q, _ := sqladapter.New(db)                     // event legs (and the coverage ledger)
-
+q, _ := sqlq.New(db)
 report, err := engine.Compute(ctx, &reg, q, req)
 ```
 
@@ -86,6 +92,7 @@ transitions as usual:
 exp, _ := promexport.New() // owns a private registry by default
 em, _ := emit.New(&reg, exp)
 http.Handle("/metrics", promhttp.HandlerFor(exp.Gatherer(), promhttp.HandlerOpts{}))
+em.Record(ctx, "auth", biz.ResultSuccess)
 ```
 
 ```go
