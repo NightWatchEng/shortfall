@@ -21,3 +21,5 @@ use ./adapters/export/datadog
 use ./adapters/query/promql
 
 use ./adapters/query/sql
+
+use ./cmd/shortfall

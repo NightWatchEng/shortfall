@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "1edce12a4e5fde1caa93533eb208957c63b8388c",
+  "base_sha": "1e58ec2b569301c8b29308b679e347f93a39505d",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T05:11:39+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified Compute leg-failure handling, import boundary/no-cycle, combined-querier composition + cleanup, SQL injection safety, nested-module correctness; found the committed binary, the stale doc ref, and the partial Prometheus AC"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 a committed build artifact (verified via git ls-files/check-ignore), a stale doc symbol, and an honest AC-partiality note; fixes are removal + doc rewrite, no behavior change"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T05:11:39+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "1edce12a4e5fde1caa93533eb208957c63b8388c",
+      "base_sha": "1e58ec2b569301c8b29308b679e347f93a39505d",
+      "rule_id": "unmapped:committed-build-artifact",
+      "tags": [],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/shortfall",
+      "line": 0,
+      "severity": "MEDIUM",
+      "finding": "A 16MB compiled Go binary was committed; root .gitignore '/shortfall' is anchored and did not match the nested path.",
+      "evidence": "git cat-file -s HEAD:cmd/shortfall/shortfall = 16274162; git check-ignore returned nothing",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "git rm --cached the binary, added cmd/shortfall/shortfall to .gitignore (now check-ignore matches). Squash merge keeps it out of main.",
+      "id": "616fade3ccc5f455"
+    },
+    {
+      "ts": "2026-08-28T05:11:39+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "1edce12a4e5fde1caa93533eb208957c63b8388c",
+      "base_sha": "1e58ec2b569301c8b29308b679e347f93a39505d",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l3-components.md",
+      "line": 6,
+      "severity": "MEDIUM",
+      "finding": "Doc referenced engine.ErrNotImplemented, which this change removed.",
+      "evidence": "'the code refuses loudly (engine.ErrNotImplemented) until each lands'",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Reworded to describe Compute assembling landed legs and marking the rest unavailable per-leg (caveat/NotAvailableReason/note), never a fabricated zero.",
+      "id": "40bee99baab99d62"
+    },
+    {
+      "ts": "2026-08-28T05:11:39+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "1edce12a4e5fde1caa93533eb208957c63b8388c",
+      "base_sha": "1e58ec2b569301c8b29308b679e347f93a39505d",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/impact_test.go",
+      "line": 473,
+      "severity": "MEDIUM",
+      "finding": "Bead 7.7 AC (harness-backed Prometheus reproduces the golden report end to end) is only partially met: SQLite path is genuinely end-to-end; the Prometheus path is a wiring smoke test (empty stub).",
+      "evidence": "stub returns empty vector; assertion only checks customers-unavailable",
+      "status": "dismissed-with-reason",
+      "origin": "day",
+      "reason": "In-code comments are already honest ('no real Prometheus'). The full Prometheus golden requires a live backend (testcontainers), unavailable in this build env, and is tracked in workspace-0ka; the PR states the AC is partially met. The SQLite path IS end-to-end and asserts realized/customers values, so the CLI is genuinely proven; only the Prometheus-specific golden is deferred.",
+      "id": "59c62f0b9c7a2c22"
+    }
+  ]
+}

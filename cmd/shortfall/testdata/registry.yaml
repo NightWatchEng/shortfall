@@ -1,0 +1,22 @@
+# The reference registry: the shape the quickstart teaches and the ADRs
+# cite (30-minute capture SLA, hour-of-week baseline, 60% recovery).
+# Amounts are minor units. Reviewed by Finance once, then stable.
+version: 1
+segments: [smb, enterprise]
+propagation:
+  allow_hosts: ["*.internal.example.com", "api.example.com"]
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: auth,    signals: ["http:POST /pay", "provider:stripe.payment_intent"] }
+      - { name: capture, signals: ["queue:capture.q", "webhook:payment_intent.succeeded"] }
+      - { name: settle,  signals: ["queue:settle.q"] }
+    sla:
+      capture: { deadline: PT30M, on_breach: lost }
+      settle:  { deadline: P1D,  on_breach: at_risk }
+    estimator: { default_minor: 18750, by_segment: { smb: 14200, enterprise: 91000 } }
+    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }
+    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }
+    reconcile: { source: "sql:ledger.payments" }

@@ -13,3 +13,6 @@ dist/
 .warden/out/
 .warden/memory/findings.jsonl
 .warden/memory/gate/
+
+# built CLI binary (nested module)
+cmd/shortfall/shortfall
