@@ -1,0 +1,91 @@
+{
+  "Request": {
+    "Window": {
+      "From": "2026-08-27T14:00:00Z",
+      "To": "2026-08-27T16:00:00Z"
+    },
+    "Scope": null,
+    "Flows": [
+      "invoice.pay"
+    ]
+  },
+  "GeneratedAt": "2026-08-27T16:01:00Z",
+  "RegistryVersion": 1,
+  "LibraryVersion": "v0.1.0",
+  "Realized": {
+    "Count": 3,
+    "ByCurrency": {
+      "USD": 15000
+    },
+    "Evidence": "deterministic",
+    "Caveats": null
+  },
+  "Deferred": {
+    "Count": 0,
+    "ByCurrency": {
+      "USD": 5568661
+    },
+    "Evidence": "deterministic",
+    "Caveats": null,
+    "ByAgeBucket": {
+      "gt2h": {
+        "USD": 5568661
+      }
+    },
+    "SLABreaches": 0,
+    "OldestAgeMinutes": 120,
+    "ProjectedLostMinor": {
+      "USD": 500
+    }
+  },
+  "Unrealized": {
+    "LowMinor": {
+      "USD": 2000
+    },
+    "MidMinor": {
+      "USD": 5000
+    },
+    "HighMinor": {
+      "USD": 8000
+    },
+    "Evidence": "estimate",
+    "Notes": [
+      "assumes 60% recovery within 2h"
+    ]
+  },
+  "Customers": {
+    "Distinct": 2,
+    "BySegment": {
+      "enterprise": 1,
+      "smb": 1
+    },
+    "TopN": [
+      {
+        "CustomerID": "h:c2",
+        "Segment": "enterprise",
+        "ByCurrency": {
+          "USD": 9000
+        }
+      },
+      {
+        "CustomerID": "h:c1",
+        "Segment": "smb",
+        "ByCurrency": {
+          "USD": 6000
+        }
+      }
+    ],
+    "NotAvailableReason": ""
+  },
+  "Coverage": {
+    "Ratio": 0.98,
+    "Window": {
+      "From": "2026-08-27T14:00:00Z",
+      "To": "2026-08-27T16:00:00Z"
+    },
+    "Source": "sql:ledger.payments",
+    "Evidence": "trust",
+    "Unavailable": ""
+  },
+  "Severity": "SEV2"
+}

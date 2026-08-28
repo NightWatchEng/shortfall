@@ -1,0 +1,16 @@
+BUSINESS IMPACT — invoice.pay
+window 2026-08-27T14:00Z → 2026-08-27T16:00Z · registry v1 · v0.1.0
+amounts are minor currency units; realized and estimate are never added
+
+REALIZED   [deterministic] USD 15000
+DEFERRED   [deterministic] USD 5568661 in-flight
+           projected lost if SLAs breach: USD 500
+           oldest in-flight ≥ 120 min
+UNREALIZED [estimate] USD 2000 … USD 8000 (mid USD 5000)  — counterfactual; do not add to realized
+           note: assumes 60% recovery within 2h
+CUSTOMERS  2 distinct (enterprise 1, smb 1)
+           h:c2 [enterprise] USD 9000
+           h:c1 [smb] USD 6000
+COVERAGE   [trust] 98.0% reconciled (sql:ledger.payments)
+
+Severity: SEV2 (suggested)
