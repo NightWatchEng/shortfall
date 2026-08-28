@@ -85,9 +85,9 @@ func (q *Querier) QueryMetric(context.Context, query.Query) (query.Series, error
 	return nil, query.ErrUnsupported
 }
 
-// QueryEvents runs the grouped event query. Sums never cross a currency: when
-// sums are read (EventAggGroups) currency must be grouped or pinned, matching
-// memq and ADR-0001.
+// QueryEvents runs the grouped event query. Money never crosses a currency:
+// when money is read per group (EventAggGroups' sum or EventAggMaxPerGroup's
+// max) currency must be grouped or pinned, matching memq and ADR-0001/0009.
 func (q *Querier) QueryEvents(ctx context.Context, qy query.EventQuery) (query.EventGroups, error) {
 	groupCols, err := columns(qy.GroupBy)
 	if err != nil {
@@ -126,7 +126,11 @@ func (q *Querier) distinctCount(ctx context.Context, groupCols []string, whereSQ
 }
 
 func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []string, whereSQL string, args []any) (query.EventGroups, error) {
+	wantMax := qy.Agg == query.EventAggMaxPerGroup
 	sel := "COUNT(*), COALESCE(SUM(amount_minor), 0)"
+	if wantMax {
+		sel += ", COALESCE(MAX(amount_minor), 0)" // representative per group (ADR-0009)
+	}
 	if len(groupCols) > 0 {
 		sel = strings.Join(groupCols, ", ") + ", " + sel
 	}
@@ -156,8 +160,11 @@ func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []s
 		for i := range groupCols {
 			scanTargets = append(scanTargets, &keyVals[i])
 		}
-		var count, sum int64
+		var count, sum, maxAmt int64
 		scanTargets = append(scanTargets, &count, &sum)
+		if wantMax {
+			scanTargets = append(scanTargets, &maxAmt)
+		}
 		if err := rows.Scan(scanTargets...); err != nil {
 			return nil, fmt.Errorf("sql: scan: %w", err)
 		}
@@ -165,7 +172,11 @@ func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []s
 		for i, col := range qy.GroupBy {
 			key[col] = keyVals[i].String
 		}
-		out = append(out, query.EventGroup{Key: key, Count: count, SumMinor: sum})
+		eg := query.EventGroup{Key: key, Count: count, SumMinor: sum}
+		if wantMax {
+			eg.MaxMinor = maxAmt
+		}
+		out = append(out, eg)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("sql: rows: %w", err)
@@ -244,8 +255,8 @@ func tiebreakCols(groupBy []string) []string {
 	return cols
 }
 
-// currencyInvariant refuses a sum that could cross currencies unless currency
-// is grouped or pinned (ADR-0001), matching memq.
+// currencyInvariant refuses money that could cross currencies (a sum or a max)
+// unless currency is grouped or pinned (ADR-0001/0009), matching memq.
 func currencyInvariant(qy query.EventQuery) error {
 	if _, pinned := qy.Filters["currency"]; pinned {
 		return nil

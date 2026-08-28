@@ -62,6 +62,13 @@ const (
 	// leg's distinct count without an unbounded fetch (SQL
 	// COUNT(DISTINCT), CW Insights count_distinct, SPL dc()).
 	EventAggDistinctCount EventAgg = "distinct_count"
+	// EventAggMaxPerGroup returns one group per distinct key (like
+	// EventAggGroups) and additionally sets EventGroup.MaxMinor to the
+	// MAXIMUM single event's minor amount in the group. It lets the engine
+	// take one representative amount per entity for exact de-dup instead of
+	// averaging SumMinor/Count (ADR-0009). MaxMinor is money, so the same
+	// currency invariant as EventAggGroups applies.
+	EventAggMaxPerGroup EventAgg = "max_per_group"
 )
 
 // EventOrder fixes which groups a Limit keeps. Limit without an order
@@ -79,10 +86,11 @@ const (
 )
 
 // EventQuery asks for grouped outcome events. Money invariant: when Agg
-// is EventAggGroups and sums will be read, "currency" MUST be in GroupBy
-// or pinned by Filters — adapters MUST reject a sum that would cross
-// currencies (ADR-0001 forbids silent normalization, and five adapter
-// authors deciding independently is how it would happen).
+// reads money per group (EventAggGroups' SumMinor or EventAggMaxPerGroup's
+// MaxMinor), "currency" MUST be in GroupBy or pinned by Filters — adapters
+// MUST reject a result that would compare across currencies (ADR-0001 forbids
+// silent normalization, and five adapter authors deciding independently is how
+// it would happen).
 type EventQuery struct {
 	Filters map[string]string
 	GroupBy []string
@@ -116,6 +124,11 @@ type EventGroup struct {
 	Key      map[string]string
 	Count    int64
 	SumMinor int64
+	// MaxMinor is the maximum single event's minor amount in the group. It is
+	// populated ONLY when EventQuery.Agg == EventAggMaxPerGroup (zero
+	// otherwise) and, being money, is meaningful only under the same currency
+	// invariant as SumMinor. See ADR-0009.
+	MaxMinor int64
 }
 
 // EventGroups is an event query result, in the EventQuery's OrderBy

@@ -239,7 +239,8 @@ func (q *Querier) QueryEvents(_ context.Context, qy query.EventQuery) (query.Eve
 		return distinctCount(matched, qy.GroupBy), nil
 	}
 
-	// EventAggGroups: sums are read, so enforce the currency invariant.
+	// EventAggGroups / EventAggMaxPerGroup: money is read per group, so enforce
+	// the currency invariant (SumMinor and MaxMinor alike, ADR-0001/0009).
 	if err := currencyInvariant(matched, qy); err != nil {
 		return nil, err
 	}
@@ -248,6 +249,7 @@ func (q *Querier) QueryEvents(_ context.Context, qy query.EventQuery) (query.Eve
 		key      map[string]string
 		count    int64
 		sumMinor int64
+		maxMinor int64
 	}
 	groups := map[string]*agg{}
 	order := []string{}
@@ -256,18 +258,29 @@ func (q *Querier) QueryEvents(_ context.Context, qy query.EventQuery) (query.Eve
 		ck := canonical(key)
 		g, ok := groups[ck]
 		if !ok {
-			g = &agg{key: key}
+			// Seed maxMinor from the first member, not the int64 zero value, so
+			// the running max matches SQL's MAX() independently of sign — parity
+			// must not rely on an amounts-are-non-negative invariant that memq
+			// does not itself enforce on WithEvents input.
+			g = &agg{key: key, maxMinor: o.VC.Money.Amount}
 			groups[ck] = g
 			order = append(order, ck)
 		}
 		g.count++
 		g.sumMinor += o.VC.Money.Amount
+		if o.VC.Money.Amount > g.maxMinor {
+			g.maxMinor = o.VC.Money.Amount
+		}
 	}
 
 	out := make(query.EventGroups, 0, len(order))
 	for _, ck := range order {
 		g := groups[ck]
-		out = append(out, query.EventGroup{Key: g.key, Count: g.count, SumMinor: g.sumMinor})
+		eg := query.EventGroup{Key: g.key, Count: g.count, SumMinor: g.sumMinor}
+		if qy.Agg == query.EventAggMaxPerGroup {
+			eg.MaxMinor = g.maxMinor // representative per group (ADR-0009)
+		}
+		out = append(out, eg)
 	}
 
 	if err := orderGroups(out, qy.OrderBy); err != nil {
@@ -294,8 +307,9 @@ func distinctCount(matched []biz.Outcome, groupBy []string) query.EventGroups {
 	return query.EventGroups{{Count: int64(len(seen))}}
 }
 
-// currencyInvariant rejects a sum that could cross currencies: when sums are
-// read (EventAggGroups), "currency" must be grouped or pinned by a filter.
+// currencyInvariant rejects money that could cross currencies: when money is
+// read per group (EventAggGroups' sum or EventAggMaxPerGroup's max),
+// "currency" must be grouped or pinned by a filter.
 func currencyInvariant(matched []biz.Outcome, qy query.EventQuery) error {
 	if _, pinned := qy.Filters["currency"]; pinned {
 		return nil

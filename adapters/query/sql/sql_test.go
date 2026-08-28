@@ -134,6 +134,10 @@ func TestParityWithMemq(t *testing.T) {
 		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, GroupBy: []string{"segment", "customer"}, OrderBy: query.OrderSumDesc},
 		// Group/filter by kind (parity for the kind label).
 		{Range: rng(), Filters: map[string]string{"outcome": "failed"}, GroupBy: []string{"currency", "kind"}},
+		// max_per_group (ADR-0009): h:c1 has two failed USD events (14900, 100),
+		// so MaxMinor must be 14900, not the mean — parity across both backends.
+		{Range: rng(), Filters: map[string]string{"outcome": "failed", "currency": "USD"}, GroupBy: []string{"customer"}, Agg: query.EventAggMaxPerGroup},
+		{Range: rng(), Filters: map[string]string{"outcome": "failed"}, GroupBy: []string{"currency"}, Agg: query.EventAggMaxPerGroup, OrderBy: query.OrderSumDesc},
 	}
 	for i, qy := range queries {
 		sgroups, err := sq.QueryEvents(ctx, qy)
@@ -177,7 +181,7 @@ func sameGroups(a, b query.EventGroups, ordered bool) bool {
 }
 
 func eqGroup(a, b query.EventGroup) bool {
-	if a.Count != b.Count || a.SumMinor != b.SumMinor || len(a.Key) != len(b.Key) {
+	if a.Count != b.Count || a.SumMinor != b.SumMinor || a.MaxMinor != b.MaxMinor || len(a.Key) != len(b.Key) {
 		return false
 	}
 	for k, v := range a.Key {

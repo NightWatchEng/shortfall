@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "9f1d2b6992ac6f747bfa1c3dd597da0b3af2a9ff",
+  "base_sha": "e77d4dba9ff8a1e00d1b3193ef4857df857e5fc1",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T07:41:19+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 4.8), independent context"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Opus 4.8), separate context \u2014 independent second judge, verified parity across all sign cases"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T07:41:19+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "9f1d2b6992ac6f747bfa1c3dd597da0b3af2a9ff",
+      "base_sha": "e77d4dba9ff8a1e00d1b3193ef4857df857e5fc1",
+      "rule_id": "unmapped:memq-max-seed-relies-on-unenforced-invariant",
+      "tags": [],
+      "dir_prefix": "query/memq",
+      "file": "query/memq/memq.go",
+      "line": 267,
+      "severity": "LOW",
+      "finding": "memq seeded the per-group running max at the int64 zero value and only raised it, matching SQL's COALESCE(MAX,0) for non-negative data but diverging if a group were all-negative \u2014 a case biz.Money.Validate forbids but memq.WithEvents does not itself enforce, so parity silently depended on an unenforced invariant.",
+      "evidence": "memq running-max seed 0 vs sql COALESCE(MAX(amount_minor),0); guarded only by biz.Money.Validate rejecting negatives, which WithEvents does not run.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "memq now seeds maxMinor from the first group member, so the running max equals SQL MAX() independently of sign. A new memq test pins an all-negative group -> MaxMinor is the negative max, not 0. The cross-examiner verified count/sum still count the first member exactly once and parity holds across multi-event, single, all-zero, all-negative, and mixed-sign groups.",
+      "id": "c37aab6cf6575355"
+    },
+    {
+      "ts": "2026-08-28T07:41:19+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "9f1d2b6992ac6f747bfa1c3dd597da0b3af2a9ff",
+      "base_sha": "e77d4dba9ff8a1e00d1b3193ef4857df857e5fc1",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "query/memq",
+      "file": "query/memq/memq.go",
+      "line": 310,
+      "severity": "LOW",
+      "finding": "The currencyInvariant doc comments in memq and the SQL adapter still described the guard as covering only sums for EventAggGroups, but after this change the function also gates EventAggMaxPerGroup's MaxMinor. The bodies were correct; only the comments were stale.",
+      "evidence": "memq.go and sql.go currencyInvariant comments said 'a sum that could cross currencies'.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Both comments updated to 'money (sum or max)'. The EventAgg const doc and EventQuery doc were already correct.",
+      "id": "a0b0a575e0c20255"
+    },
+    {
+      "ts": "2026-08-28T07:41:19+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "9f1d2b6992ac6f747bfa1c3dd597da0b3af2a9ff",
+      "base_sha": "e77d4dba9ff8a1e00d1b3193ef4857df857e5fc1",
+      "rule_id": "unmapped:empty-groupby-no-match-parity",
+      "tags": [],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/sql/sql.go",
+      "line": 128,
+      "severity": "LOW",
+      "finding": "For EventAggGroups with an empty GroupBy and zero matching rows, the SQL aggregate-without-GROUP-BY returns one group {count 0, sum 0} while memq returns zero groups \u2014 a memq<->sql parity divergence.",
+      "evidence": "Cross-examiner traced SQL's COALESCE over a no-row aggregate vs memq producing no group.",
+      "status": "dismissed-with-reason",
+      "origin": "day",
+      "reason": "Pre-existing (predates ADR-0009 \u2014 the plain SUM path has the same shape), NOT introduced by this change, and unreachable from the engine (the realized leg always groups by currency,entity; customers by currency,customer,segment). Filed as workspace-tmw.13 for parity completeness rather than expanding this PR's scope.",
+      "id": "b7a2c2f8dc1c2634"
+    }
+  ]
+}

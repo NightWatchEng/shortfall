@@ -96,25 +96,41 @@ func TestRealizedLegEventsPath(t *testing.T) {
 	}
 }
 
-func TestRealizedLegInconsistentDuplicatesCaveated(t *testing.T) {
-	// One entity with two DIFFERENT failed amounts violates the identical-
-	// duplicate precondition: the leg must flag it, not silently average an
-	// exact-looking figure. 100 + 101 over 2 events → SumMinor 201, Count 2,
-	// not divisible, so the caveat fires.
-	events := []biz.Outcome{
-		evAt(1, "invoice.pay", "inv_1", biz.ResultFailed, 100, "USD"),
-		evAt(2, "invoice.pay", "inv_1", biz.ResultFailed, 101, "USD"),
+func TestRealizedLegDeDupsDuplicatesExactly(t *testing.T) {
+	// Per-entity de-dup takes the MAX single failed amount, not a mean
+	// (ADR-0009). Identical redeliveries collapse to their exact value; an
+	// entity with DIFFERING failed amounts collapses to the largest single
+	// exposure — a real figure, never an average — with no caveat.
+	cases := []struct {
+		name    string
+		amounts []int64
+		want    int64
+	}{
+		{"identical redeliveries -> exact value", []int64{200, 200, 200}, 200},
+		{"differing amounts -> max, not mean (100,101 would mean 100)", []int64{100, 101}, 101},
+		{"even-division differing -> max, not the hidden mean 200", []int64{100, 300}, 300},
 	}
-	q := memq.New(memq.WithEvents(events))
-	leg, err := RealizedLeg(context.Background(), nil, q, Request{Window: win, Flows: []string{"invoice.pay"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(leg.Caveats) == 0 {
-		t.Fatal("inconsistent duplicate amounts must produce a caveat")
-	}
-	if leg.Count != 1 {
-		t.Fatalf("count = %d, want 1 (still one entity)", leg.Count)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var events []biz.Outcome
+			for i, amt := range c.amounts {
+				events = append(events, evAt(i+1, "invoice.pay", "inv_1", biz.ResultFailed, amt, "USD"))
+			}
+			q := memq.New(memq.WithEvents(events))
+			leg, err := RealizedLeg(context.Background(), nil, q, Request{Window: win, Flows: []string{"invoice.pay"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(leg.Caveats) != 0 {
+				t.Fatalf("exact de-dup must not caveat, got %v", leg.Caveats)
+			}
+			if leg.Count != 1 {
+				t.Fatalf("count = %d, want 1 (still one entity)", leg.Count)
+			}
+			if leg.ByCurrency["USD"] != c.want {
+				t.Fatalf("USD = %d, want %d (max representative)", leg.ByCurrency["USD"], c.want)
+			}
+		})
 	}
 }
 
