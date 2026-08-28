@@ -1,0 +1,24 @@
+# Registry for the counterfactual golden test: the reference invoice.pay
+# shape with a 4-week baseline (matching the history the test generates),
+# no recovery netting (the scenarios recover nothing), and the estimator
+# set to the generator's true mean amount so the interval assertion tests
+# the baseline, not estimator bias.
+version: 1
+segments: [smb, enterprise]
+propagation:
+  allow_hosts: ["api.example.com"]
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: auth,    signals: ["http:POST /pay"] }
+      - { name: capture, signals: ["queue:capture.q"] }
+      - { name: settle,  signals: ["queue:settle.q"] }
+    sla:
+      capture: { deadline: PT30M, on_breach: lost }
+      settle:  { deadline: P1D,  on_breach: at_risk }
+    estimator: { default_minor: 21879, by_segment: { smb: 14200, enterprise: 91000 } }
+    baseline:  { seasonality: hour_of_week, lookback_weeks: 4 }
+    recovery:  { model: usage_loss_curve, recovered_fraction: 0.0 }
+    reconcile: { source: "sql:ledger.payments" }

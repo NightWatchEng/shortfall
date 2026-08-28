@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "bff6e99d6a0c947318c28f6ab804663ed5eecca2",
+  "base_sha": "0ecf89b017af94a5f0fed72c4a0805a7c08b4172",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T16:14:11+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; verified abandoned invisibility, estimator arithmetic, window symmetry, containment robustness"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context; empirically reproduced the AOV halving with a scratch metrics-only querier and traced the latent engine defect to production reach"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T16:14:11+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "bff6e99d6a0c947318c28f6ab804663ed5eecca2",
+      "base_sha": "0ecf89b017af94a5f0fed72c4a0805a7c08b4172",
+      "rule_id": "unmapped:entry-count-skews-metric-aov",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier.go",
+      "line": 91,
+      "severity": "MEDIUM",
+      "finding": "Entry-stage success counts match the engine's stage-unfiltered AOV filters, so a metrics-only consumer of MetricsFromResult roughly halves the fallback AOV (measured: 29944 -> 14804 on the seed-42 fixture); the doc justified omitting the value point but not the count-side consequence. The real emitter ships value at every stage transition \u2014 the deeper mismatch is the engine's stage-unfiltered readers.",
+      "evidence": "engine/unrealized.go:237-241 stage-unfiltered ratio; emit/emitter.go per-stage txn+value emission; examiner scratch run on this branch.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Doc now discloses the asymmetry and directs metrics-only consumers to feed events (examiner disposition a). Companion value emission rejected (it would mirror the trap into coverage's clamp-to-1). The root engine defect \u2014 stage-unfiltered coverage/AOV readers multiply-count the prescribed per-stage emission, coverage clamps to 1 and masks exporter drops, reachable via shortfall reconcile --prometheus \u2014 is parked as engine bug bead workspace-93g with a pinning-test direction and the quickstart-vs-inhouse doc-contract ambiguity recorded (examiner disposition c).",
+      "id": "cefeb7d2b4cd6811"
+    },
+    {
+      "ts": "2026-08-28T16:14:11+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "bff6e99d6a0c947318c28f6ab804663ed5eecca2",
+      "base_sha": "0ecf89b017af94a5f0fed72c4a0805a7c08b4172",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier_test.go",
+      "line": 307,
+      "severity": "MEDIUM",
+      "finding": "The entry-stage assertion's auth-failed term was structurally zero: the fixture ran fault-free and StateAuthFail is only assigned under FaultAPI5xx, so the named behavior was asserted against a guaranteed-empty set.",
+      "evidence": "checkout.go:356-359 sole assignment site; fixture had no Faults.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Fixture injects a 0.2-rate FaultAPI5xx slice; a wantAuthFailed>0 guard keeps the term non-vacuous against future fixture edits. Suite green.",
+      "id": "3dbcfdfdc6b7e6a7"
+    }
+  ]
+}

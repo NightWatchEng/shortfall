@@ -65,26 +65,40 @@ func TestTelemetryOutcomeMapping(t *testing.T) {
 // answers match the ledger's terminal transactions.
 func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	start := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC) // a Monday
+	// A slice of 5xx failures keeps the auth-failed branch of the entry
+	// assertion non-vacuous — with no fault, StateAuthFail never occurs and
+	// the auth-failed term would be asserted against a guaranteed-empty set.
 	res := checkout.Run(checkout.Config{
 		Seed:  42,
 		Start: start,
 		End:   start.Add(2 * time.Hour),
+		Faults: []checkout.FaultSpec{{
+			Kind: checkout.FaultAPI5xx, Rate: 0.2,
+			From: start.Add(30 * time.Minute), To: start.Add(90 * time.Minute),
+		}},
 	})
 	if len(res.Ledger.Txns) == 0 {
 		t.Fatal("harness produced an empty ledger")
 	}
 
-	// Ground truth: count terminal txns and their failed value, by hand.
-	var wantTerminal int
+	// Ground truth by hand: terminal txns and their failed value, plus the
+	// flow entries (txns that authed — each adds one entry-stage point).
+	var wantTerminal, wantEntered, wantAuthFailed int
 	var wantFailedValueUSD int64
 	var currencies = map[string]bool{}
 	for _, txn := range res.Ledger.Txns {
+		if !txn.AuthedAt.IsZero() {
+			wantEntered++
+		}
 		_, result, _, visible := telemetryOutcome(txn)
 		if !visible {
 			continue
 		}
 		wantTerminal++
 		currencies[txn.Currency] = true
+		if txn.State == checkout.StateAuthFail {
+			wantAuthFailed++
+		}
 		if result == biz.Result("failed") && txn.Currency == "USD" {
 			wantFailedValueUSD += txn.AmountMinor
 		}
@@ -94,20 +108,33 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	ctx := context.Background()
 	full := query.TimeRange{From: start, To: start.Add(24 * time.Hour)}
 
-	// Events: total terminal count via distinct entity ids... simpler: sum
-	// biz_txn_total over the window equals the terminal count.
-	series, err := q.QueryMetric(ctx, query.Query{Metric: "biz_txn_total", Agg: query.AggSum, Range: full})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var gotTxn float64
-	for _, s := range series {
-		for _, p := range s.Points {
-			gotTxn += p.Value
+	// Metrics: the total biz_txn_total is one terminal point per terminal
+	// txn plus one entry-stage point per txn that entered the flow, and the
+	// entry-stage sum (over outcomes) counts every entry — successes via
+	// their entry point, auth failures via their terminal point.
+	sumTxn := func(filters map[string]string) int {
+		series, err := q.QueryMetric(ctx, query.Query{
+			Metric: "biz_txn_total", Agg: query.AggSum, Filters: filters, Range: full,
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
+		var got float64
+		for _, s := range series {
+			for _, p := range s.Points {
+				got += p.Value
+			}
+		}
+		return int(got)
 	}
-	if int(gotTxn) != wantTerminal {
-		t.Fatalf("biz_txn_total sum = %d, want %d terminal txns", int(gotTxn), wantTerminal)
+	if got := sumTxn(nil); got != wantTerminal+wantEntered {
+		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d)", got, wantTerminal+wantEntered, wantTerminal, wantEntered)
+	}
+	if wantAuthFailed == 0 {
+		t.Fatal("fixture produced no auth failures — the auth-failed half of the entry assertion would be vacuous")
+	}
+	if got := sumTxn(map[string]string{"stage": "auth"}); got != wantEntered+wantAuthFailed {
+		t.Fatalf("entry-stage biz_txn_total sum = %d, want %d entries (entered %d + auth-failed %d)", got, wantEntered+wantAuthFailed, wantEntered, wantAuthFailed)
 	}
 
 	// Events: failed USD value via a currency-pinned, outcome-filtered event
