@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "c4f58798a58feb185d6133e788255e27c1ef6af4",
+  "base_sha": "c0bbace8b1ddea3930b6449324cb3d12307c7a89",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T03:42:53+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified gauge reading, breach/projected-lost, feeder proxy, import boundary; probed deadline-truncation, doc-exactness, golden circularity"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "accepted on inspection \u2014 findings are an arithmetic truncation (reachability evidenced: ParseISODuration accepts seconds), a doc overclaim vs the function's own comment, and test-oracle circularity; fixes verified by the passing regression tests"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T03:42:53+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "c4f58798a58feb185d6133e788255e27c1ef6af4",
+      "base_sha": "c0bbace8b1ddea3930b6449324cb3d12307c7a89",
+      "rule_id": "unmapped:projected-lost-minute-truncation",
+      "tags": [],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 142,
+      "severity": "MEDIUM",
+      "finding": "breachedAndLost compared int64(sla.Deadline.Minutes()), truncating a fractional-minute deadline downward and pulling earlier buckets over the breach line \u2014 over-stating ProjectedLostMinor. Reachable: registry.ParseISODuration accepts seconds (PT90S).",
+      "evidence": "return int64(sla.Deadline.Minutes()) <= floorMin  // PT90S -> 1.5 -> 1; 1m-5m floor 1 -> 1<=1 true",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Compares as durations now: sla.Deadline <= time.Duration(floorMin)*time.Minute. Exact, never truncates, preserves the conservative bucket-floor lower-bound semantics. Reference registry (whole-minute deadlines) unaffected.",
+      "id": "8260037cadb07e45"
+    },
+    {
+      "ts": "2026-08-28T03:42:53+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "c4f58798a58feb185d6133e788255e27c1ef6af4",
+      "base_sha": "c0bbace8b1ddea3930b6449324cb3d12307c7a89",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 31,
+      "severity": "MEDIUM",
+      "finding": "Doc called ByAgeBucket, ByCurrency AND ProjectedLostMinor 'exact', but ProjectedLostMinor is a conservative lower bound (bucket-floor granularity), contradicting the function's own comment.",
+      "evidence": "'ByAgeBucket, ByCurrency and ProjectedLostMinor are exact' vs breachedAndLost comment 'a documented lower bound on projected-lost'.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Reworded: ByAgeBucket/ByCurrency are exact gauge reads; ProjectedLostMinor is a conservative lower bound (deadline falling inside a bucket under-attributes it).",
+      "id": "d8a1fb86b1bb60f0"
+    },
+    {
+      "ts": "2026-08-28T03:42:53+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "c4f58798a58feb185d6133e788255e27c1ef6af4",
+      "base_sha": "c0bbace8b1ddea3930b6449324cb3d12307c7a89",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "engine",
+      "file": "engine/deferred_test.go",
+      "line": 321,
+      "severity": "MEDIUM",
+      "finding": "The golden's 'independent' projected-lost oracle reused the leg's own ageBucketFloorMinutes map and a hardcoded 30m deadline, mirroring breachedAndLost \u2014 a shared bug (e.g. the truncation) would pass. reg==nil, no-flows, and level==0 branches were untested.",
+      "evidence": "if ageBucketFloorMinutes[bucket] >= 30 { ... } // reused leg map + hardcoded deadline",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Oracle now reads the deadline+policy from the registry and uses a LOCAL Duration floor table (independent of the leg's map). Added TestDeferredEdgeCases (nil registry -> no projected-lost, no-flows scope-only, zero-level skipped).",
+      "id": "44e5be537c0ddfb0"
+    }
+  ]
+}
