@@ -1,0 +1,165 @@
+package engine
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/NightWatchEng/shortfall/query"
+	"github.com/NightWatchEng/shortfall/registry"
+)
+
+// ageBucketFloorMinutes maps each ADR-0005 age bucket to the minimum age (in
+// minutes) of the value it holds. An item in a bucket is at least this old.
+var ageBucketFloorMinutes = map[string]int64{
+	"lt1m":   0,
+	"1m-5m":  1,
+	"5m-30m": 5,
+	"30m-2h": 30,
+	"gt2h":   120,
+}
+
+// ageBucketOrder is oldest-last, for finding the oldest non-empty bucket.
+var ageBucketOrder = []string{"lt1m", "1m-5m", "5m-30m", "30m-2h", "gt2h"}
+
+// Deferred computes the in-flight (deferred) value leg from biz_inflight_value
+// at the window's snapshot instant. Deferred is NOT lost — the whole point of
+// this leg is the distinction: money still moving, some of it past its SLA and
+// projected to become lost, most of it not.
+//
+// Sources and honest gaps (founder decision): the value gauge carries VALUE by
+// (flow, stage, age_bucket, currency) only — no transaction count. So:
+//   - ByAgeBucket, ByCurrency and ProjectedLostMinor are exact, read straight
+//     from the gauge and the registry SLA policy;
+//   - OldestAgeMinutes is the floor age of the oldest non-empty bucket (a lower
+//     bound — the bucket is that old or older);
+//   - SLABreaches and Leg.Count (transaction counts) are NOT derivable from a
+//     value gauge and are left 0, with a caveat; breach is expressed as
+//     ProjectedLostMinor (breached VALUE). Exact counts need a companion count
+//     metric — ADR-0004 amendment tracked in workspace-lte.
+//
+// Evidence is deterministic (a measured level). A backend with no metric
+// source cannot ground this leg and Deferred returns an error.
+func Deferred(ctx context.Context, reg *registry.Registry, q query.Querier, req Request) (DeferredLeg, error) {
+	if !q.Capabilities().Metrics {
+		return DeferredLeg{}, fmt.Errorf("engine: deferred leg needs a metric source (biz_inflight_value); this backend serves no metrics")
+	}
+	leg := DeferredLeg{
+		Leg: Leg{
+			ByCurrency: map[string]int64{},
+			Evidence:   EvidenceDeterministic,
+			Caveats: []string{
+				"in-flight and SLA-breach transaction COUNTS are unavailable from the value-only gauge; breach is reported as projected-lost value (see workspace-lte)",
+			},
+		},
+		ByAgeBucket:        map[string]map[string]int64{},
+		ProjectedLostMinor: map[string]int64{},
+	}
+	oldestIdx := -1
+
+	for _, filters := range inflightFilters(req) {
+		series, err := q.QueryMetric(ctx, query.Query{
+			Metric:  "biz_inflight_value",
+			Filters: filters,
+			GroupBy: []string{"flow", "stage", "age_bucket", "currency"},
+			Range:   req.Window,
+		})
+		if err != nil {
+			return DeferredLeg{}, fmt.Errorf("engine: deferred inflight query: %w", err)
+		}
+		for _, s := range series {
+			level := lastLevel(s)
+			if level == 0 {
+				continue
+			}
+			bucket := s.Labels["age_bucket"]
+			currency := s.Labels["currency"]
+
+			if leg.ByAgeBucket[bucket] == nil {
+				leg.ByAgeBucket[bucket] = map[string]int64{}
+			}
+			leg.ByAgeBucket[bucket][currency] += level
+			leg.ByCurrency[currency] += level
+
+			if idx := bucketIndex(bucket); idx > oldestIdx {
+				oldestIdx = idx
+			}
+
+			// Projected-lost: value in a bucket entirely past the stage's SLA
+			// deadline, when the registry says a breach becomes lost.
+			if reg != nil && breachedAndLost(reg, s.Labels["flow"], s.Labels["stage"], bucket) {
+				leg.ProjectedLostMinor[currency] += level
+			}
+		}
+	}
+
+	if oldestIdx >= 0 {
+		leg.OldestAgeMinutes = ageBucketFloorMinutes[ageBucketOrder[oldestIdx]]
+	}
+	return leg, nil
+}
+
+// lastLevel returns the gauge level for a series (the sum of its points;
+// with Step 0 there is exactly one carried-forward level point).
+func lastLevel(s query.SeriesSlice) int64 {
+	var v int64
+	for _, p := range s.Points {
+		v += int64(p.Value)
+	}
+	return v
+}
+
+// bucketIndex returns a bucket's position in oldest-last order, or -1.
+func bucketIndex(bucket string) int {
+	for i, b := range ageBucketOrder {
+		if b == bucket {
+			return i
+		}
+	}
+	return -1
+}
+
+// breachedAndLost reports whether a bucket is entirely past the flow/stage
+// SLA deadline AND the registry's on_breach policy for that stage is "lost".
+func breachedAndLost(reg *registry.Registry, flow, stage, bucket string) bool {
+	f, ok := reg.Flow(flow)
+	if !ok {
+		return false
+	}
+	sla, ok := f.SLA[stage]
+	if !ok {
+		return false
+	}
+	if sla.OnBreach != registry.BreachLost {
+		return false
+	}
+	floorMin, ok := ageBucketFloorMinutes[bucket]
+	if !ok {
+		return false
+	}
+	// The bucket is entirely past the deadline when its FLOOR age already
+	// meets it (conservative: a deadline falling inside a bucket is not
+	// counted for that bucket — a documented lower bound on projected-lost).
+	return int64(sla.Deadline.Minutes()) <= floorMin
+}
+
+// inflightFilters returns one filter map per flow (scope + flow), with no
+// outcome — biz_inflight_value has no outcome label.
+func inflightFilters(req Request) []map[string]string {
+	scope := make(map[string]string, len(req.Scope))
+	for k, v := range req.Scope {
+		scope[k] = v
+	}
+	if len(req.Flows) == 0 {
+		return []map[string]string{scope}
+	}
+	out := make([]map[string]string, 0, len(req.Flows))
+	for _, f := range req.Flows {
+		m := make(map[string]string, len(scope)+1)
+		for k, v := range scope {
+			m[k] = v
+		}
+		m["flow"] = f
+		out = append(out, m)
+	}
+	return out
+}
