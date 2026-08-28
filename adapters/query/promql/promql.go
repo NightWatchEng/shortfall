@@ -2,11 +2,11 @@
 // API endpoint. It translates the frozen query AST into PromQL chosen to match
 // the in-memory reference (query/memq) rather than PromQL's rate helpers:
 // counter families as a non-extrapolating cumulative difference across the
-// window (m @ To − m @ From), the gauge family as last_over_time. See
-// translate() for the exactness properties and their limits (monotonic-
-// counter assumption, sample-boundary alignment, Step==0 only) — numeric
-// parity against a live Prometheus is verified by the golden harness tracked
-// in workspace-0ka.
+// window (each boundary read via last_over_time, one-end series filled to 0),
+// the gauge family as last_over_time. See translate() for the exact expression,
+// the exactness properties, and their limits (monotonic-counter assumption,
+// sample-boundary alignment, Step==0 only) — numeric parity against a live
+// Prometheus is verified by the golden harness tracked in workspace-0ka.
 //
 // It is events-incapable (Prometheus has no event store) and returns
 // query.ErrUnsupported for QueryEvents, so the engine reports the customers

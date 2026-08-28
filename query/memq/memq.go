@@ -8,8 +8,10 @@
 // match, so a number the engine reads from memq is the number it must read
 // from PromQL or SQL for the same query:
 //   - counter families: each Point is the INCREASE within its step interval;
-//   - the gauge family (biz_inflight_value): each Point is the last observed
-//     level at its step boundary;
+//   - the gauge family (biz_inflight_value): each Point carries every
+//     underlying series' last observed level forward to its step boundary and
+//     sums them, matching sum by(g)(last_over_time(m)) — so a GroupBy that
+//     collapses several series reports their summed level, not one sample;
 //   - Step == 0 means one bucket over the whole Range.
 package memq
 
@@ -178,28 +180,49 @@ func bucketPoints(points []emit.MetricPoint, qy query.Query, gauge bool) []query
 	return out
 }
 
-// aggregate reduces a group's points to a single bucket value. For a gauge
-// it is the last observed level AT the bucket boundary — the most recent
-// sample with At < to, carried forward from before the bucket (and before
-// the whole window) if the level has not changed, matching a real backend's
-// last_over_time; nil only when no level has ever been set. For a counter it
-// is the increase within [from, to) (sum of delta values), or under AggCount
-// the number of points.
+// aggregate reduces a group's points to a single bucket value. For a gauge it
+// carries each underlying series' last level (its most recent sample with
+// At < to, from before the bucket or the whole window) forward, then sums those
+// per-series levels — matching a real backend's sum by(g)(last_over_time(m)).
+// When GroupBy collapses several series into one group (e.g. stage=capture and
+// stage=settle into one age_bucket/currency group), each series contributes its
+// own carried-forward level; taking a single last sample across the whole group
+// would return one series' level instead of their sum and diverge from
+// Prometheus (workspace-0ka caught this against a live backend). Under AggCount
+// the gauge value is the number of series with a level. nil only when no level
+// has ever been set. For a counter it is the increase within [from, to) (sum of
+// delta values), or under AggCount the number of points.
 func aggregate(points []emit.MetricPoint, from, to time.Time, agg query.Agg, gauge bool) *float64 {
 	if gauge {
-		var last *emit.MetricPoint
+		// Per underlying series (full label identity), keep the last level
+		// before the boundary.
+		type level struct {
+			at time.Time
+			v  int64
+		}
+		last := map[string]level{}
 		for i := range points {
-			if points[i].At.Before(to) { // carry the last level ≤ boundary forward
-				if last == nil || points[i].At.After(last.At) {
-					last = &points[i]
-				}
+			p := points[i]
+			if !p.At.Before(to) { // carry the last level ≤ boundary forward
+				continue
+			}
+			id := canonical(p.Labels)
+			if cur, ok := last[id]; !ok || p.At.After(cur.at) {
+				last[id] = level{at: p.At, v: p.Value}
 			}
 		}
-		if last == nil {
+		if len(last) == 0 {
 			return nil
 		}
-		v := float64(last.Value)
-		return &v
+		if agg == query.AggCount {
+			c := float64(len(last))
+			return &c
+		}
+		var sum float64
+		for _, l := range last {
+			sum += float64(l.v)
+		}
+		return &sum
 	}
 	var sum float64
 	var count float64

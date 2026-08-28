@@ -56,6 +56,28 @@ jobs:
       - name: golangci-lint (all modules)
         run: ./scripts/ci-go.sh lint
 
+  golden:
+    name: promql live-parity (golden)
+    # The core job skips test/promgolden's live harness (no SHORTFALL_GOLDEN,
+    # no image pull). This job runs it against a REAL Prometheus: seed the
+    # harness metrics via remote-write, then assert the promql adapter reads
+    # back the same Series memq does — the workspace-0ka correctness bar.
+    # ubuntu-latest ships Docker, so the test's own orchestration pulls the
+    # pinned prom/prometheus image; no service container needed.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: stable
+          cache: true
+      - name: go test (live Prometheus golden harness)
+        working-directory: test/promgolden
+        env:
+          SHORTFALL_GOLDEN: "1"
+        run: go test -timeout 300s ./...
+
   bench:
     name: benchmarks (advisory)
     # Compares PR benchmarks against main with benchstat and writes the
