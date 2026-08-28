@@ -8,6 +8,7 @@ import (
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/examples/checkout"
 	"github.com/NightWatchEng/shortfall/query"
+	"github.com/NightWatchEng/shortfall/query/memq"
 )
 
 // TestTelemetryOutcomeMapping pins each state's mapping to a telemetry
@@ -124,5 +125,56 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	// The querier serves both signals with no process running.
 	if c := q.Capabilities(); !c.Metrics || !c.Events {
 		t.Fatalf("caps = %+v, want both", c)
+	}
+}
+
+// TestInFlightGaugeSnapshotVisibleWithinWindow is the named regression test for
+// the workspace-0ka vacuous-gauge-parity bug: a biz_inflight_value snapshot
+// stamped exactly at a query window's end To is invisible to the half-open
+// [From, To) read (memq drops samples with At>=To; the promql adapter reads
+// last_over_time at To-1ms), so the golden harness's gauge parity was comparing
+// empty==empty and proving nothing. MetricsFromResultAt lets the harness
+// snapshot the gauge strictly inside the window, where it is actually read.
+func TestInFlightGaugeSnapshotVisibleWithinWindow(t *testing.T) {
+	start := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	end := start.Add(50 * time.Minute)
+	// A stalled capture queue guarantees a backlog of in-flight (StateAuthed)
+	// transactions left at the run's end.
+	res := checkout.Run(checkout.Config{
+		Seed: 5, Start: start, End: end,
+		Faults: []checkout.FaultSpec{{
+			Kind: checkout.FaultConsumerStall, Queue: checkout.QueueCapture,
+			From: start.Add(10 * time.Minute), To: start.Add(35 * time.Minute),
+		}},
+	})
+	window := query.TimeRange{From: start, To: end}
+	gaugeQ := query.Query{Metric: "biz_inflight_value", GroupBy: []string{"age_bucket", "currency"}, Range: window}
+	ctx := context.Background()
+
+	// Setup sanity: the stall must leave a backlog, else neither case proves
+	// anything.
+	sanity, _ := memq.New(memq.WithMetrics(InFlightPointsAt(res, end.Add(-time.Minute)))).QueryMetric(ctx, gaugeQ)
+	if len(sanity) == 0 {
+		t.Fatal("stall scenario left no in-flight backlog; test setup is broken")
+	}
+
+	cases := []struct {
+		name     string
+		gaugeAt  time.Time
+		wantSeen bool
+	}{
+		{"snapshot at window end To is invisible (the bug)", end, false},
+		{"snapshot one minute inside the window is visible", end.Add(-time.Minute), true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			series, err := memq.New(memq.WithMetrics(MetricsFromResultAt(res, c.gaugeAt))).QueryMetric(ctx, gaugeQ)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if seen := len(series) > 0; seen != c.wantSeen {
+				t.Fatalf("gauge series seen = %v (%d series), want %v", seen, len(series), c.wantSeen)
+			}
+		})
 	}
 }

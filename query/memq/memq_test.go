@@ -127,6 +127,33 @@ func TestGaugeCarriesForward(t *testing.T) {
 	}
 }
 
+// TestGaugeSumsCollapsedSeries is the named regression test for the
+// workspace-0ka gauge-aggregation bug: when GroupBy collapses several gauge
+// series into one group, the bucket value must be the SUM of each series'
+// carried-forward level, matching a real backend's sum by(g)(last_over_time),
+// not a single last sample across the whole group. Two stages (capture, settle)
+// share one (age_bucket, currency) group; the answer is their sum.
+func TestGaugeSumsCollapsedSeries(t *testing.T) {
+	full := query.TimeRange{From: base, To: base.Add(5 * time.Minute)}
+	metrics := []emit.MetricPoint{
+		mp("biz_inflight_value", base.Add(time.Minute), 300, map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "lt1m", "currency": "USD"}),
+		mp("biz_inflight_value", base.Add(time.Minute), 700, map[string]string{"flow": "invoice.pay", "stage": "settle", "age_bucket": "lt1m", "currency": "USD"}),
+	}
+	q := New(WithMetrics(metrics))
+	series, err := q.QueryMetric(context.Background(), query.Query{
+		Metric: "biz_inflight_value", Range: full, GroupBy: []string{"age_bucket", "currency"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("series = %d, want 1 (one age_bucket/currency group)", len(series))
+	}
+	if got := series[0].Points[0].Value; got != 1000 {
+		t.Fatalf("collapsed gauge value = %v, want 1000 (300 capture + 700 settle)", got)
+	}
+}
+
 func TestQueryMetricGroupsByLabel(t *testing.T) {
 	full := query.TimeRange{From: base, To: base.Add(time.Hour)}
 	metrics := []emit.MetricPoint{

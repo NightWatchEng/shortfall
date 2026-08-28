@@ -28,3 +28,5 @@ use (
 	./adapters/incident/slack
 	./adapters/payment/stripe
 )
+
+use ./test/promgolden

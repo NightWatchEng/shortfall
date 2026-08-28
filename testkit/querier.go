@@ -29,9 +29,13 @@ import (
 // The mapping uses the flow name "invoice.pay" (the reference registry's
 // flow) and the checkout lifecycle stages auth/capture/settle.
 func QuerierFromResult(res checkout.Result) *memq.Querier {
-	var events []biz.Outcome
-	var metrics []emit.MetricPoint
+	return memq.New(memq.WithEvents(EventsFromResult(res)), memq.WithMetrics(MetricsFromResult(res)))
+}
 
+// EventsFromResult returns the telemetry-visible outcome events for a harness
+// run — one per terminal, telemetry-visible transaction.
+func EventsFromResult(res checkout.Result) []biz.Outcome {
+	var events []biz.Outcome
 	for _, txn := range res.Ledger.Txns {
 		stage, result, at, visible := telemetryOutcome(txn)
 		if !visible {
@@ -46,7 +50,38 @@ func QuerierFromResult(res checkout.Result) *memq.Querier {
 			Kind:       biz.KindFee,
 		}
 		events = append(events, biz.Outcome{At: at, VC: vc, Stage: stage, Result: result, Source: "harness"})
+	}
+	return events
+}
 
+// MetricsFromResult returns the metric points a real emitter would have shipped
+// for a harness run: biz_txn_total + biz_value_total per telemetry-visible
+// terminal transaction, plus the biz_inflight_value gauge snapshot at the run's
+// end instant (res.Config.End) — the level a live scrape would publish "now".
+// The golden harness (workspace-0ka) feeds these to BOTH memq and a real
+// Prometheus so the two must return identical Series.
+func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
+	return MetricsFromResultAt(res, res.Config.End)
+}
+
+// MetricsFromResultAt is MetricsFromResult with a caller-chosen instant for the
+// in-flight gauge snapshot. The counters (biz_txn_total, biz_value_total) are
+// stamped at their own event times; only the biz_inflight_value gauge is
+// snapshotted at gaugeAt.
+//
+// The golden harness snapshots the gauge strictly INSIDE its query window: a
+// gauge sample stamped exactly at the window end To is invisible to a half-open
+// [From, To) read on BOTH sides — memq drops samples with At >= To and the
+// promql adapter evaluates last_over_time at To-1ms — so an at-To snapshot would
+// make the gauge parity assertion vacuous (empty == empty). A gaugeAt before To
+// exercises the gauge/last_over_time translation for real.
+func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPoint {
+	var metrics []emit.MetricPoint
+	for _, txn := range res.Ledger.Txns {
+		stage, result, at, visible := telemetryOutcome(txn)
+		if !visible {
+			continue
+		}
 		common := map[string]string{
 			"flow": "invoice.pay", "stage": stage, "outcome": string(result),
 			"currency": txn.Currency, "segment": string(txn.Segment),
@@ -59,12 +94,10 @@ func QuerierFromResult(res checkout.Result) *memq.Querier {
 		}
 		metrics = append(metrics, emit.MetricPoint{Name: "biz_value_total", Labels: valueLabels, Value: txn.AmountMinor, At: at})
 	}
-
-	// In-flight (deferred) value at the run's end instant — the snapshot the
-	// deferred leg reads. Appended as biz_inflight_value gauge points.
-	metrics = append(metrics, InFlightPointsAt(res, res.Config.End)...)
-
-	return memq.New(memq.WithEvents(events), memq.WithMetrics(metrics))
+	// In-flight (deferred) value snapshot — the level the deferred leg reads.
+	// Appended as biz_inflight_value gauge points stamped at gaugeAt.
+	metrics = append(metrics, InFlightPointsAt(res, gaugeAt)...)
+	return metrics
 }
 
 // InFlightPointsAt returns the biz_inflight_value gauge points for the demand

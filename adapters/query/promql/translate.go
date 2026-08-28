@@ -28,17 +28,23 @@ type promExpr struct {
 //
 //   - COUNTER families: the exact increase over the window is the cumulative
 //     counter's difference between the two ends,
-//     `sum by(g)(m @ To) - sum by(g)(m @ From)`. This deliberately avoids
-//     increase(), which EXTRAPOLATES to the range boundaries and drops the
-//     first in-range sample — producing an estimate, not the exact minor-unit
-//     sum memq computes. It is exact for a MONOTONIC counter (our value/count
-//     families never decrease) up to sample-boundary alignment; counter
-//     resets and series present at only one end are edge cases tracked in
-//     workspace-0ka.
+//     `<end> - (<start> or (<end> * 0))`, where each end reads the last
+//     cumulative sample at that boundary via last_over_time (see below for why
+//     last_over_time and not a bare `@` instant, and why the `or (<end>*0)`
+//     fill). This deliberately avoids increase(), which EXTRAPOLATES to the
+//     range boundaries and drops the first in-range sample — producing an
+//     estimate, not the exact minor-unit sum memq computes. It is exact for a
+//     MONOTONIC counter (our value/count families never decrease) up to
+//     sample-boundary alignment; a series present at only ONE end is handled
+//     (the `or` fill starts it from 0, as memq does), while counter resets
+//     remain an edge case tracked in workspace-0ka.
 //   - The GAUGE family: `sum by(g)(last_over_time(m[window] @ To))` — the last
 //     level at To, carried forward across the window, matching memq's
 //     carry-forward (a plain instant would use Prometheus's ~5m staleness
 //     window instead).
+//
+// Both boundaries are evaluated one millisecond inside the window (To-1ms,
+// From-1ms) to realize the half-open [From, To) window; see the body.
 //
 // Only Step==0 (one bucket over the whole range) is supported: Prometheus
 // range-step increase() buckets look BACKWARD from each step boundary while
@@ -54,22 +60,45 @@ func translate(q query.Query) (promExpr, error) {
 	}
 	matchers := labelMatchers(q.Filters)
 	by := groupBy(q.GroupBy)
-	at := q.Range.To
+
+	// The engine window is half-open [From, To) — memq counts samples with
+	// From <= At < To. A bare `@ To` is INCLUSIVE (<= To) and `@ From` includes
+	// From, which would give (From, To]. Evaluate one millisecond before each
+	// boundary so `<= To-1ms` is `< To` and `<= From-1ms` is `< From`, matching
+	// memq exactly (Prometheus timestamps are millisecond-resolution and the
+	// data is coarser). workspace-0ka verified this against a live Prometheus.
+	evalTo := q.Range.To.Add(-time.Millisecond)
+	evalFrom := q.Range.From.Add(-time.Millisecond)
+	at := evalTo
 
 	if gaugeFamilies[q.Metric] {
 		rng := q.Range.To.Sub(q.Range.From)
 		return promExpr{
-			expr: fmt.Sprintf("sum %s(last_over_time(%s%s[%s] @ %s))", by, q.Metric, matchers, promDuration(rng), promTime(at)),
+			expr: fmt.Sprintf("sum %s(last_over_time(%s%s[%s] @ %s))", by, q.Metric, matchers, promDuration(rng), promTime(evalTo)),
 			at:   at,
 		}, nil
 	}
 
-	// Counter: exact non-extrapolating cumulative difference across the window.
+	// Counter: exact non-extrapolating cumulative difference across the window,
+	// end minus start. Each boundary reads the last cumulative sample in the
+	// window via last_over_time, NOT a bare `@` instant: `@` uses a 5-minute
+	// staleness lookback, so a counter that stopped incrementing more than 5
+	// minutes before To (failures that clustered early in the window) would
+	// vanish at the boundary and be undercounted — memq has no such limit
+	// (workspace-0ka caught this against a live Prometheus). The window range
+	// looks back far enough to find the boundary's latest sample.
+	//
+	// A group present at To but ABSENT at From (a series that first appeared
+	// inside the window) must count its full end value, not be dropped by the
+	// subtraction — memq starts such a counter from 0. The `or (<end> * 0)`
+	// fills every end-group's missing start value with 0, so `A - (B or A*0)`
+	// never silently drops a one-end series.
+	rng := promDuration(q.Range.To.Sub(q.Range.From))
+	end := fmt.Sprintf("sum %s(last_over_time(%s%s[%s] @ %s))", by, q.Metric, matchers, rng, promTime(evalTo))
+	start := fmt.Sprintf("sum %s(last_over_time(%s%s[%s] @ %s))", by, q.Metric, matchers, rng, promTime(evalFrom))
 	return promExpr{
-		expr: fmt.Sprintf("sum %s(%s%s @ %s) - sum %s(%s%s @ %s)",
-			by, q.Metric, matchers, promTime(q.Range.To),
-			by, q.Metric, matchers, promTime(q.Range.From)),
-		at: at,
+		expr: fmt.Sprintf("%s - (%s or (%s * 0))", end, start, end),
+		at:   at,
 	}, nil
 }
 

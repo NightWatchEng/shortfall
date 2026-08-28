@@ -18,7 +18,9 @@ var (
 )
 
 func TestTranslate(t *testing.T) {
-	tT, tF := promTime(to), promTime(from)
+	// The adapter evaluates one millisecond inside each boundary to realize the
+	// half-open [From, To) window (see translate); expectations use the same.
+	tT, tF := promTime(to.Add(-time.Millisecond)), promTime(from.Add(-time.Millisecond))
 	cases := []struct {
 		name     string
 		q        query.Query
@@ -26,11 +28,12 @@ func TestTranslate(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "counter is an exact cumulative difference, not increase()",
+			name: "counter is an exact cumulative difference, not increase(); one-end series default to 0",
 			q: query.Query{Metric: "biz_value_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to},
 				Filters: map[string]string{"outcome": "failed", "flow": "invoice.pay"}, GroupBy: []string{"currency"}},
-			wantExpr: `sum by (currency) (biz_value_total{flow="invoice.pay",outcome="failed"} @ ` + tT +
-				`) - sum by (currency) (biz_value_total{flow="invoice.pay",outcome="failed"} @ ` + tF + `)`,
+			wantExpr: `sum by (currency) (last_over_time(biz_value_total{flow="invoice.pay",outcome="failed"}[3600s] @ ` + tT +
+				`)) - (sum by (currency) (last_over_time(biz_value_total{flow="invoice.pay",outcome="failed"}[3600s] @ ` + tF +
+				`)) or (sum by (currency) (last_over_time(biz_value_total{flow="invoice.pay",outcome="failed"}[3600s] @ ` + tT + `)) * 0))`,
 		},
 		{
 			name:     "gauge reads the carried-forward level via last_over_time",
