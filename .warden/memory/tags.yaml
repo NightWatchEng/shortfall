@@ -1,0 +1,14 @@
+# Tag vocabulary — the recall index's declared keys (retro 2026-08-28,
+# workspace-fl5). Unknown tags warn, never reject; the retro proposes changes.
+tags:
+  ci-gate: a CI job or gate whose wiring weakens or skips enforcement
+  docs-drift: documentation describing behavior the code does not have
+  gauge-parity: gauge semantics diverging between backends or from the reference
+  memq-parity: the in-memory reference disagreeing with a real backend
+  scope-misstatement: a doc or ADR misstating what a change or pass covers
+  vacuous-pass: a test, gate, or assertion that can pass on empty inputs
+
+aliases:
+  # 'gauge' (1 shard) and 'gauge-parity' (1 shard) named one class; merged
+  # per the retro. Shards keep their historical key; readers fold it.
+  gauge: gauge-parity
