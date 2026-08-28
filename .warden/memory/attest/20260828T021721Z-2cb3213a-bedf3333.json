@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "2cb3213aba2a529125d7c097ea291d5858917ff9",
+  "base_sha": "686bb3908ceffba11331d965428684c8199f8ebd",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T02:17:21+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified Loki push shape, per-outcome ns timestamps, stream grouping, amounts/ids-in-line, retry propagation, replace paths"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude), separate context \u2014 confirmed the emitter fence is metrics-only and events keep raw flow/stage; recommended doc-only fix"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T02:17:21+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "2cb3213aba2a529125d7c097ea291d5858917ff9",
+      "base_sha": "686bb3908ceffba11331d965428684c8199f8ebd",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/loki/loki.go",
+      "line": 8,
+      "severity": "MEDIUM",
+      "finding": "Package doc called flow/stage 'BOUNDED' stream labels, but ADR-0004's unregistered-fence is emitter-side and metrics-only; the outcome event keeps raw flow/stage, and this exporter has no registry to fence with. Only outcome is a structurally bounded enum, so an unregistered/dynamic flow becomes a distinct Loki stream \u2014 the cardinality risk the doc claimed to prevent.",
+      "evidence": "// only the BOUNDED outcome dimensions become stream LABELS ; labels := {\"flow\": o.VC.Flow, \"stage\": o.Stage, \"outcome\": string(o.Result)}",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Cross-examiner confirmed (emitter.go flowStageLabels is metrics-only; ADR-0004 keeps raw names on events) and recommended doc-only. Rewrote the package doc and streamLabelKeys comment to state the truth: labels are flow/stage/outcome; outcome is enum-bounded; flow/stage are raw and their Loki cardinality follows the caller's registry discipline (an unregistered/dynamic flow mints a new stream); ADR-0004's cardinality guarantee is scoped to metrics, not this log adapter.",
+      "id": "ef6ff31bfab810e5"
+    },
+    {
+      "ts": "2026-08-28T02:17:21+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "2cb3213aba2a529125d7c097ea291d5858917ff9",
+      "base_sha": "686bb3908ceffba11331d965428684c8199f8ebd",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/loki/loki_test.go",
+      "line": 369,
+      "severity": "MEDIUM",
+      "finding": "TestMetricsAreNoopEventsOnly bundled two distinct behaviors (capabilities events-only; ExportMetrics no-op) in one non-table-driven test (ADR-0007).",
+      "evidence": "func TestMetricsAreNoopEventsOnly(t *testing.T){ ... Capabilities() ... ExportMetrics(...) ... len(d.bodies) != 0 }",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Split into TestCapabilitiesEventsOnly and TestExportMetricsIsNoop.",
+      "id": "fa83ff646067be78"
+    }
+  ]
+}
