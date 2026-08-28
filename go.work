@@ -9,3 +9,7 @@ use ./adapters/export/prometheus
 use ./adapters/export/cloudwatch
 
 use ./adapters/export/statsd
+
+use ./adapters/httpbatch
+
+use ./adapters/export/splunkhec
