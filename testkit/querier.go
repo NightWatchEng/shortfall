@@ -60,7 +60,58 @@ func QuerierFromResult(res checkout.Result) *memq.Querier {
 		metrics = append(metrics, emit.MetricPoint{Name: "biz_value_total", Labels: valueLabels, Value: txn.AmountMinor, At: at})
 	}
 
+	// In-flight (deferred) value at the run's end instant — the snapshot the
+	// deferred leg reads. Appended as biz_inflight_value gauge points.
+	metrics = append(metrics, InFlightPointsAt(res, res.Config.End)...)
+
 	return memq.New(memq.WithEvents(events), memq.WithMetrics(metrics))
+}
+
+// InFlightPointsAt returns the biz_inflight_value gauge points for the demand
+// still in a queue at instant `at` — transactions the run left in the capture
+// queue (State authed) or the settle queue (State captured). Each point is the
+// summed value for one (flow, stage, age_bucket, currency) at `at`; age is the
+// time since the transaction entered that queue, bucketed per ADR-0005. This
+// models what the InFlightTracker would have published at the snapshot.
+func InFlightPointsAt(res checkout.Result, at time.Time) []emit.MetricPoint {
+	// stage -> bucket -> currency -> value
+	acc := map[string]map[string]map[string]int64{
+		"capture": {},
+		"settle":  {},
+	}
+	add := func(stage, bucket, currency string, v int64) {
+		if acc[stage][bucket] == nil {
+			acc[stage][bucket] = map[string]int64{}
+		}
+		acc[stage][bucket][currency] += v
+	}
+	for _, txn := range res.Ledger.Txns {
+		switch txn.State {
+		case checkout.StateAuthed: // waiting in the capture queue
+			if !txn.AuthedAt.IsZero() && !txn.AuthedAt.After(at) {
+				add("capture", emit.AgeBucketFor(at.Sub(txn.AuthedAt)), txn.Currency, txn.AmountMinor)
+			}
+		case checkout.StateCaptured: // waiting in the settle queue
+			if !txn.CapturedAt.IsZero() && !txn.CapturedAt.After(at) {
+				add("settle", emit.AgeBucketFor(at.Sub(txn.CapturedAt)), txn.Currency, txn.AmountMinor)
+			}
+		}
+	}
+	var points []emit.MetricPoint
+	for stage, buckets := range acc {
+		for bucket, byCur := range buckets {
+			for currency, v := range byCur {
+				points = append(points, emit.MetricPoint{
+					Name: "biz_inflight_value",
+					Labels: map[string]string{
+						"flow": "invoice.pay", "stage": stage, "age_bucket": bucket, "currency": currency,
+					},
+					Value: v, At: at,
+				})
+			}
+		}
+	}
+	return points
 }
 
 // telemetryOutcome maps a transaction's state to the outcome real telemetry
