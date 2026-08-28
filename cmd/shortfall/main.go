@@ -46,6 +46,8 @@ func run(args []string) int {
 		return 0
 	case "impact":
 		return runImpact(args[1:], os.Stdout, os.Stderr)
+	case "reconcile":
+		return runReconcile(args[1:], os.Stdout, os.Stderr)
 	default:
 		usage()
 		return 2
@@ -59,5 +61,8 @@ usage:
   shortfall impact --registry r.yaml --from <RFC3339> --to <RFC3339> [--flow f]...
                    [--scope k=v]... [--prometheus URL] [--sql DSN] [--format text|json|markdown]
                                        compute the impact ledger for a window
+  shortfall reconcile --registry r.yaml --from <RFC3339> --to <RFC3339> --ledger rows.json [--flow f]...
+                   [--prometheus URL] [--sql DSN] [--source label]
+                                       publish the coverage ratio (telemetry vs a ledger)
   shortfall version                    print build provenance`)
 }
