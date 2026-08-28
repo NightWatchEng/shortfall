@@ -1,0 +1,55 @@
+#!/bin/sh
+# Regression suite for commit-lint.sh, run by the pr-title-lint CI job and
+# runnable locally (./scripts/commit-lint-test.sh). The multibyte cases pin
+# the byte-vs-char fix: length is bytes under LC_ALL=C on every platform, so
+# a 100-char header with an em-dash fails identically on macOS and CI.
+set -eu
+lint="$(dirname "$0")/commit-lint.sh"
+fails=0
+
+expect() { # expect <pass|fail> <description> [args...]
+  want="$1"; desc="$2"; shift 2
+  if "$lint" "$@" >/dev/null 2>&1; then got=pass; else got=fail; fi
+  if [ "$got" != "$want" ]; then
+    echo "FAIL: $desc (wanted $want, got $got)" >&2
+    fails=$((fails + 1))
+  fi
+}
+
+# 96 ascii filler chars for length-boundary cases.
+filler="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+# Convention shapes.
+expect pass "typed header with bead id"        "feat: add Money type (workspace-abc.1)"
+expect pass "no-bead form"                     "chore: fix typo (no-bead: trivial)"
+expect pass "squash suffix tolerated"          "fix: handle nil (workspace-x.2) (#12)"
+expect fail "unknown type"                     "feet: add Money type (workspace-abc.1)"
+expect fail "missing tracked-item id"          "feat: add Money type"
+expect fail "scoped type"                      "feat(emit): add thing (workspace-abc.1)"
+
+# Byte-length cap: exactly 100 bytes passes, 101 fails.
+h100="feat: $filler (no-bead: len888)"  # 6+76+18 = 100 bytes
+[ "$(printf '%s' "$h100" | LC_ALL=C wc -c | tr -d ' ')" = 100 ] || { echo "FAIL: h100 fixture is not 100 bytes" >&2; fails=$((fails + 1)); }
+expect pass "exactly 100 ascii bytes"          "$h100"
+expect fail "101 ascii bytes"                  "x$h100"
+
+# The workspace-edf regression: 100 CHARS whose em-dash makes 102 BYTES must
+# fail on every platform (a char-counting shell passed it locally while the
+# CI fence rejected it).
+hmb="feat: ${filler}\xe2\x80\x94 (no-bead: len88)" # em-dash: 100 chars, 102 bytes
+hmb="$(printf "$hmb")"
+[ "$(printf '%s' "$hmb" | LC_ALL=C wc -c | tr -d ' ')" = 102 ] || { echo "FAIL: hmb fixture is not 102 bytes" >&2; fails=$((fails + 1)); }
+expect fail "multibyte header over 100 bytes"  "$hmb"
+
+# Merge/revert exemption applies only in hook (-f) mode.
+tmp="$(mktemp)"
+printf 'Merge branch main\n' > "$tmp"
+expect pass "merge commit exempt in -f mode"   -f "$tmp"
+expect fail "merge title linted in arg mode"   "Merge branch main"
+rm -f "$tmp"
+
+if [ "$fails" -gt 0 ]; then
+  echo "commit-lint-test: $fails case(s) failed" >&2
+  exit 1
+fi
+echo "commit-lint-test: all cases pass"
