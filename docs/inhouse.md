@@ -59,11 +59,14 @@ a `sql:`/`stripe:` reconcile source.
 Load it once at startup:
 
 ```go
-reg, err := registry.Load("registry.yaml")   // or registry.Parse(rawBytes)
-if err != nil {
+reg, err := registry.Load("registry.yaml")   // returns a registry.Registry value
+if err != nil {                               // (registry.Parse(rawBytes) for in-memory bytes)
     log.Fatalf("registry: %v", err)
 }
 ```
+
+`Load`/`Parse` return a `registry.Registry` **value**; the emitter and
+middleware constructors below take a `*registry.Registry`, so pass `&reg`.
 
 ---
 
@@ -84,7 +87,7 @@ exp, err := prom.New()               // serve exp.Gatherer() on /metrics
 if err != nil {
     log.Fatal(err)
 }
-em, err := emit.New(reg, exp)        // emit.New(reg, exporter, ...EmitterOption)
+em, err := emit.New(&reg, exp)       // emit.New(*registry.Registry, exporter, ...EmitterOption)
 if err != nil {
     log.Fatal(err)
 }
@@ -134,7 +137,7 @@ ingress := func(r *http.Request) (biz.ValueContext, bool) {
     }, true
 }
 
-handler = httpmw.Middleware(reg, httpmw.WithIngress(ingress))(handler)
+handler = httpmw.Middleware(&reg, httpmw.WithIngress(ingress))(handler)
 ```
 
 The middleware first tries to recover a `biz.vc` that an upstream service
@@ -228,7 +231,7 @@ to third parties:
 
 ```go
 client := &http.Client{
-    Transport: httpmw.NewTransport(reg, http.DefaultTransport),
+    Transport: httpmw.NewTransport(&reg, http.DefaultTransport),
 }
 ```
 
