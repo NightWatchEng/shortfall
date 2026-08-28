@@ -16,7 +16,7 @@ expect() { # expect <pass|fail> <description> [args...]
   fi
 }
 
-# 96 ascii filler chars for length-boundary cases.
+# 76 ascii filler chars for length-boundary cases.
 filler="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 # Convention shapes.
@@ -31,13 +31,16 @@ expect fail "scoped type"                      "feat(emit): add thing (workspace
 h100="feat: $filler (no-bead: len888)"  # 6+76+18 = 100 bytes
 [ "$(printf '%s' "$h100" | LC_ALL=C wc -c | tr -d ' ')" = 100 ] || { echo "FAIL: h100 fixture is not 100 bytes" >&2; fails=$((fails + 1)); }
 expect pass "exactly 100 ascii bytes"          "$h100"
-expect fail "101 ascii bytes"                  "x$h100"
+# Shape-valid 101-byte header: fails only via the cap, so an off-by-one cap
+# regression cannot hide behind a convention rejection.
+h101="feat: a$filler (no-bead: len888)"  # 6+1+76+18 = 101 bytes
+[ "$(printf '%s' "$h101" | LC_ALL=C wc -c | tr -d ' ')" = 101 ] || { echo "FAIL: h101 fixture is not 101 bytes" >&2; fails=$((fails + 1)); }
+expect fail "101 ascii bytes, valid shape"     "$h101"
 
-# The workspace-edf regression: 100 CHARS whose em-dash makes 102 BYTES must
+# The chars-vs-bytes regression: 100 chars whose em-dash makes 102 bytes must
 # fail on every platform (a char-counting shell passed it locally while the
-# CI fence rejected it).
-hmb="feat: ${filler}\xe2\x80\x94 (no-bead: len88)" # em-dash: 100 chars, 102 bytes
-hmb="$(printf "$hmb")"
+# CI fence rejected it). Octal escapes: POSIX printf — dash has no \xHH.
+hmb="$(printf 'feat: %s\342\200\224 (no-bead: len88)' "$filler")" # em-dash: 100 chars, 102 bytes
 [ "$(printf '%s' "$hmb" | LC_ALL=C wc -c | tr -d ' ')" = 102 ] || { echo "FAIL: hmb fixture is not 102 bytes" >&2; fails=$((fails + 1)); }
 expect fail "multibyte header over 100 bytes"  "$hmb"
 
