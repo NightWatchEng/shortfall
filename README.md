@@ -98,9 +98,11 @@ shortfall impact --registry registry.yaml --prometheus http://prom:9090 \
   --from 2026-08-25T09:00:00Z --to 2026-08-25T12:00:00Z
 ```
 
-Runnable versions of these snippets live in the package examples
-(`biz`, `emit`, `engine` on pkg.go.dev); the full path from `go get` to a
-rendered report is the [Quickstart](docs/quickstart.md).
+Runnable versions of these snippets live in the package examples —
+`go doc github.com/NightWatchEng/shortfall/biz`, `emit`, and `engine`
+render them locally (and on pkg.go.dev once the repo is public); the full
+path from `go get` to a rendered report is the
+[Quickstart](docs/quickstart.md).
 
 ## Documentation
 
