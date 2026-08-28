@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/NightWatchEng/shortfall/query"
 	"github.com/NightWatchEng/shortfall/registry"
@@ -28,8 +29,10 @@ var ageBucketOrder = []string{"lt1m", "1m-5m", "5m-30m", "30m-2h", "gt2h"}
 //
 // Sources and honest gaps (founder decision): the value gauge carries VALUE by
 // (flow, stage, age_bucket, currency) only — no transaction count. So:
-//   - ByAgeBucket, ByCurrency and ProjectedLostMinor are exact, read straight
-//     from the gauge and the registry SLA policy;
+//   - ByAgeBucket and ByCurrency are exact gauge reads;
+//   - ProjectedLostMinor is a conservative LOWER BOUND: it sums the value in
+//     buckets ENTIRELY past a stage's SLA deadline (bucket-floor granularity),
+//     so a deadline falling inside a bucket under-attributes that bucket;
 //   - OldestAgeMinutes is the floor age of the oldest non-empty bucket (a lower
 //     bound — the bucket is that old or older);
 //   - SLABreaches and Leg.Count (transaction counts) are NOT derivable from a
@@ -137,9 +140,12 @@ func breachedAndLost(reg *registry.Registry, flow, stage, bucket string) bool {
 		return false
 	}
 	// The bucket is entirely past the deadline when its FLOOR age already
-	// meets it (conservative: a deadline falling inside a bucket is not
-	// counted for that bucket — a documented lower bound on projected-lost).
-	return int64(sla.Deadline.Minutes()) <= floorMin
+	// meets it. Compared as durations, never as truncated float minutes: a
+	// fractional-minute deadline (PT90S) must not round down and pull earlier
+	// buckets over the line, which would OVER-state projected loss. Still
+	// conservative — a deadline falling inside a bucket is not attributed to
+	// that bucket (a documented lower bound on projected-lost).
+	return sla.Deadline <= time.Duration(floorMin)*time.Minute
 }
 
 // inflightFilters returns one filter map per flow (scope + flow), with no

@@ -87,6 +87,43 @@ func TestDeferredAtRiskIsNotProjectedLost(t *testing.T) {
 	}
 }
 
+func TestDeferredEdgeCases(t *testing.T) {
+	at := win.To.Add(-time.Minute)
+	t.Run("nil registry: value counted, no projected-lost", func(t *testing.T) {
+		q := memq.New(memq.WithMetrics([]emit.MetricPoint{inflightPoint("capture", "gt2h", "USD", 500, at)}))
+		leg, err := Deferred(context.Background(), nil, q, Request{Window: win, Flows: []string{"invoice.pay"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if leg.ByCurrency["USD"] != 500 {
+			t.Fatalf("value = %v, want 500", leg.ByCurrency)
+		}
+		if len(leg.ProjectedLostMinor) != 0 {
+			t.Fatalf("nil registry cannot know SLAs; projected-lost must be empty, got %v", leg.ProjectedLostMinor)
+		}
+	})
+	t.Run("no flows: scope-only aggregates all flows", func(t *testing.T) {
+		q := memq.New(memq.WithMetrics([]emit.MetricPoint{inflightPoint("capture", "5m-30m", "USD", 300, at)}))
+		leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: win}) // no Flows
+		if err != nil {
+			t.Fatal(err)
+		}
+		if leg.ByCurrency["USD"] != 300 {
+			t.Fatalf("scope-only must still read the gauge, got %v", leg.ByCurrency)
+		}
+	})
+	t.Run("zero level does not create a bucket entry", func(t *testing.T) {
+		q := memq.New(memq.WithMetrics([]emit.MetricPoint{inflightPoint("capture", "gt2h", "USD", 0, at)}))
+		leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: win, Flows: []string{"invoice.pay"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(leg.ByAgeBucket) != 0 || len(leg.ByCurrency) != 0 {
+			t.Fatalf("a zero level must not create entries, got buckets=%v cur=%v", leg.ByAgeBucket, leg.ByCurrency)
+		}
+	})
+}
+
 func TestDeferredNoMetricsErrors(t *testing.T) {
 	q := memq.New(memq.WithCaps(query.Caps{Events: true}))
 	if _, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: win}); err == nil {
@@ -112,8 +149,20 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 		}},
 	})
 
-	// Ground truth: value still in the capture queue at end (State authed),
-	// bucketed by age, and the breached (>= 30m) share that on_breach=lost.
+	// Ground truth computed INDEPENDENTLY of the leg: the deadline and policy
+	// are read from the registry (not hardcoded), the bucket floors use a
+	// local duration table (not the leg's package map), and breach is the
+	// bucket-floor-vs-deadline rule the leg documents.
+	reg := testRegistry(t)
+	f, ok := reg.Flow("invoice.pay")
+	if !ok {
+		t.Fatal("registry missing invoice.pay")
+	}
+	capSLA := f.SLA["capture"]
+	capLost := capSLA.OnBreach == registry.BreachLost
+	localFloor := map[string]time.Duration{
+		"lt1m": 0, "1m-5m": time.Minute, "5m-30m": 5 * time.Minute, "30m-2h": 30 * time.Minute, "gt2h": 120 * time.Minute,
+	}
 	wantByCur := map[string]int64{}
 	wantBucket := map[string]int64{}
 	wantProjLost := map[string]int64{}
@@ -124,7 +173,7 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 		bucket := emit.AgeBucketFor(end.Sub(tx.AuthedAt))
 		wantByCur[tx.Currency] += tx.AmountMinor
 		wantBucket[bucket] += tx.AmountMinor
-		if ageBucketFloorMinutes[bucket] >= 30 { // capture SLA PT30M -> lost
+		if capLost && localFloor[bucket] >= capSLA.Deadline {
 			wantProjLost[tx.Currency] += tx.AmountMinor
 		}
 	}
@@ -133,7 +182,7 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 	}
 
 	q := testkit.QuerierFromResult(res)
-	leg, err := Deferred(context.Background(), testRegistry(t), q,
+	leg, err := Deferred(context.Background(), reg, q,
 		Request{Window: query.TimeRange{From: start, To: end.Add(time.Second)}, Flows: []string{"invoice.pay"}})
 	if err != nil {
 		t.Fatal(err)
