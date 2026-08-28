@@ -19,3 +19,5 @@ use ./adapters/export/loki
 use ./adapters/export/datadog
 
 use ./adapters/query/promql
+
+use ./adapters/query/sql
