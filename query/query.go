@@ -5,7 +5,7 @@
 // need a new Querier method, that is a design smell to raise, not a
 // method to add.
 //
-// FROZEN SURFACE (v0.1.0).
+// Frozen surface (v0.1.0).
 package query
 
 import (
@@ -31,10 +31,9 @@ type TimeRange struct {
 // Query asks for an aggregated metric over a range. Filters and GroupBy
 // name ADR-0004 labels only.
 //
-// Temporal semantics every adapter MUST implement identically — two
-// conforming adapters returning different numbers for the same Query is
-// cross-backend drift in the numbers Finance reads:
-//   - Counter families: each returned Point is the INCREASE within its
+// Temporal semantics are identical across adapters (divergence is
+// cross-backend drift in the numbers Finance reads):
+//   - Counter families: each returned Point is the increase within its
 //     step interval (PromQL: sum(increase(m[step]))); never a cumulative
 //     sample.
 //   - Gauge families: each Point is the last observed level at its step
@@ -59,24 +58,21 @@ const (
 	EventAggGroups EventAgg = ""
 	// EventAggDistinctCount returns a single EventGroup whose Count is
 	// the number of distinct GroupBy key combinations — the customers
-	// leg's distinct count without an unbounded fetch (SQL
-	// COUNT(DISTINCT), CW Insights count_distinct, SPL dc()).
+	// leg's distinct count without an unbounded fetch.
 	EventAggDistinctCount EventAgg = "distinct_count"
-	// EventAggMaxPerGroup returns one group per distinct key (like
-	// EventAggGroups) and additionally sets EventGroup.MaxMinor to the
-	// MAXIMUM single event's minor amount in the group. It lets the engine
-	// take one representative amount per entity for exact de-dup instead of
-	// averaging SumMinor/Count (ADR-0009). MaxMinor is money, so the same
-	// currency invariant as EventAggGroups applies.
+	// EventAggMaxPerGroup is EventAggGroups plus EventGroup.MaxMinor: the
+	// maximum single event's minor amount per group, one representative
+	// amount per entity for exact de-dup (ADR-0009). MaxMinor is money, so
+	// the same currency invariant as EventAggGroups applies.
 	EventAggMaxPerGroup EventAgg = "max_per_group"
 )
 
 // EventOrder fixes which groups a Limit keeps. Limit without an order
-// would mean a DIFFERENT arbitrary N per backend.
+// would mean a different arbitrary N per backend.
 type EventOrder string
 
 const (
-	// OrderNone: no ordering contract; Limit MUST be 0.
+	// OrderNone: no ordering contract; Limit must be 0.
 	OrderNone EventOrder = ""
 	// OrderSumDesc: groups ordered by SumMinor descending (top accounts
 	// by value).
@@ -87,10 +83,8 @@ const (
 
 // EventQuery asks for grouped outcome events. Money invariant: when Agg
 // reads money per group (EventAggGroups' SumMinor or EventAggMaxPerGroup's
-// MaxMinor), "currency" MUST be in GroupBy or pinned by Filters — adapters
-// MUST reject a result that would compare across currencies (ADR-0001 forbids
-// silent normalization, and five adapter authors deciding independently is how
-// it would happen).
+// MaxMinor), "currency" must be in GroupBy or pinned by Filters — adapters
+// must reject a result that would compare across currencies (ADR-0001).
 type EventQuery struct {
 	Filters map[string]string
 	GroupBy []string
@@ -124,10 +118,9 @@ type EventGroup struct {
 	Key      map[string]string
 	Count    int64
 	SumMinor int64
-	// MaxMinor is the maximum single event's minor amount in the group. It is
-	// populated ONLY when EventQuery.Agg == EventAggMaxPerGroup (zero
-	// otherwise) and, being money, is meaningful only under the same currency
-	// invariant as SumMinor. See ADR-0009.
+	// MaxMinor is the maximum single event's minor amount in the group,
+	// populated only when EventQuery.Agg == EventAggMaxPerGroup (zero
+	// otherwise); same currency invariant as SumMinor (ADR-0009).
 	MaxMinor int64
 }
 
@@ -136,11 +129,9 @@ type EventGroup struct {
 type EventGroups []EventGroup
 
 // Caps declares what a backend can honestly serve. Metrics and events
-// are independent capabilities (Loki-style log stores serve events but
-// no metric TSDB; Prometheus serves metrics but no events), and their
-// retentions routinely differ — the baseline leg reads
-// MetricHistoryWeeks, the customers leg reads EventHistoryWeeks.
-// emit.Caps is the write-side mirror of this shape — amend BOTH together
+// are independent capabilities with independent retentions: the baseline
+// leg reads MetricHistoryWeeks, the customers leg EventHistoryWeeks.
+// emit.Caps is the write-side mirror of this shape — amend both together
 // (a parity test in each package pins the tie).
 type Caps struct {
 	Metrics            bool
@@ -149,9 +140,9 @@ type Caps struct {
 	EventHistoryWeeks  int
 }
 
-// ErrUnsupported is returned by EITHER verb a backend cannot serve:
+// ErrUnsupported is returned by either verb a backend cannot serve:
 // QueryEvents on a metrics-only backend, QueryMetric on an events-only
-// one. The engine MUST turn it into an honest NotAvailable, never a
+// one. The engine must turn it into an honest NotAvailable, never a
 // silent zero.
 var ErrUnsupported = errors.New("query: this signal kind is not supported by this backend")
 

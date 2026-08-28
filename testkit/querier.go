@@ -10,19 +10,16 @@ import (
 )
 
 // QuerierFromResult builds an in-memory query.Querier from a harness run's
-// ground-truth ledger, modelling a TELEMETRY backend: it contains only what
+// ground-truth ledger, modelling a telemetry backend: it contains only what
 // real telemetry could observe, so the engine can be exercised end to end
 // with no backend process. Each telemetry-visible terminal transaction
 // becomes one outcome event and its counter metric points (biz_txn_total,
 // and biz_value_total carrying the exact amount).
 //
-// Deliberately excluded, because a real emitter never records them:
-//   - abandoned transactions — the user gave up before the request landed;
-//     "telemetry never saw it" (checkout.StateAbandoned). Abandoned rows stay
-//     in res.Ledger as ground truth; this invisible loss is the
-//     counterfactual leg's concern (baseline expected-vs-observed), never a
-//     telemetry querier. (res.Suppressed separately holds blackout-suppressed
-//     demand, a distinct invisible-loss source.)
+// Excluded, because a real emitter never records them:
+//   - abandoned transactions (checkout.StateAbandoned) — telemetry never saw
+//     them; they stay in res.Ledger as ground truth for the counterfactual
+//     leg (res.Suppressed separately holds blackout-suppressed demand);
 //   - non-terminal (still in-flight) transactions — the deferred leg reads
 //     these from biz_inflight_value, which a deferred-leg test seeds.
 //
@@ -58,8 +55,8 @@ func EventsFromResult(res checkout.Result) []biz.Outcome {
 // for a harness run: biz_txn_total + biz_value_total per telemetry-visible
 // terminal transaction, plus the biz_inflight_value gauge snapshot at the run's
 // end instant (res.Config.End) — the level a live scrape would publish "now".
-// The golden harness (workspace-0ka) feeds these to BOTH memq and a real
-// Prometheus so the two must return identical Series.
+// The golden harness feeds these to both memq and a real Prometheus, which
+// must return identical Series.
 func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
 	return MetricsFromResultAt(res, res.Config.End)
 }
@@ -69,12 +66,10 @@ func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
 // stamped at their own event times; only the biz_inflight_value gauge is
 // snapshotted at gaugeAt.
 //
-// The golden harness snapshots the gauge strictly INSIDE its query window: a
-// gauge sample stamped exactly at the window end To is invisible to a half-open
-// [From, To) read on BOTH sides — memq drops samples with At >= To and the
-// promql adapter evaluates last_over_time at To-1ms — so an at-To snapshot would
-// make the gauge parity assertion vacuous (empty == empty). A gaugeAt before To
-// exercises the gauge/last_over_time translation for real.
+// gaugeAt must lie strictly inside the query window: a sample stamped exactly
+// at the window end To is invisible to a half-open [From, To) read on both
+// sides (memq drops At >= To; the promql adapter reads last_over_time at
+// To-1ms), which would make a gauge parity assertion vacuous (empty == empty).
 func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPoint {
 	var metrics []emit.MetricPoint
 	for _, txn := range res.Ledger.Txns {
@@ -92,7 +87,12 @@ func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPo
 			"flow": "invoice.pay", "stage": stage, "outcome": string(result),
 			"currency": txn.Currency, "kind": string(biz.KindFee), "segment": string(txn.Segment),
 		}
-		metrics = append(metrics, emit.MetricPoint{Name: "biz_value_total", Labels: valueLabels, Value: txn.AmountMinor, At: at})
+		metrics = append(metrics, emit.MetricPoint{
+			Name:   "biz_value_total",
+			Labels: valueLabels,
+			Value:  txn.AmountMinor,
+			At:     at,
+		})
 	}
 	// In-flight (deferred) value snapshot — the level the deferred leg reads.
 	// Appended as biz_inflight_value gauge points stamped at gaugeAt.

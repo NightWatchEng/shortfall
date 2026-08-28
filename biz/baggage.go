@@ -11,14 +11,14 @@ import (
 	"go.opentelemetry.io/otel/baggage"
 )
 
-// The ValueContext wire codec (ADR-0003): ONE versioned Baggage member,
-// biz.vc, so async carriers copy exactly one header. The encoded VALUE is
+// The ValueContext wire codec (ADR-0003): one versioned Baggage member,
+// biz.vc, so async carriers copy exactly one header. The encoded value is
 // capped at MaxEncodedBytes, measured as UTF-8 bytes before any
 // percent-encoding the Baggage wire layer adds, and every byte emitted is
 // inside the W3C baggage value grammar (no spaces, quotes, commas,
 // semicolons, or backslashes survive escaping).
 //
-// DecodeVC returns exactly what the wire carried; it does NOT run
+// DecodeVC returns exactly what the wire carried; it does not run
 // Validate — transport fidelity and semantic validity are separate
 // judgments, and the emit layer makes the second one.
 
@@ -33,7 +33,7 @@ const MaxEncodedBytes = 512
 const codecVersion = "1"
 
 // Deadline domain on the wire: strictly after the epoch and no later
-// than year 3000, carried at UNIX-SECOND precision (sub-second components
+// than year 3000, carried at unix-second precision (sub-second components
 // are discarded at encode). Both codec directions enforce the same
 // bounds, so everything encoded decodes and a peer-controlled header can
 // never smuggle a time.Time-overflowing instant into SLA math.
@@ -60,10 +60,8 @@ func EncodeVC(vc ValueContext) (string, error) {
 	deadline := int64(0)
 	if !vc.Deadline.IsZero() {
 		deadline = vc.Deadline.Unix()
-		// The zero wire value means "no deadline", so the encodable
-		// domain must exclude it — and everything the decoder rejects.
-		// An encoder that emits wire its own decoder refuses loses
-		// context silently on the next hop (a confirmed HIGH finding).
+		// Zero on the wire means "no deadline", so the encodable domain excludes
+		// it and everything the decoder rejects — else context drops on the next hop.
 		if deadline <= 0 || deadline > maxDeadlineUnix {
 			return "", fmt.Errorf("biz: deadline %v outside the encodable domain (1970, 3000]", vc.Deadline)
 		}
@@ -180,7 +178,7 @@ func WithValueContext(ctx context.Context, vc ValueContext) (context.Context, er
 
 // FromContext decodes the biz.vc member. The three outcomes are
 // distinguishable on purpose — a corrupted header must never be mistaken
-// for an absent one (money bugs must be loud):
+// for an absent one:
 //
 //	(vc, true, nil)    present and well-formed
 //	(_, false, nil)    absent
@@ -223,15 +221,13 @@ func escapeInto(b *strings.Builder, s string) {
 	}
 }
 
-// unescape rejects any raw byte the encoder would have escaped (a fuzz
-// finding — its counterexample is committed in testdata). The precise
-// invariant, examiner-verified over all 256 escape bytes: re-encoding a
-// decoded input NEVER lengthens it, so the 512 cap survives round trips.
-// The decoder does still accept some never-emitted forms — non-canonical
-// %XX of bytes needing no escape, zero-padded or plus-signed numbers —
-// all of which only shrink on re-encode. Escapes are UPPERCASE hex only
-// ("%7C", never "%7c"): independent implementations of this wire format
-// must emit uppercase.
+// unescape rejects any raw byte the encoder would have escaped, so
+// re-encoding a decoded input never lengthens it and the 512 cap
+// survives round trips. Some never-emitted forms are still accepted —
+// non-canonical %XX of bytes needing no escape, zero-padded or
+// plus-signed numbers — all of which only shrink on re-encode. Escapes
+// are uppercase hex only ("%7C", never "%7c"): independent
+// implementations of this wire format must emit uppercase.
 func unescape(s string) (string, error) {
 	// Fast path: no escapes and nothing that should have been — return
 	// the input without copying.

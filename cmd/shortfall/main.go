@@ -1,8 +1,7 @@
 // Command shortfall is the CLI: validate a flow registry, compute an
 // impact report for an incident window, reconcile telemetry against a
-// ledger, and simulate scenarios. Subcommands arrive with their engine
-// milestones; the arg surface stays hand-rolled until there is more than
-// one real verb to route.
+// ledger, and simulate scenarios. The arg surface stays hand-rolled
+// until the verb set outgrows it.
 package main
 
 import (

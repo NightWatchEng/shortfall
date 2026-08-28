@@ -44,7 +44,7 @@ func TestComputeAssemblesDeterministicLegs(t *testing.T) {
 	if len(report.Deferred.Caveats) == 0 {
 		t.Fatal("deferred must be marked unavailable on an events-only backend")
 	}
-	// M7/M8 legs are honestly pending.
+	// Unavailable legs say why instead of rendering zeros.
 	if len(report.Unrealized.Notes) == 0 || report.Coverage.Unavailable == "" {
 		t.Fatal("unrealized and coverage must state they are not yet computed")
 	}

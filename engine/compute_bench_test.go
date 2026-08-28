@@ -29,7 +29,7 @@ func buildIncident(nEvents int) *memq.Querier {
 	buckets := emit.AgeBuckets
 	events := make([]biz.Outcome, 0, nEvents)
 	span := benchWindow.To.Sub(benchWindow.From)
-	// Per-event stride computed BEFORE multiplying by i: i*span would overflow
+	// Per-event stride computed before multiplying by i: i*span would overflow
 	// int64 (span is ~8.6e13 ns) past ~107k events and wrap negative, silently
 	// dropping events out of the window.
 	stride := span / time.Duration(nEvents)

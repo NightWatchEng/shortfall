@@ -125,11 +125,10 @@ func TestExportMetricsMapping(t *testing.T) {
 	}
 }
 
-// TestInflightGaugeHonorsAtOrdering pins the fix for the confirmed
-// out-of-order gauge bug: biz_inflight_value is a LEVEL, and a stale sample
-// (older At) arriving after a fresh one — which overlapping flushes can
-// deliver, per emit's order-by-At contract — must NOT overwrite the fresh
-// level. Counters are immune (Add commutes) and are not retested here.
+// TestInflightGaugeHonorsAtOrdering: biz_inflight_value is a level, and a
+// stale sample (older At) arriving after a fresh one — which overlapping
+// flushes can deliver, per emit's order-by-At contract — must not overwrite
+// the fresh level. Counters are immune (Add commutes) and are not retested.
 func TestInflightGaugeHonorsAtOrdering(t *testing.T) {
 	older := at
 	newer := at.Add(time.Minute)

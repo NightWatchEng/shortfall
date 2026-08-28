@@ -13,11 +13,17 @@ import (
 
 // TestTelemetryOutcomeMapping pins each state's mapping to a telemetry
 // outcome, independent of a harness run — including that abandoned and
-// in-flight states are NOT telemetry-visible.
+// in-flight states are not telemetry-visible.
 func TestTelemetryOutcomeMapping(t *testing.T) {
 	t0 := time.Date(2026, 8, 27, 10, 0, 0, 0, time.UTC)
 	tx := func(state checkout.State, authed, captured, settled time.Time) checkout.Txn {
-		return checkout.Txn{State: state, CreatedAt: t0, AuthedAt: authed, CapturedAt: captured, SettledAt: settled}
+		return checkout.Txn{
+			State:      state,
+			CreatedAt:  t0,
+			AuthedAt:   authed,
+			CapturedAt: captured,
+			SettledAt:  settled,
+		}
 	}
 	cases := []struct {
 		name        string
@@ -128,13 +134,12 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	}
 }
 
-// TestInFlightGaugeSnapshotVisibleWithinWindow is the named regression test for
-// the workspace-0ka vacuous-gauge-parity bug: a biz_inflight_value snapshot
-// stamped exactly at a query window's end To is invisible to the half-open
-// [From, To) read (memq drops samples with At>=To; the promql adapter reads
-// last_over_time at To-1ms), so the golden harness's gauge parity was comparing
-// empty==empty and proving nothing. MetricsFromResultAt lets the harness
-// snapshot the gauge strictly inside the window, where it is actually read.
+// TestInFlightGaugeSnapshotVisibleWithinWindow pins the vacuous-gauge-parity
+// regression: a biz_inflight_value snapshot stamped exactly at a query
+// window's end To is invisible to the half-open [From, To) read on both sides
+// (memq drops At>=To; the promql adapter reads last_over_time at To-1ms), so
+// an at-To gauge parity check compares empty==empty and proves nothing.
+// MetricsFromResultAt lets the harness snapshot strictly inside the window.
 func TestInFlightGaugeSnapshotVisibleWithinWindow(t *testing.T) {
 	start := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
 	end := start.Add(50 * time.Minute)
@@ -148,12 +153,17 @@ func TestInFlightGaugeSnapshotVisibleWithinWindow(t *testing.T) {
 		}},
 	})
 	window := query.TimeRange{From: start, To: end}
-	gaugeQ := query.Query{Metric: "biz_inflight_value", GroupBy: []string{"age_bucket", "currency"}, Range: window}
+	gaugeQ := query.Query{
+		Metric:  "biz_inflight_value",
+		GroupBy: []string{"age_bucket", "currency"},
+		Range:   window,
+	}
 	ctx := context.Background()
 
 	// Setup sanity: the stall must leave a backlog, else neither case proves
 	// anything.
-	sanity, _ := memq.New(memq.WithMetrics(InFlightPointsAt(res, end.Add(-time.Minute)))).QueryMetric(ctx, gaugeQ)
+	sanity, _ := memq.New(memq.WithMetrics(InFlightPointsAt(res, end.Add(-time.Minute)))).
+		QueryMetric(ctx, gaugeQ)
 	if len(sanity) == 0 {
 		t.Fatal("stall scenario left no in-flight backlog; test setup is broken")
 	}
@@ -168,7 +178,8 @@ func TestInFlightGaugeSnapshotVisibleWithinWindow(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			series, err := memq.New(memq.WithMetrics(MetricsFromResultAt(res, c.gaugeAt))).QueryMetric(ctx, gaugeQ)
+			series, err := memq.New(memq.WithMetrics(MetricsFromResultAt(res, c.gaugeAt))).
+				QueryMetric(ctx, gaugeQ)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1,7 +1,7 @@
 // Package promgolden seeds a real Prometheus with the harness's metric points
 // (via the remote-write protocol) and asserts the promql adapter reads back the
 // same Series the in-memory reference (memq) does — the live numeric-parity
-// harness for workspace-0ka. It lives in its own module so its test-only deps
+// harness. It lives in its own module so its test-only deps
 // (snappy, the Docker orchestration) never touch the promql adapter's go.mod.
 package promgolden
 
@@ -24,8 +24,8 @@ import (
 // as-is). Everything else is a counter and must be cumulated before seeding.
 var gaugeFamilies = map[string]bool{"biz_inflight_value": true, "biz_inflight_count": true}
 
-// cumulativeForPrometheus converts the harness's per-event DELTA counter points
-// into the CUMULATIVE (monotonically increasing) series a real Prometheus
+// cumulativeForPrometheus converts the harness's per-event delta counter points
+// into the cumulative (monotonically increasing) series a real Prometheus
 // counter client would expose, so the adapter's `m@To - m@From` recovers the
 // in-window sum — matching memq, which sums the deltas directly. Gauge families
 // pass through unchanged. Within each counter series, points are sorted by time
@@ -46,9 +46,9 @@ func cumulativeForPrometheus(points []emit.MetricPoint) []emit.MetricPoint {
 
 	var out []emit.MetricPoint
 	// Counter series -> one representative point + the delta summed per timestamp.
-	// Same-minute events share a timestamp; Prometheus keeps only ONE sample per
+	// Same-minute events share a timestamp; Prometheus keeps one sample per
 	// (series, timestamp), so cumulating per raw point would drop the extra
-	// steps and undercount. Collapse to one cumulative sample per DISTINCT
+	// steps and undercount. Collapse to one cumulative sample per distinct
 	// timestamp: sum the deltas at each timestamp, then running-sum those.
 	type acc struct {
 		rep   emit.MetricPoint

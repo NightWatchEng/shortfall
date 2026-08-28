@@ -1,8 +1,8 @@
-// Package propagate carries ValueContext across message queues as ONE
+// Package propagate carries ValueContext across message queues as one
 // header — the biz.vc member (ADR-0003) — so async consumers re-attach
 // the same context. It defines the Carrier seam (Get/Set/Keys over
 // string), and the kafka, sqs, and amqp subpackages provide Carriers over
-// each transport's header shape WITHOUT importing that transport's client
+// each transport's header shape without importing that transport's client
 // library: a Prometheus user never pulls a Kafka SDK into their build.
 package propagate
 
@@ -20,7 +20,7 @@ type Carrier interface {
 	Get(key string) string
 	// Set writes the value under key and reports whether the write
 	// landed. A carrier over a nil/unwritable backing store returns
-	// false so Inject can fail LOUDLY instead of losing money context
+	// false so Inject can fail loudly instead of losing money context
 	// on the hop while the caller believes it propagated.
 	Set(key, value string) bool
 	Keys() []string
@@ -35,7 +35,9 @@ func Inject(c Carrier, vc biz.ValueContext) error {
 		return err
 	}
 	if !c.Set(biz.MemberKey, enc) {
-		return fmt.Errorf("propagate: carrier could not hold biz.vc (nil or unwritable backing store) — context not propagated")
+		return fmt.Errorf(
+			"propagate: carrier could not hold biz.vc (nil or unwritable backing store) — context not propagated",
+		)
 	}
 	return nil
 }

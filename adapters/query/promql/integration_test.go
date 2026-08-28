@@ -1,11 +1,11 @@
 //go:build integration
 
-// Integration test: runs the translated PromQL against a REAL Prometheus and
+// Integration test: runs the translated PromQL against a real Prometheus and
 // checks the adapter reads back what was written. It is env-gated (set
 // PROMETHEUS_URL) and excluded from the default build; the unit tests cover
-// translation and parsing. The correctness bar (bead 7.6) is that the same
-// golden queries match the in-memory reference — a CI job seeds Prometheus
-// from the harness and points both memq and this adapter at the same data.
+// translation and parsing. The correctness bar is that the same golden
+// queries match the in-memory reference — a CI job seeds Prometheus from the
+// harness and points both memq and this adapter at the same data.
 //
 //	PROMETHEUS_URL=http://localhost:9090 go test -tags integration ./...
 package promql

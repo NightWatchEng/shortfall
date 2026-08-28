@@ -72,7 +72,14 @@ func TestCoverageHarnessReports100(t *testing.T) {
 		t.Fatal("scenario produced no settled transactions")
 	}
 	q := testkit.QuerierFromResult(res) // telemetry sees exactly what settled
-	leg, slices, err := Coverage(context.Background(), nil, q, Request{Window: coverageWindow(), Flows: []string{"invoice.pay"}}, ledger, "harness")
+	leg, slices, err := Coverage(
+		context.Background(),
+		nil,
+		q,
+		Request{Window: coverageWindow(), Flows: []string{"invoice.pay"}},
+		ledger,
+		"harness",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +106,14 @@ func TestCoverageDroppedExporterUnder100WithDelta(t *testing.T) {
 	// still complete. Coverage must fall below 100% and the delta must be
 	// attributed to the affected slice.
 	q := testkit.QuerierFromResult(dropSettled(res, 2))
-	leg, slices, err := Coverage(context.Background(), nil, q, Request{Window: coverageWindow(), Flows: []string{"invoice.pay"}}, ledger, "harness")
+	leg, slices, err := Coverage(
+		context.Background(),
+		nil,
+		q,
+		Request{Window: coverageWindow(), Flows: []string{"invoice.pay"}},
+		ledger,
+		"harness",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +154,12 @@ func TestCoverageOverTelemetryClampedToFull(t *testing.T) {
 		{Name: "biz_value_total", Value: 30000, At: window.From.Add(time.Minute), Labels: map[string]string{
 			"flow": "invoice.pay", "stage": "settle", "outcome": "success", "currency": "USD", "kind": "fee", "segment": "smb"}},
 	}), memq.WithCaps(query.Caps{Metrics: true}))
-	ledger := []biz.LedgerRow{{Flow: "invoice.pay", Outcome: biz.ResultSuccess, Money: biz.Money{Amount: 10000, Currency: "USD", Exponent: 2}, Count: 1}}
+	ledger := []biz.LedgerRow{{
+		Flow:    "invoice.pay",
+		Outcome: biz.ResultSuccess,
+		Money:   biz.Money{Amount: 10000, Currency: "USD", Exponent: 2},
+		Count:   1,
+	}}
 	leg, slices, err := Coverage(context.Background(), nil, q, Request{Window: window, Flows: []string{"invoice.pay"}}, ledger, "test")
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +170,7 @@ func TestCoverageOverTelemetryClampedToFull(t *testing.T) {
 }
 
 func TestCoverageZeroValueSliceSkipped(t *testing.T) {
-	// A legitimate $0 success ledger slice (Count>0, Amount==0) must be SKIPPED,
+	// A legitimate $0 success ledger slice (Count>0, Amount==0) must be skipped,
 	// not scored 0 — otherwise it would tank the headline to 0%. A real USD slice
 	// alongside it stays the headline.
 	window := query.TimeRange{From: time.Unix(0, 0).UTC(), To: time.Unix(3600, 0).UTC()}
@@ -182,7 +201,12 @@ func TestCoverageAllZeroLedgerUnavailable(t *testing.T) {
 	// leg is Unavailable, not a fabricated 100% (Ratio must stay 0, unset).
 	window := query.TimeRange{From: time.Unix(0, 0).UTC(), To: time.Unix(3600, 0).UTC()}
 	q := memq.New(memq.WithCaps(query.Caps{Metrics: true}))
-	ledger := []biz.LedgerRow{{Flow: "invoice.pay", Outcome: biz.ResultSuccess, Money: biz.Money{Amount: 0, Currency: "USD", Exponent: 2}, Count: 4}}
+	ledger := []biz.LedgerRow{{
+		Flow:    "invoice.pay",
+		Outcome: biz.ResultSuccess,
+		Money:   biz.Money{Amount: 0, Currency: "USD", Exponent: 2},
+		Count:   4,
+	}}
 	leg, slices, err := Coverage(context.Background(), nil, q, Request{Window: window, Flows: []string{"invoice.pay"}}, ledger, "test")
 	if err != nil {
 		t.Fatal(err)

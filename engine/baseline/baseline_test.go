@@ -129,7 +129,7 @@ func TestHolidayExclusion(t *testing.T) {
 func TestLookbackBoundsHistory(t *testing.T) {
 	// History older than LookbackWeeks before the target must be dropped, and
 	// samples at/after the target window excluded — the baseline is the last N
-	// weeks BEFORE the incident, never a wider basis a loose caller passed.
+	// weeks before the incident, never a wider basis a loose caller passed.
 	target := time.Date(2024, 3, 4, 0, 0, 0, 0, time.UTC) // a Monday
 	hist := []Sample{
 		{At: target.Add(-10 * week), Count: 1},  // older than the 8-week lookback -> dropped
@@ -149,8 +149,8 @@ func TestLookbackBoundsHistory(t *testing.T) {
 
 func TestConstantBucketYieldsZeroWidthInterval(t *testing.T) {
 	// A genuinely constant hour has zero normal variation: MAD 0 -> a zero-width
-	// interval. Documented behavior; the unrealized leg (8.2) decides how to
-	// treat a zero-width band (workspace-tmw.8.2).
+	// interval. Documented behavior; the unrealized leg decides how to treat a
+	// zero-width band.
 	histMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	target := histMon.Add(4 * week)
 	hist := []Sample{

@@ -12,32 +12,22 @@ import (
 // window and scope, de-duplicated so retries and cross-process duplicate
 // events never double-count.
 //
-// Events path (preferred): for each flow it counts each failed entity once
-// and excludes any entity that also has a success in the window — a failed-
-// then-recovered transaction is not a loss. Grouping by (currency, entity)
-// collapses duplicate failed events for one entity and keeps sums within a
-// single currency (ADR-0001).
+// Events path (preferred): each failed entity counts once, at the maximum
+// single failed amount per (currency, entity) — exact for redelivered
+// duplicates, the largest single exposure when amounts differ (ADR-0009) —
+// and an entity that also has a success in the window is excluded as
+// recovered. The library has no entity-id-unique-per-transaction invariant;
+// never assume one. Sums stay within a single currency (ADR-0001).
 //
-// De-dup is exact. Grouping by (currency, entity) with EventAggMaxPerGroup
-// yields, per entity, the MAXIMUM single failed event's amount (ADR-0009).
-// Under at-least-once delivery a duplicate failed event is the SAME event
-// redelivered, so the max equals its (identical) value — exact. When an entity
-// legitimately has failed events with DIFFERING amounts (partial captures,
-// corrections, order-id reuse), the max is the largest single exposure — a
-// real observed figure, not a synthetic mean, and deterministic. There is no
-// "entity id is unique per transaction" invariant in the library; do not
-// assume one.
+// Metrics-only path (fallback): the failed biz_value_total sums are real, but
+// a time-series cannot de-dup by entity, so the leg carries the "upper bound,
+// not de-duped" caveat in Leg.Caveats.
 //
-// Metrics-only path (fallback, when the backend serves no events): the failed
-// biz_value_total sums are real, but a time-series cannot de-dup by entity,
-// so the leg is labelled "upper bound, not de-duped" — the caveat rides the
-// Report's Leg.Caveats, not just prose.
-//
-// Either way the evidence is deterministic (a measured sum, never an
-// estimate). A backend that serves neither events nor metrics cannot ground
-// this leg, and RealizedLeg returns an error rather than a plausible zero.
+// Evidence is deterministic either way. A backend serving neither events nor
+// metrics cannot ground this leg; RealizedLeg returns an error rather than a
+// plausible zero.
 func RealizedLeg(ctx context.Context, reg *registry.Registry, q query.Querier, req Request) (Leg, error) {
-	_ = reg // reserved: flow validation lands with the Compute assembly
+	_ = reg // reserved for flow validation
 	caps := q.Capabilities()
 	switch {
 	case caps.Events:
@@ -51,8 +41,8 @@ func RealizedLeg(ctx context.Context, reg *registry.Registry, q query.Querier, r
 
 // flowFilters returns one filter map per flow in the request (or a single
 // scope-only filter when no flow is named), each carrying the given outcome.
-// Scope is applied FIRST and the reserved keys (outcome, flow) are set after,
-// so a stray Scope entry for either cannot override the leg's own filter.
+// The reserved keys (outcome, flow) are set after Scope is copied, so a stray
+// Scope entry for either cannot override the leg's own filter.
 func flowFilters(req Request, outcome string) []map[string]string {
 	scope := make(map[string]string, len(req.Scope))
 	for k, v := range req.Scope {
@@ -93,13 +83,8 @@ func realizedFromEvents(ctx context.Context, q query.Querier, req Request) (Leg,
 		}
 	}
 
-	// Collapse duplicate failed events per entity to ONE representative amount:
-	// EventAggMaxPerGroup returns, per (currency, entity), the maximum single
-	// failed event's amount (ADR-0009). For a redelivered (identical) duplicate
-	// the max IS the value — exact; for genuinely differing failed amounts on
-	// one entity it is the largest single exposure, a real observed figure
-	// rather than a synthetic mean. Either way there is no averaging and no
-	// undetectable even-division case.
+	// EventAggMaxPerGroup collapses duplicate failed events per entity to the
+	// maximum single amount — never an average (ADR-0009).
 	for _, filters := range flowFilters(req, "failed") {
 		groups, err := q.QueryEvents(ctx, query.EventQuery{
 			Range: req.Window, Filters: filters, GroupBy: []string{"currency", "entity"},

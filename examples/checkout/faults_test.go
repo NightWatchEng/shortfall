@@ -84,7 +84,7 @@ func TestConsumerStallFormsAndDrainsBacklog(t *testing.T) {
 			continue
 		}
 		// Strictly inside the window: a completion timestamp equal to the
-		// stall start marks work that finished AT the boundary — its
+		// stall start marks work that finished at the boundary — its
 		// service minutes were all un-stalled.
 		if txn.CapturedAt.After(stallFrom) && txn.CapturedAt.Before(stallTo) {
 			duringStallCaptures++
@@ -187,8 +187,8 @@ func TestFaultValidation(t *testing.T) {
 }
 
 func TestScenarioFileExpressesTheCanonicalStall(t *testing.T) {
-	// The acceptance criterion verbatim: a scenario file can express
-	// "14:02-14:47 consumer stall".
+	// A scenario file must be able to express "14:02-14:47 consumer
+	// stall".
 	yamlDoc := `
 name: capture-stall
 seed: 42
@@ -280,9 +280,9 @@ func TestCommittedScenariosAllLoadAndRun(t *testing.T) {
 
 func TestOverlappingStallsFreezeByUnion(t *testing.T) {
 	// Two overlapping stall specs model overlapping causes; the outage is
-	// their union [14:00, 14:45), never double-counted. Reviewer
-	// counterexample: eligible 13:58, 5m delay — true completion 14:48
-	// (2 un-stalled minutes, freeze across the 45m union, 3 remaining).
+	// their union [14:00, 14:45), never double-counted. Eligible 13:58
+	// with a 5m delay completes at 14:48: 2 un-stalled minutes, freeze
+	// across the 45m union, 3 remaining.
 	f1 := FaultSpec{Kind: FaultConsumerStall, Queue: QueueCapture, From: day2(14, 0), To: day2(14, 30)}
 	f2 := FaultSpec{Kind: FaultConsumerStall, Queue: QueueCapture, From: day2(14, 15), To: day2(14, 45)}
 	st := newStage(5, 20, QueueCapture, []FaultSpec{f2, f1}) // order-independent
@@ -307,7 +307,13 @@ func TestRearrivalIntoLaterBlackoutIsSuppressed(t *testing.T) {
 	// Recovery from blackout one lands inside blackout two: it must be
 	// suppressed there (and rolled under blackout two's model), never
 	// processed as a Recovered arrival inside a blackout window.
-	b1 := FaultSpec{Kind: FaultBlackout, From: day2(10, 0), To: day2(10, 30), RecoveredFraction: 1.0, RecoveryWithin: 30 * time.Minute}
+	b1 := FaultSpec{
+		Kind:              FaultBlackout,
+		From:              day2(10, 0),
+		To:                day2(10, 30),
+		RecoveredFraction: 1.0,
+		RecoveryWithin:    30 * time.Minute,
+	}
 	b2 := FaultSpec{Kind: FaultBlackout, From: day2(10, 30), To: day2(11, 30)}
 	cfg := Config{Seed: 21, Start: mon, End: mon.Add(48 * time.Hour), Faults: []FaultSpec{b1, b2}}
 	res := Run(cfg)
@@ -385,8 +391,20 @@ func TestGoldenBlockRejections(t *testing.T) {
 func TestRecoveryAttributionSurvivesResuppression(t *testing.T) {
 	// Demand suppressed by blackout A, whose recovery lands inside
 	// blackout B, keeps A's attribution when it finally arrives.
-	a := FaultSpec{Kind: FaultBlackout, From: day2(10, 0), To: day2(10, 10), RecoveredFraction: 1.0, RecoveryWithin: time.Minute}
-	b := FaultSpec{Kind: FaultBlackout, From: day2(10, 10), To: day2(10, 40), RecoveredFraction: 1.0, RecoveryWithin: 30 * time.Minute}
+	a := FaultSpec{
+		Kind:              FaultBlackout,
+		From:              day2(10, 0),
+		To:                day2(10, 10),
+		RecoveredFraction: 1.0,
+		RecoveryWithin:    time.Minute,
+	}
+	b := FaultSpec{
+		Kind:              FaultBlackout,
+		From:              day2(10, 10),
+		To:                day2(10, 40),
+		RecoveredFraction: 1.0,
+		RecoveryWithin:    30 * time.Minute,
+	}
 	cfg := Config{Seed: 33, Start: mon, End: mon.Add(48 * time.Hour), Faults: []FaultSpec{a, b}}
 	res := Run(cfg)
 

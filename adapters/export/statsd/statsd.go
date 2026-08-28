@@ -6,7 +6,7 @@
 // core — it wraps no StatsD client library (the core's transitive deps still
 // appear in go.mod as indirect).
 //
-// Honestly metrics-only: Capabilities reports Events=false. StatsD has no
+// Metrics-only: Capabilities reports Events=false. StatsD has no
 // place for per-transaction amounts and ids, so the customers leg is
 // answered from an event sink, not here.
 //
@@ -144,7 +144,7 @@ func New(opts ...func(*Options)) (*Exporter, error) {
 	}, nil
 }
 
-// Capabilities: metrics only, honestly. Retention is the StatsD backend's.
+// Capabilities reports metrics only; retention is the StatsD backend's.
 func (e *Exporter) Capabilities() emit.Caps {
 	return emit.Caps{Metrics: true, Events: false}
 }
@@ -212,7 +212,7 @@ func (e *Exporter) encode(p emit.MetricPoint, labels []string) string {
 	return fmt.Sprintf("%s:%d|%s|#%s", p.Name, p.Value, typ, strings.Join(tags, ","))
 }
 
-// ExportEvents is a no-op: Events=false, kept honestly (nothing delivered).
+// ExportEvents is a no-op: Events=false, nothing delivered.
 func (e *Exporter) ExportEvents(context.Context, []biz.Outcome) error { return nil }
 
 // Shutdown closes the sink (flushes a writer, closes a UDP conn).

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Money is an amount in MINOR units (cents for USD, yen for JPY) with its
+// Money is an amount in minor units (cents for USD, yen for JPY) with its
 // ISO 4217 currency and the currency's decimal exponent. Never a float —
 // floats drift, and drift is what ledger reconciliation exists to catch
 // (ADR-0001).
@@ -22,7 +22,9 @@ func (m Money) Validate() error {
 	if m.Amount < 0 {
 		return fmt.Errorf("biz: money amount %d is negative", m.Amount)
 	}
-	if len(m.Currency) != 3 || m.Currency != strings.ToUpper(m.Currency) || strings.ContainsFunc(m.Currency, func(r rune) bool { return r < 'A' || r > 'Z' }) {
+	if len(m.Currency) != 3 ||
+		m.Currency != strings.ToUpper(m.Currency) ||
+		strings.ContainsFunc(m.Currency, func(r rune) bool { return r < 'A' || r > 'Z' }) {
 		return fmt.Errorf("biz: currency %q is not an ISO 4217 alphabetic code", m.Currency)
 	}
 	if m.Exponent < 0 || m.Exponent > 4 {
@@ -34,7 +36,7 @@ func (m Money) Validate() error {
 // String renders the amount in major units for humans: "USD 149.00",
 // "JPY 14900". Pure integer formatting — no float ever touches it. Total
 // on any receiver: an invalid Money renders in a marked raw form instead
-// of panicking or printing garbage (a Stringer must never be the crash).
+// of panicking or printing garbage.
 func (m Money) String() string {
 	if m.Validate() != nil {
 		return fmt.Sprintf("%s INVALID(%d e%d)", m.Currency, m.Amount, m.Exponent)

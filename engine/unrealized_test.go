@@ -168,10 +168,10 @@ func TestUnrealizedNoMetricsUnavailable(t *testing.T) {
 
 func TestUnrealizedNonHourAlignedWindow(t *testing.T) {
 	// A responder-supplied window need not start on the hour. Observed entries
-	// must still pair with the right target hour (the alignment fix): with a
-	// 10:30 start the single target hour is 11:00, and the 40 entries observed
-	// at 11:00 must be used — not misbucketed to 0 (which would make the
-	// shortfall the full expectation).
+	// must still pair with the right target hour: with a 10:30 start the single
+	// target hour is 11:00, and the 40 entries observed at 11:00 must be used —
+	// not misbucketed to 0 (which would make the shortfall the full
+	// expectation).
 	reg := unrealizedRegistry(t)
 	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	eleven := 11 * time.Hour
@@ -184,7 +184,10 @@ func TestUnrealizedNonHourAlignedWindow(t *testing.T) {
 	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
 
 	// Window 10:30 → 11:30: only the 11:00 hour begins inside it.
-	req := Request{Window: query.TimeRange{From: incidentHour.Add(-30 * time.Minute), To: incidentHour.Add(30 * time.Minute)}, Flows: []string{"invoice.pay"}}
+	req := Request{
+		Window: query.TimeRange{From: incidentHour.Add(-30 * time.Minute), To: incidentHour.Add(30 * time.Minute)},
+		Flows:  []string{"invoice.pay"},
+	}
 	leg, err := Unrealized(context.Background(), reg, q, req)
 	if err != nil {
 		t.Fatal(err)
@@ -295,8 +298,8 @@ func TestUnrealizedAOVFromEventsIncludesEstimated(t *testing.T) {
 
 func TestUnrealizedRetentionGap(t *testing.T) {
 	// The querier serves only 4 weeks of history but invoice.pay's baseline needs
-	// 8. The report must show the gap and a warehouse suggestion, and must NOT
-	// silently compute a degraded baseline (workspace-tmw.8.3).
+	// 8. The report must show the gap and a warehouse suggestion, and must not
+	// silently compute a degraded baseline.
 	reg := unrealizedRegistry(t)
 	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	const hour = 10 * time.Hour
@@ -382,8 +385,8 @@ func TestUnrealizedDisclosesEventsFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// It must NOT silently succeed as if events were absent: the failure is disclosed,
-	// and it still values via the counter fallback (mid 120000).
+	// It must not silently succeed as if events were absent: the failure is
+	// disclosed, and it still values via the counter fallback (mid 120000).
 	if !hasNoteContaining(leg.Notes, "events query failed") {
 		t.Fatalf("events-backend failure must be disclosed, notes: %v", leg.Notes)
 	}

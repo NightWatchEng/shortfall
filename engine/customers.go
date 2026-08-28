@@ -12,28 +12,21 @@ import (
 // Customers computes who was hit: distinct affected accounts, a per-segment
 // breakdown, and the top-N by failed value — exportable for credits and
 // outreach. When the backend cannot serve events (a metrics-only TSDB), the
-// leg says WHY it is unavailable rather than rendering a misleading zero.
+// leg says why it is unavailable rather than rendering a misleading zero.
 //
-// It runs ONE grouped event query per flow — by (currency, customer, segment),
-// so sums never cross a currency (ADR-0001) — and merges the groups per
-// customer in the engine. Distinct and the per-segment counts are therefore
-// exact even across multiple flows (a customer hit in two flows is one
+// Groups are queried per (currency, customer, segment) — sums never cross a
+// currency (ADR-0001) — and merged per customer, so Distinct and the segment
+// counts are exact even across flows (a customer hit in two flows is one
 // account).
 //
-// Recovery semantics — read this before treating ByCurrency as loss. This leg
-// is "who was hit": it is deliberately recovery-AGNOSTIC. A customer's
-// ByCurrency is the GROSS value of their FAILED transactions in the window; it
-// does NOT net out a failure the customer later recovered from (a retry that
-// succeeded). That is on purpose — outreach and credit triage want everyone
-// who experienced a failure — but it means ByCurrency is NOT the net realized
-// loss. Net-of-recovery loss is the realized leg's job (RealizedLeg excludes
-// failed-then-succeeded entities); do not sum this leg's ByCurrency as company
-// loss.
+// The leg is deliberately recovery-agnostic: ByCurrency is the gross value of
+// a customer's failed transactions, not netted for later recoveries — outreach
+// wants everyone who experienced a failure. Net-of-recovery loss is the
+// realized leg's job; do not sum this leg's ByCurrency as company loss.
 //
-// Top-N ranking: accounts are ordered by their LARGEST single-currency failed
-// value, never a cross-currency total (which ADR-0001 forbids); ties break by
-// customer id for determinism. For the common single-currency deployment this
-// is simply "top accounts by failed value".
+// Top-N ranking orders accounts by their largest single-currency failed value,
+// never a cross-currency total (ADR-0001); ties break by customer id for
+// determinism.
 func Customers(ctx context.Context, reg *registry.Registry, q query.Querier, req Request, topN int) (CustomersLeg, error) {
 	_ = reg // segments are read from the event data, not the registry
 	if !q.Capabilities().Events {

@@ -23,22 +23,17 @@ var ageBucketFloorMinutes = map[string]int64{
 var ageBucketOrder = []string{"lt1m", "1m-5m", "5m-30m", "30m-2h", "gt2h"}
 
 // Deferred computes the in-flight (deferred) value leg from biz_inflight_value
-// at the window's snapshot instant. Deferred is NOT lost — the whole point of
-// this leg is the distinction: money still moving, some of it past its SLA and
-// projected to become lost, most of it not.
+// at the window's snapshot instant. Deferred is not lost — the leg's point is
+// the distinction: money still moving, some of it past its SLA and projected
+// to become lost, most of it not.
 //
-// Sources and honest gaps (founder decision): the value gauge carries VALUE by
-// (flow, stage, age_bucket, currency) only — no transaction count. So:
-//   - ByAgeBucket and ByCurrency are exact gauge reads;
-//   - ProjectedLostMinor is a conservative LOWER BOUND: it sums the value in
-//     buckets ENTIRELY past a stage's SLA deadline (bucket-floor granularity),
-//     so a deadline falling inside a bucket under-attributes that bucket;
-//   - OldestAgeMinutes is the floor age of the oldest non-empty bucket (a lower
-//     bound — the bucket is that old or older);
-//   - SLABreaches and Leg.Count (transaction counts) are NOT derivable from a
-//     value gauge and are left 0, with a caveat; breach is expressed as
-//     ProjectedLostMinor (breached VALUE). Exact counts need a companion count
-//     metric — ADR-0004 amendment tracked in workspace-lte.
+// ByAgeBucket and ByCurrency are exact gauge reads. ProjectedLostMinor is a
+// conservative lower bound: it sums value in buckets entirely past a stage's
+// SLA deadline (bucket-floor granularity), so a deadline falling inside a
+// bucket under-attributes that bucket. OldestAgeMinutes is the floor age of
+// the oldest non-empty bucket, also a lower bound. Leg.Count and SLABreaches
+// come from the companion biz_inflight_count gauge (ADR-0012); a value-only
+// source leaves them 0 with a caveat.
 //
 // Evidence is deterministic (a measured level). A backend with no metric
 // source cannot ground this leg and Deferred returns an error.
@@ -96,9 +91,6 @@ func Deferred(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		leg.OldestAgeMinutes = ageBucketFloorMinutes[ageBucketOrder[oldestIdx]]
 	}
 
-	// Transaction counts from the companion count gauge (ADR-0012). When the
-	// source emits it, Count and SLABreaches are exact; a value-only source
-	// (no count gauge) leaves them 0 and keeps the honest caveat.
 	if err := fillDeferredCounts(ctx, reg, q, req, &leg); err != nil {
 		return DeferredLeg{}, err
 	}
@@ -134,7 +126,7 @@ func fillDeferredCounts(ctx context.Context, reg *registry.Registry, q query.Que
 			}
 		}
 	}
-	// Only caveat when there IS in-flight value but no count gauge to count it —
+	// Caveat only when in-flight value exists but no count gauge counted it —
 	// an older, value-only source. No in-flight at all needs no caveat.
 	if !sawCount && len(leg.ByAgeBucket) > 0 {
 		leg.Caveats = append(leg.Caveats,
@@ -164,14 +156,14 @@ func bucketIndex(bucket string) int {
 }
 
 // breached reports whether a bucket is entirely past the flow/stage SLA
-// deadline — regardless of the on_breach policy. This is the predicate for the
-// SLA-breach transaction COUNT: an at_risk breach is still a breach.
+// deadline — regardless of the on_breach policy. It is the predicate for the
+// SLA-breach transaction count: an at_risk breach is still a breach.
 //
-// The bucket is entirely past the deadline when its FLOOR age already meets it.
-// Compared as durations, never as truncated float minutes: a fractional-minute
-// deadline (PT90S) must not round down and pull earlier buckets over the line,
-// which would OVER-state breaches. Still conservative — a deadline falling
-// inside a bucket is not attributed to that bucket (a documented lower bound).
+// The bucket is entirely past the deadline when its floor age already meets
+// it, compared as durations: truncating a fractional-minute deadline (PT90S)
+// to whole minutes would pull earlier buckets over the line and over-state
+// breaches. A deadline falling inside a bucket is not attributed to that
+// bucket (a documented lower bound).
 func breached(reg *registry.Registry, flow, stage, bucket string) bool {
 	f, ok := reg.Flow(flow)
 	if !ok {
@@ -188,9 +180,9 @@ func breached(reg *registry.Registry, flow, stage, bucket string) bool {
 	return sla.Deadline <= time.Duration(floorMin)*time.Minute
 }
 
-// breachedAndLost is breached AND the registry's on_breach policy is "lost" —
-// the predicate for projected-lost VALUE (an at_risk breach is a breach but not
-// projected loss).
+// breachedAndLost is breached and the registry's on_breach policy is "lost" —
+// the predicate for projected-lost value (an at_risk breach is a breach but
+// not projected loss).
 func breachedAndLost(reg *registry.Registry, flow, stage, bucket string) bool {
 	f, ok := reg.Flow(flow)
 	if !ok {

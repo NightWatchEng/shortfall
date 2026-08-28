@@ -81,13 +81,13 @@ func TestAmountsAndIdsStayOutOfStreamLabels(t *testing.T) {
 		t.Fatalf("streams = %d", len(req.Streams))
 	}
 	labels := req.Streams[0].Stream
-	// Stream labels are ONLY the bounded dims — no amount/id/customer.
+	// Stream labels are only the bounded dims — no amount/id/customer.
 	for k := range labels {
 		if k != "flow" && k != "stage" && k != "outcome" {
 			t.Fatalf("unexpected (unbounded?) stream label %q", k)
 		}
 	}
-	// The amount and ids must be in the log LINE, not labels.
+	// The amount and ids must be in the log line, not labels.
 	line := req.Streams[0].Values[0][1]
 	for _, want := range []string{"biz.amount_minor", "inv_1", "h:c"} {
 		if !strings.Contains(line, want) {

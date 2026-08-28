@@ -11,7 +11,7 @@ import (
 
 // TestGoldensMatchGroundTruth is the drift fence: the committed goldens
 // must equal a fresh ground-truth computation of every scenario that
-// declares a golden window. CI (ubuntu/amd64) is AUTHORITATIVE: on a
+// declares a golden window. CI (ubuntu/amd64) is authoritative: on a
 // platform whose math.Exp differs this test may fail locally — adopt the
 // values this test prints in CI, never local ones (see the harness
 // package doc for the mechanism).

@@ -80,7 +80,7 @@ func countPoint(stage, bucket, currency string, count int64, at time.Time) emit.
 
 func TestDeferredExactCountsFromCountGauge(t *testing.T) {
 	// With the companion count gauge (ADR-0012), Count and SLABreaches are exact
-	// and the caveat is gone. SLABreaches counts EVERY breach (past deadline),
+	// and the caveat is gone. SLABreaches counts every breach (past deadline),
 	// not only the "lost" ones.
 	at := win.To.Add(-time.Minute)
 	metrics := []emit.MetricPoint{
@@ -114,8 +114,8 @@ func TestDeferredExactCountsFromCountGauge(t *testing.T) {
 }
 
 func TestDeferredAtRiskBreachCountsButIsNotProjectedLost(t *testing.T) {
-	// A stage that is at_risk (not lost) and past its deadline is a BREACH — it
-	// counts toward SLABreaches — but is NOT projected loss. The reference
+	// A stage that is at_risk (not lost) and past its deadline is a breach — it
+	// counts toward SLABreaches — but is not projected loss. The reference
 	// registry cannot produce this (its only at_risk stage, settle P1D, can
 	// never breach via the 120m top bucket), so parse a flow with an at_risk
 	// deadline a bucket can cross.

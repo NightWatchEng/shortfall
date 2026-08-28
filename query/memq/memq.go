@@ -2,12 +2,12 @@
 // AST over a fixed set of metric points and outcome events held in memory,
 // so the engine (and adapter conformance) can be exercised with zero
 // external processes. It is fed either directly (WithMetrics/WithEvents) or
-// from the M1 harness via testkit.
+// from the checkout harness via testkit.
 //
 // It implements the frozen temporal semantics that every real adapter must
 // match, so a number the engine reads from memq is the number it must read
 // from PromQL or SQL for the same query:
-//   - counter families: each Point is the INCREASE within its step interval;
+//   - counter families: each Point is the increase within its step interval;
 //   - the gauge family (biz_inflight_value): each Point carries every
 //     underlying series' last observed level forward to its step boundary and
 //     sums them, matching sum by(g)(last_over_time(m)) — so a GroupBy that
@@ -56,7 +56,12 @@ func WithCaps(c query.Caps) Option { return func(q *Querier) { q.caps = c } }
 // New builds an in-memory querier. Default capabilities serve both signals
 // with effectively unbounded history.
 func New(opts ...Option) *Querier {
-	q := &Querier{caps: query.Caps{Metrics: true, Events: true, MetricHistoryWeeks: 520, EventHistoryWeeks: 520}}
+	q := &Querier{caps: query.Caps{
+		Metrics:            true,
+		Events:             true,
+		MetricHistoryWeeks: 520,
+		EventHistoryWeeks:  520,
+	}}
 	for _, o := range opts {
 		o(q)
 	}
@@ -121,12 +126,11 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 		if p.Name != qy.Metric || !matchFilters(p.Labels, qy.Filters) {
 			continue
 		}
-		// A counter contributes only its in-window increase, so it is
-		// filtered to [From, To). A gauge is a persistent LEVEL: a sample
-		// set before the window still defines the level inside it, so gauge
-		// samples are kept whenever they precede the window's end and the
-		// bucket reader carries the last one forward (matching a real
-		// backend's last_over_time).
+		// A counter is filtered to [From, To). A gauge is a persistent
+		// level: a sample set before the window still defines the level
+		// inside it, so gauge samples are kept whenever they precede the
+		// window's end (the bucket reader carries the last one forward,
+		// matching last_over_time).
 		if gauge {
 			if !p.At.Before(qy.Range.To) {
 				continue
@@ -181,16 +185,13 @@ func bucketPoints(points []emit.MetricPoint, qy query.Query, gauge bool) []query
 }
 
 // aggregate reduces a group's points to a single bucket value. For a gauge it
-// carries each underlying series' last level (its most recent sample with
-// At < to, from before the bucket or the whole window) forward, then sums those
-// per-series levels — matching a real backend's sum by(g)(last_over_time(m)).
-// When GroupBy collapses several series into one group (e.g. stage=capture and
-// stage=settle into one age_bucket/currency group), each series contributes its
-// own carried-forward level; taking a single last sample across the whole group
-// would return one series' level instead of their sum and diverge from
-// Prometheus (workspace-0ka caught this against a live backend). Under AggCount
-// the gauge value is the number of series with a level. nil only when no level
-// has ever been set. For a counter it is the increase within [from, to) (sum of
+// carries each underlying series' last level (most recent sample with At < to)
+// forward, then sums those per-series levels — matching a real backend's
+// sum by(g)(last_over_time(m)). When GroupBy collapses several series into one
+// group, taking a single last sample across the group would return one series'
+// level instead of their sum and diverge from Prometheus. Under AggCount the
+// gauge value is the number of series with a level; nil only when no level has
+// ever been set. For a counter it is the increase within [from, to) (sum of
 // delta values), or under AggCount the number of points.
 func aggregate(points []emit.MetricPoint, from, to time.Time, agg query.Agg, gauge bool) *float64 {
 	if gauge {
@@ -281,10 +282,8 @@ func (q *Querier) QueryEvents(_ context.Context, qy query.EventQuery) (query.Eve
 		ck := canonical(key)
 		g, ok := groups[ck]
 		if !ok {
-			// Seed maxMinor from the first member, not the int64 zero value, so
-			// the running max matches SQL's MAX() independently of sign — parity
-			// must not rely on an amounts-are-non-negative invariant that memq
-			// does not itself enforce on WithEvents input.
+			// Seed maxMinor from the first member, not zero: the running max
+			// must match SQL's MAX() for negative amounts too.
 			g = &agg{key: key, maxMinor: o.VC.Money.Amount}
 			groups[ck] = g
 			order = append(order, ck)

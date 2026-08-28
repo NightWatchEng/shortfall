@@ -26,7 +26,7 @@ type ProviderCall struct {
 }
 
 // Backend decorates a stripe.Backend: it observes every API call for
-// biz_provider_calls_total and, when an AUTH-stage call (a PaymentIntent
+// biz_provider_calls_total and, when an auth-stage call (a PaymentIntent
 // create/confirm) fails at the infrastructure level — a timeout or 5xx that
 // Stripe never sends a webhook for — emits an auth/failed outcome so that
 // synchronous, webhook-invisible loss is still counted.
@@ -155,7 +155,7 @@ func authVC(params stripe.ParamsContainer) (biz.ValueContext, bool) {
 	}, true
 }
 
-// stripeNamespaces are the Stripe path prefixes that GROUP resources rather
+// stripeNamespaces are the Stripe path prefixes that group resources rather
 // than being a resource themselves — /v1/<ns>/<resource>/<id>. They shift the
 // id one segment to the right, so deriveOp must know them to strip ids by
 // position. The set is small and changes rarely; if Stripe adds one we miss,
@@ -168,8 +168,8 @@ var stripeNamespaces = map[string]bool{
 	"climate": true, "forwarding": true, "tax": true, "entitlements": true, "sigma": true,
 }
 
-// deriveOp turns (method, path) into a BOUNDED op label (ADR-0004) by stripping
-// Stripe object ids. Ids are stripped by POSITION, not shape: the segment after
+// deriveOp turns (method, path) into a bounded op label (ADR-0004) by stripping
+// Stripe object ids. Ids are stripped by position, not shape: the segment after
 // a resource is always an id — including user-defined ones (a coupon id
 // "summer", a custom product id) that look exactly like a resource word, which
 // no shape test could catch. Examples:
@@ -248,9 +248,9 @@ func deriveOp(method, path string) string {
 // isIDShaped is the boundedness backstop for the unknown-namespace case: it
 // reports whether a segment looks like an auto-generated Stripe id
 // (prefix_suffix with a digit or uppercase letter in the suffix, e.g.
-// cs_test_ABC123). It is NOT the primary id test — position is — because
-// user-defined ids ("summer") are shapeless; it only stops an auto-generated
-// id from a namespace this code does not yet know from reaching the op label.
+// cs_test_ABC123). Position, not shape, is the primary id test — user-defined
+// ids ("summer") are shapeless; this only stops an auto-generated id from an
+// unknown namespace from reaching the op label.
 func isIDShaped(s string) bool {
 	i := strings.IndexByte(s, '_')
 	if i <= 0 || i == len(s)-1 {

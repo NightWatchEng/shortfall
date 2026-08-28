@@ -8,12 +8,12 @@ import (
 )
 
 // eventName is the OTel semantic-convention event name for a shortfall
-// outcome (proposal 4.4).
+// outcome.
 const eventName = "biz.outcome"
 
 // buildRecord maps one outcome to an OpenTelemetry log API record (the
 // builder form — attribute limits are applied SDK-side, so all fields
-// survive). Amounts and ids ride HERE (events), never on metrics. The
+// survive). Amounts and ids ride here (events), never on metrics. The
 // record's timestamp is the outcome's own At; trace linking is applied by
 // the emitter through the emit context (the log SDK links traces from
 // ctx, not the record).

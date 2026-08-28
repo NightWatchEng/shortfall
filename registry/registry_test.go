@@ -205,7 +205,10 @@ flows:
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(reg.Severity) != 2 || reg.Severity[0].Sev != "SEV1" || reg.Severity[0].MinPerMinuteMinor != 100000 || reg.Severity[1].Sev != "SEV2" {
+		if len(reg.Severity) != 2 ||
+			reg.Severity[0].Sev != "SEV1" ||
+			reg.Severity[0].MinPerMinuteMinor != 100000 ||
+			reg.Severity[1].Sev != "SEV2" {
 			t.Fatalf("ladder = %+v", reg.Severity)
 		}
 	})
@@ -290,8 +293,8 @@ func TestDurationOverflowRejected(t *testing.T) {
 		name string
 		s    string
 	}{
-		{"positive wrap", "P213504D"}, // wrapped POSITIVE through int64 ns pre-fix
-		{"negative wrap", "P106752D"}, // wrapped negative (was caught by luck)
+		{"positive wrap", "P213504D"}, // would wrap positive through int64 ns if unbounded
+		{"negative wrap", "P106752D"}, // would wrap negative through int64 ns if unbounded
 		{"max int digits", "P2147483647D"},
 		{"just over ten years", "P3651D"},
 		{"huge hours", "PT87601H"},

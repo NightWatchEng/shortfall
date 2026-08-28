@@ -142,7 +142,7 @@ func TestExportEventsCarryAmountsAsFieldsNotMetrics(t *testing.T) {
 	if r["biz.entity.id"] != "inv_1" || r["biz.customer.id"] != "h:c" {
 		t.Fatalf("ids missing: %v", r)
 	}
-	// The event record must NOT declare a metric (no double-count with the
+	// The event record must not declare a metric (no double-count with the
 	// metric path): its _aws block has a Timestamp but no CloudWatchMetrics.
 	aws := r["_aws"].(map[string]any)
 	if _, ok := aws["CloudWatchMetrics"]; ok {
@@ -192,7 +192,7 @@ func TestPutMetricDataReplacesEMFMetricRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	recs := decode(t, buf.Bytes())
-	// With a putter, NO metric EMF records are written (that would
+	// With a putter, no metric EMF records are written (that would
 	// double-count); only the one event record reaches the writer.
 	if len(recs) != 1 {
 		t.Fatalf("want only the event record on the writer, got %d records", len(recs))

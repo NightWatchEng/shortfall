@@ -205,8 +205,8 @@ func TestDeadlineDomain(t *testing.T) {
 		})
 	}
 	vc := codecVC()
-	// Sub-second precision truncates by contract (documented): the codec
-	// carries unix seconds.
+	// Sub-second precision truncates by contract: the codec carries unix
+	// seconds.
 	vc.Deadline = time.Date(2026, 8, 27, 14, 32, 0, 500_000_000, time.UTC)
 	enc, err := EncodeVC(vc)
 	if err != nil {

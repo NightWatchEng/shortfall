@@ -66,7 +66,7 @@ func RenderText(r engine.Report) string {
 		fmt.Fprintf(&b, "           oldest in-flight ≥ %d min\n", r.Deferred.OldestAgeMinutes)
 	}
 
-	// Unrealized is an estimate RANGE, tagged, and never added to realized.
+	// Unrealized is an estimate range, tagged, and never added to realized.
 	fmt.Fprintf(&b, "UNREALIZED [%s] %s … %s (mid %s)  — counterfactual; do not add to realized\n",
 		r.Unrealized.Evidence, money(r.Unrealized.LowMinor), money(r.Unrealized.HighMinor), money(r.Unrealized.MidMinor))
 	for _, n := range r.Unrealized.Notes {
@@ -85,7 +85,13 @@ func RenderText(r engine.Report) string {
 	if r.Coverage.Unavailable != "" {
 		fmt.Fprintf(&b, "COVERAGE   unavailable: %s\n", r.Coverage.Unavailable)
 	} else {
-		fmt.Fprintf(&b, "COVERAGE   [%s] %.1f%% reconciled (%s)\n", r.Coverage.Evidence, r.Coverage.Ratio*100, r.Coverage.Source)
+		fmt.Fprintf(
+			&b,
+			"COVERAGE   [%s] %.1f%% reconciled (%s)\n",
+			r.Coverage.Evidence,
+			r.Coverage.Ratio*100,
+			r.Coverage.Source,
+		)
 	}
 
 	if r.Severity != "" {
@@ -132,7 +138,12 @@ func RenderMarkdown(r engine.Report) string {
 	b.WriteString("| Leg | Evidence | Value |\n|---|---|---|\n")
 	fmt.Fprintf(&b, "| Realized | %s | %s |\n", r.Realized.Evidence, money(r.Realized.ByCurrency))
 	fmt.Fprintf(&b, "| Deferred (in-flight) | %s | %s |\n", r.Deferred.Evidence, money(r.Deferred.ByCurrency))
-	fmt.Fprintf(&b, "| Deferred → projected lost | %s | %s |\n", r.Deferred.Evidence, money(r.Deferred.ProjectedLostMinor))
+	fmt.Fprintf(
+		&b,
+		"| Deferred → projected lost | %s | %s |\n",
+		r.Deferred.Evidence,
+		money(r.Deferred.ProjectedLostMinor),
+	)
 	fmt.Fprintf(&b, "| Unrealized (counterfactual) | %s | %s … %s (mid %s) |\n",
 		r.Unrealized.Evidence, money(r.Unrealized.LowMinor), money(r.Unrealized.HighMinor), money(r.Unrealized.MidMinor))
 	b.WriteString("\n> Unrealized is an estimate range and must not be added to realized.\n\n")
@@ -155,7 +166,13 @@ func RenderMarkdown(r engine.Report) string {
 	if r.Coverage.Unavailable != "" {
 		fmt.Fprintf(&b, "_Unavailable: %s_\n", r.Coverage.Unavailable)
 	} else {
-		fmt.Fprintf(&b, "%.1f%% of telemetry reconciled against `%s` [%s].\n", r.Coverage.Ratio*100, r.Coverage.Source, r.Coverage.Evidence)
+		fmt.Fprintf(
+			&b,
+			"%.1f%% of telemetry reconciled against `%s` [%s].\n",
+			r.Coverage.Ratio*100,
+			r.Coverage.Source,
+			r.Coverage.Evidence,
+		)
 	}
 	if r.Severity != "" {
 		fmt.Fprintf(&b, "\n**Suggested severity:** %s\n", r.Severity)
