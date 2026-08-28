@@ -18,6 +18,7 @@ var scope = instrumentation.Scope{
 // everything else is a monotonic delta Sum (a counter).
 var gaugeFamilies = map[string]bool{
 	"biz_inflight_value": true,
+	"biz_inflight_count": true,
 }
 
 // buildResourceMetrics groups a MetricPoint batch by family into OTLP

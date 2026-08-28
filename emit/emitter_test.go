@@ -401,9 +401,10 @@ func TestExportFailureCountsDrops(t *testing.T) {
 func TestSetInFlightEmitsGauge(t *testing.T) {
 	exp := &captureExporter{}
 	em := newTestEmitter(t, exp)
-	em.SetInFlight("invoice.pay", "capture", Age5mTo30m, biz.Money{Amount: 5568661, Currency: "USD", Exponent: 2})
+	em.SetInFlight("invoice.pay", "capture", Age5mTo30m, biz.Money{Amount: 5568661, Currency: "USD", Exponent: 2}, 42)
 	metrics, _ := flushAndSnapshot(t, em, exp)
-	g := metricsByName(metrics)["biz_inflight_value"]
+	byName := metricsByName(metrics)
+	g := byName["biz_inflight_value"]
 	if len(g) != 1 {
 		t.Fatalf("gauge points: %v", metrics)
 	}
@@ -419,12 +420,36 @@ func TestSetInFlightEmitsGauge(t *testing.T) {
 	if g[0].Value != 5568661 {
 		t.Fatalf("gauge value %d", g[0].Value)
 	}
+	// The companion count gauge (ADR-0012) rides the same labels.
+	c := byName["biz_inflight_count"]
+	if len(c) != 1 || c[0].Value != 42 {
+		t.Fatalf("count gauge = %v, want one point value 42", c)
+	}
+	for k, v := range want {
+		if c[0].Labels[k] != v {
+			t.Fatalf("count label %s = %q, want %q", k, c[0].Labels[k], v)
+		}
+	}
+}
+
+func TestSetInFlightRejectsNegativeCount(t *testing.T) {
+	exp := &captureExporter{}
+	em := newTestEmitter(t, exp)
+	em.SetInFlight("invoice.pay", "capture", Age5mTo30m, biz.Money{Amount: 1, Currency: "USD", Exponent: 2}, -1)
+	metrics, _ := flushAndSnapshot(t, em, exp)
+	if g := metricsByName(metrics)["biz_inflight_value"]; len(g) != 0 {
+		t.Fatalf("a negative count must reject the whole sample: %v", g)
+	}
+	drops := metricsByName(metrics)["biz_dropped_events_total"]
+	if len(drops) != 1 || drops[0].Labels["reason"] != "invalid" {
+		t.Fatalf("negative count must count as invalid: %v", drops)
+	}
 }
 
 func TestSetInFlightRejectsUnknownBucket(t *testing.T) {
 	exp := &captureExporter{}
 	em := newTestEmitter(t, exp)
-	em.SetInFlight("invoice.pay", "capture", "1m-5min", biz.Money{Amount: 1, Currency: "USD", Exponent: 2})
+	em.SetInFlight("invoice.pay", "capture", "1m-5min", biz.Money{Amount: 1, Currency: "USD", Exponent: 2}, 1)
 	metrics, _ := flushAndSnapshot(t, em, exp)
 	if g := metricsByName(metrics)["biz_inflight_value"]; len(g) != 0 {
 		t.Fatalf("typo bucket minted a series: %v", g)
@@ -527,7 +552,7 @@ func TestSetInFlightFencesFlowAndStage(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			exp := &captureExporter{}
 			em := newTestEmitter(t, exp)
-			em.SetInFlight(c.flow, c.stage, AgeLt1m, biz.Money{Amount: 1, Currency: "USD", Exponent: 2})
+			em.SetInFlight(c.flow, c.stage, AgeLt1m, biz.Money{Amount: 1, Currency: "USD", Exponent: 2}, 1)
 			metrics, _ := flushAndSnapshot(t, em, exp)
 			g := metricsByName(metrics)["biz_inflight_value"]
 			if len(g) != 1 {
@@ -550,7 +575,7 @@ func TestMetricBufferIsBounded(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	for i := 0; i < 100; i++ {
-		em.SetInFlight("invoice.pay", "capture", AgeLt1m, biz.Money{Amount: int64(i + 1), Currency: "USD", Exponent: 2})
+		em.SetInFlight("invoice.pay", "capture", AgeLt1m, biz.Money{Amount: int64(i + 1), Currency: "USD", Exponent: 2}, 1)
 	}
 	metrics, _ := flushAndSnapshot(t, em, exp)
 	if len(metrics) > 8 {

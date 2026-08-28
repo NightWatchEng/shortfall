@@ -105,5 +105,8 @@ type RecordConfig struct {
 // sampler.
 type Emitter interface {
 	Record(ctx context.Context, stage string, result biz.Result, opts ...Option)
-	SetInFlight(flow, stage, ageBucket string, money biz.Money)
+	// SetInFlight publishes one sample of the in-flight family for a
+	// (flow, stage, age_bucket, currency): biz_inflight_value (money) and
+	// biz_inflight_count (count) together (ADR-0012).
+	SetInFlight(flow, stage, ageBucket string, money biz.Money, count int64)
 }

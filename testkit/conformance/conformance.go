@@ -69,15 +69,35 @@ func sampleMetrics(n int) []emit.MetricPoint {
 	currencies := []string{"USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "SEK", "NZD", "NOK", "DKK", "SGD"}
 	out := make([]emit.MetricPoint, 0, n)
 	for i := 0; i < n; i++ {
-		out = append(out, emit.MetricPoint{
-			Name: "biz_value_total",
-			Labels: map[string]string{
-				"flow": "invoice.pay", "stage": "capture", "outcome": "failed",
-				"currency": currencies[i%len(currencies)], "kind": "fee", "segment": "smb",
-			},
-			Value: int64(100 + i),
-			At:    baseTime.Add(time.Duration(i) * time.Second),
-		})
+		at := baseTime.Add(time.Duration(i) * time.Second)
+		cur := currencies[i%len(currencies)]
+		// Interleave the in-flight gauge families so every metric exporter is
+		// exercised on all families, not just biz_value_total — a family an
+		// exporter fails to handle drops the whole batch (this caught the
+		// biz_inflight_count gap, ADR-0012).
+		switch i % 3 {
+		case 0:
+			out = append(out, emit.MetricPoint{
+				Name:   "biz_inflight_count",
+				Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": cur},
+				Value:  int64(1 + i), At: at,
+			})
+		case 1:
+			out = append(out, emit.MetricPoint{
+				Name:   "biz_inflight_value",
+				Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": "5m-30m", "currency": cur},
+				Value:  int64(100 + i), At: at,
+			})
+		default:
+			out = append(out, emit.MetricPoint{
+				Name: "biz_value_total",
+				Labels: map[string]string{
+					"flow": "invoice.pay", "stage": "capture", "outcome": "failed",
+					"currency": cur, "kind": "fee", "segment": "smb",
+				},
+				Value: int64(100 + i), At: at,
+			})
+		}
 	}
 	return out
 }

@@ -50,9 +50,6 @@ func Deferred(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		Leg: Leg{
 			ByCurrency: map[string]int64{},
 			Evidence:   EvidenceDeterministic,
-			Caveats: []string{
-				"in-flight and SLA-breach transaction COUNTS are unavailable from the value-only gauge; breach is reported as projected-lost value (see workspace-lte)",
-			},
 		},
 		ByAgeBucket:        map[string]map[string]int64{},
 		ProjectedLostMinor: map[string]int64{},
@@ -98,7 +95,52 @@ func Deferred(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 	if oldestIdx >= 0 {
 		leg.OldestAgeMinutes = ageBucketFloorMinutes[ageBucketOrder[oldestIdx]]
 	}
+
+	// Transaction counts from the companion count gauge (ADR-0012). When the
+	// source emits it, Count and SLABreaches are exact; a value-only source
+	// (no count gauge) leaves them 0 and keeps the honest caveat.
+	if err := fillDeferredCounts(ctx, reg, q, req, &leg); err != nil {
+		return DeferredLeg{}, err
+	}
 	return leg, nil
+}
+
+// fillDeferredCounts reads biz_inflight_count to fill Leg.Count (all buckets)
+// and SLABreaches (breaching buckets). If the count gauge is absent while value
+// is present, it records the count-unavailable caveat instead of asserting 0.
+func fillDeferredCounts(ctx context.Context, reg *registry.Registry, q query.Querier, req Request, leg *DeferredLeg) error {
+	sawCount := false
+	for _, filters := range inflightFilters(req) {
+		series, err := q.QueryMetric(ctx, query.Query{
+			Metric:  "biz_inflight_count",
+			Filters: filters,
+			GroupBy: []string{"flow", "stage", "age_bucket", "currency"},
+			Range:   req.Window,
+		})
+		if err != nil {
+			return fmt.Errorf("engine: deferred inflight count query: %w", err)
+		}
+		for _, s := range series {
+			count := lastLevel(s)
+			if count == 0 {
+				continue
+			}
+			sawCount = true
+			leg.Count += count
+			// SLABreaches counts every transaction past its SLA deadline —
+			// at_risk breaches included, not just the "lost" ones.
+			if reg != nil && breached(reg, s.Labels["flow"], s.Labels["stage"], s.Labels["age_bucket"]) {
+				leg.SLABreaches += count
+			}
+		}
+	}
+	// Only caveat when there IS in-flight value but no count gauge to count it —
+	// an older, value-only source. No in-flight at all needs no caveat.
+	if !sawCount && len(leg.ByAgeBucket) > 0 {
+		leg.Caveats = append(leg.Caveats,
+			"in-flight and SLA-breach transaction COUNTS are unavailable — this source emits biz_inflight_value but not biz_inflight_count (ADR-0012); breach is reported as projected-lost value")
+	}
+	return nil
 }
 
 // lastLevel returns the gauge level for a series (the sum of its points;
@@ -121,9 +163,16 @@ func bucketIndex(bucket string) int {
 	return -1
 }
 
-// breachedAndLost reports whether a bucket is entirely past the flow/stage
-// SLA deadline AND the registry's on_breach policy for that stage is "lost".
-func breachedAndLost(reg *registry.Registry, flow, stage, bucket string) bool {
+// breached reports whether a bucket is entirely past the flow/stage SLA
+// deadline — regardless of the on_breach policy. This is the predicate for the
+// SLA-breach transaction COUNT: an at_risk breach is still a breach.
+//
+// The bucket is entirely past the deadline when its FLOOR age already meets it.
+// Compared as durations, never as truncated float minutes: a fractional-minute
+// deadline (PT90S) must not round down and pull earlier buckets over the line,
+// which would OVER-state breaches. Still conservative — a deadline falling
+// inside a bucket is not attributed to that bucket (a documented lower bound).
+func breached(reg *registry.Registry, flow, stage, bucket string) bool {
 	f, ok := reg.Flow(flow)
 	if !ok {
 		return false
@@ -132,20 +181,25 @@ func breachedAndLost(reg *registry.Registry, flow, stage, bucket string) bool {
 	if !ok {
 		return false
 	}
-	if sla.OnBreach != registry.BreachLost {
-		return false
-	}
 	floorMin, ok := ageBucketFloorMinutes[bucket]
 	if !ok {
 		return false
 	}
-	// The bucket is entirely past the deadline when its FLOOR age already
-	// meets it. Compared as durations, never as truncated float minutes: a
-	// fractional-minute deadline (PT90S) must not round down and pull earlier
-	// buckets over the line, which would OVER-state projected loss. Still
-	// conservative — a deadline falling inside a bucket is not attributed to
-	// that bucket (a documented lower bound on projected-lost).
 	return sla.Deadline <= time.Duration(floorMin)*time.Minute
+}
+
+// breachedAndLost is breached AND the registry's on_breach policy is "lost" —
+// the predicate for projected-lost VALUE (an at_risk breach is a breach but not
+// projected loss).
+func breachedAndLost(reg *registry.Registry, flow, stage, bucket string) bool {
+	f, ok := reg.Flow(flow)
+	if !ok {
+		return false
+	}
+	if sla, ok := f.SLA[stage]; !ok || sla.OnBreach != registry.BreachLost {
+		return false
+	}
+	return breached(reg, flow, stage, bucket)
 }
 
 // inflightFilters returns one filter map per flow (scope + flow), with no

@@ -38,6 +38,11 @@ func TestTranslate(t *testing.T) {
 			wantExpr: `sum by (age_bucket, currency) (last_over_time(biz_inflight_value[3600s] @ ` + tT + `))`,
 		},
 		{
+			name:     "biz_inflight_count is a gauge too (ADR-0012), not a counter delta",
+			q:        query.Query{Metric: "biz_inflight_count", Range: query.TimeRange{From: from, To: to}, GroupBy: []string{"age_bucket", "currency"}},
+			wantExpr: `sum by (age_bucket, currency) (last_over_time(biz_inflight_count[3600s] @ ` + tT + `))`,
+		},
+		{
 			name:    "stepped queries are rejected (bucket alignment)",
 			q:       query.Query{Metric: "biz_txn_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}, Step: time.Minute},
 			wantErr: true,

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +67,100 @@ func TestDeferredByBucketAndCurrency(t *testing.T) {
 	// Counts are the honest gap.
 	if leg.SLABreaches != 0 || leg.Count != 0 || len(leg.Caveats) == 0 {
 		t.Fatalf("expected count gap with a caveat, got breaches=%d count=%d caveats=%v", leg.SLABreaches, leg.Count, leg.Caveats)
+	}
+}
+
+func countPoint(stage, bucket, currency string, count int64, at time.Time) emit.MetricPoint {
+	return emit.MetricPoint{
+		Name:   "biz_inflight_count",
+		Labels: map[string]string{"flow": "invoice.pay", "stage": stage, "age_bucket": bucket, "currency": currency},
+		Value:  count, At: at,
+	}
+}
+
+func TestDeferredExactCountsFromCountGauge(t *testing.T) {
+	// With the companion count gauge (ADR-0012), Count and SLABreaches are exact
+	// and the caveat is gone. SLABreaches counts EVERY breach (past deadline),
+	// not only the "lost" ones.
+	at := win.To.Add(-time.Minute)
+	metrics := []emit.MetricPoint{
+		inflightPoint("capture", "5m-30m", "USD", 1000, at), countPoint("capture", "5m-30m", "USD", 10, at), // not breached
+		inflightPoint("capture", "gt2h", "USD", 500, at), countPoint("capture", "gt2h", "USD", 5, at), // breached -> lost
+		inflightPoint("capture", "30m-2h", "EUR", 700, at), countPoint("capture", "30m-2h", "EUR", 7, at), // breached -> lost
+		inflightPoint("settle", "gt2h", "USD", 9000, at), countPoint("settle", "gt2h", "USD", 3, at), // settle P1D: not breached at gt2h
+	}
+	q := memq.New(memq.WithMetrics(metrics))
+	leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: win, Flows: []string{"invoice.pay"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leg.Count != 25 {
+		t.Fatalf("Count = %d, want 25 (10+5+7+3)", leg.Count)
+	}
+	// Breaches: capture gt2h (5) + capture 30m-2h (7) = 12; settle gt2h and
+	// capture 5m-30m are under their deadlines.
+	if leg.SLABreaches != 12 {
+		t.Fatalf("SLABreaches = %d, want 12 (all breaches, at_risk included)", leg.SLABreaches)
+	}
+	for _, c := range leg.Caveats {
+		if strings.Contains(c, "COUNT") {
+			t.Fatalf("count gauge present — the count-unavailable caveat must be gone: %v", leg.Caveats)
+		}
+	}
+	// Value legs still correct alongside the counts.
+	if leg.ByCurrency["USD"] != 10500 || leg.ProjectedLostMinor["EUR"] != 700 {
+		t.Fatalf("value legs wrong: ByCurrency=%v projectedLost=%v", leg.ByCurrency, leg.ProjectedLostMinor)
+	}
+}
+
+func TestDeferredAtRiskBreachCountsButIsNotProjectedLost(t *testing.T) {
+	// A stage that is at_risk (not lost) and past its deadline is a BREACH — it
+	// counts toward SLABreaches — but is NOT projected loss. The reference
+	// registry cannot produce this (its only at_risk stage, settle P1D, can
+	// never breach via the 120m top bucket), so parse a flow with an at_risk
+	// deadline a bucket can cross.
+	reg, err := registry.Parse([]byte(`version: 1
+segments: [smb]
+flows:
+  hold.flow:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: hold, signals: ["queue:hold.q"] }
+    sla:
+      hold: { deadline: PT30M, on_breach: at_risk }
+    estimator: { default_minor: 100 }
+    baseline: { seasonality: hour_of_week, lookback_weeks: 8 }
+    recovery: { model: usage_loss_curve, recovered_fraction: 0.5, within: PT2H }
+    reconcile: { source: "sql:hold.ledger" }
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := win.To.Add(-time.Minute)
+	hold := func(count, value int64, bucket string) []emit.MetricPoint {
+		lbl := map[string]string{"flow": "hold.flow", "stage": "hold", "age_bucket": bucket, "currency": "USD"}
+		return []emit.MetricPoint{
+			{Name: "biz_inflight_value", Labels: lbl, Value: value, At: at},
+			{Name: "biz_inflight_count", Labels: lbl, Value: count, At: at},
+		}
+	}
+	var metrics []emit.MetricPoint
+	metrics = append(metrics, hold(4, 4000, "gt2h")...)   // 120m >= 30m: breached (at_risk)
+	metrics = append(metrics, hold(9, 9000, "5m-30m")...) // 5m < 30m: not breached
+	q := memq.New(memq.WithMetrics(metrics))
+	leg, err := Deferred(context.Background(), &reg, q, Request{Window: win, Flows: []string{"hold.flow"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leg.Count != 13 {
+		t.Fatalf("Count = %d, want 13 (4 + 9)", leg.Count)
+	}
+	if leg.SLABreaches != 4 {
+		t.Fatalf("SLABreaches = %d, want 4 (the at_risk breach counts)", leg.SLABreaches)
+	}
+	if len(leg.ProjectedLostMinor) != 0 {
+		t.Fatalf("at_risk breach is NOT projected loss, got %v", leg.ProjectedLostMinor)
 	}
 }
 

@@ -57,6 +57,7 @@ type Exporter struct {
 	valueTotal    *prometheus.CounterVec
 	txnTotal      *prometheus.CounterVec
 	inflightValue *prometheus.GaugeVec
+	inflightCount *prometheus.GaugeVec
 	providerCalls *prometheus.CounterVec
 	droppedEvents *prometheus.CounterVec
 
@@ -112,6 +113,10 @@ func New(opts ...func(*Options)) (*Exporter, error) {
 			Name: "biz_inflight_value",
 			Help: "In-flight (deferred) business value by flow/stage/age_bucket (minor currency units).",
 		}, inflightLabels),
+		inflightCount: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "biz_inflight_count",
+			Help: "In-flight (deferred) transaction count by flow/stage/age_bucket (ADR-0012).",
+		}, inflightLabels),
 		providerCalls: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "biz_provider_calls_total",
 			Help: "Cumulative count of downstream provider calls by provider/op/outcome.",
@@ -134,7 +139,7 @@ func New(opts ...func(*Options)) (*Exporter, error) {
 }
 
 func (e *Exporter) collectors() []prometheus.Collector {
-	return []prometheus.Collector{e.valueTotal, e.txnTotal, e.inflightValue, e.providerCalls, e.droppedEvents}
+	return []prometheus.Collector{e.valueTotal, e.txnTotal, e.inflightValue, e.inflightCount, e.providerCalls, e.droppedEvents}
 }
 
 // Gatherer exposes the registry to build an http handler:
@@ -175,7 +180,9 @@ func (e *Exporter) ExportMetrics(_ context.Context, batch []emit.MetricPoint) er
 				return err
 			}
 		case "biz_inflight_value":
-			e.setInflight(p)
+			e.setInflight(e.inflightValue, p)
+		case "biz_inflight_count":
+			e.setInflight(e.inflightCount, p)
 		default:
 			return fmt.Errorf("prometheus: unknown metric family %q", p.Name)
 		}
@@ -189,15 +196,18 @@ func (e *Exporter) ExportMetrics(_ context.Context, batch []emit.MetricPoint) er
 // (emit's order-by-At contract; Prometheus text carries no per-sample time,
 // so the exporter enforces the ordering the wire format cannot). Equal
 // timestamps apply (last of a tie wins, harmlessly).
-func (e *Exporter) setInflight(p emit.MetricPoint) {
+func (e *Exporter) setInflight(vec *prometheus.GaugeVec, p emit.MetricPoint) {
 	vals := orderedValues(p.Labels, inflightLabels)
-	key := strings.Join(vals, "\x00")
+	// Qualify the stale-guard key by family name: biz_inflight_value and
+	// biz_inflight_count share the same label set, so an unqualified key would
+	// let one family's timestamp gate the other's.
+	key := p.Name + "\x00" + strings.Join(vals, "\x00")
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if last, ok := e.inflightAt[key]; ok && p.At.Before(last) {
 		return // stale: a fresher level is already published
 	}
-	e.inflightValue.WithLabelValues(vals...).Set(float64(p.Value))
+	vec.WithLabelValues(vals...).Set(float64(p.Value))
 	e.inflightAt[key] = p.At
 }
 

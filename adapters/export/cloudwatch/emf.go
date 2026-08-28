@@ -37,7 +37,7 @@ func dimsFor(name string) []string {
 		return valueDims
 	case "biz_txn_total":
 		return txnDims
-	case "biz_inflight_value":
+	case "biz_inflight_value", "biz_inflight_count":
 		return inflightDims
 	case "biz_provider_calls_total":
 		return providerDims

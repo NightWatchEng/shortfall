@@ -226,7 +226,7 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 // unknown buckets are rejected loudly, and flow/stage outside the
 // registry fall back to "unregistered" — no caller string ever mints an
 // unbounded series (ADR-0004).
-func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money) {
+func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money, count int64) {
 	valid := false
 	for _, b := range AgeBuckets {
 		if ageBucket == b {
@@ -234,19 +234,24 @@ func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money) {
 			break
 		}
 	}
-	if !valid || money.Validate() != nil {
-		s.dropInvalid("in-flight gauge rejected", fmt.Errorf("bucket %q / money %+v", ageBucket, money))
+	if !valid || money.Validate() != nil || count < 0 {
+		s.dropInvalid("in-flight gauge rejected", fmt.Errorf("bucket %q / money %+v / count %d", ageBucket, money, count))
 		return
 	}
 	flowLabel, stageLabel := s.flowStageLabels(flow, stage)
-	s.appendMetrics(MetricPoint{
-		Name: "biz_inflight_value",
-		Labels: map[string]string{
+	lbls := func() map[string]string {
+		return map[string]string{
 			"flow": flowLabel, "stage": stageLabel, "age_bucket": ageBucket, "currency": money.Currency,
-		},
-		Value: money.Amount,
-		At:    s.clock(),
-	})
+		}
+	}
+	now := s.clock()
+	// Value and count are the two gauges of the in-flight family (ADR-0012),
+	// published together from the same snapshot so they never disagree. Each
+	// point gets its own label map — no shared-map aliasing downstream.
+	s.appendMetrics(
+		MetricPoint{Name: "biz_inflight_value", Labels: lbls(), Value: money.Amount, At: now},
+		MetricPoint{Name: "biz_inflight_count", Labels: lbls(), Value: count, At: now},
+	)
 }
 
 // Flush exports everything pending and returns the first export error.
