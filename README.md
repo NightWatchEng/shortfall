@@ -59,6 +59,49 @@ Design invariants, enforced in review and by the library itself:
 - No PAN or PII ever appears in `biz.*` attributes (guarded, not promised).
 - Realized and estimated value are never merged into one headline number.
 
+## Getting started
+
+```sh
+go get github.com/NightWatchEng/shortfall          # core: biz, emit, engine, registry, query
+go get github.com/NightWatchEng/shortfall/adapters/export/prometheus  # adapters are separate modules
+```
+
+Attach business context where a request enters, record every stage
+transition, and the library does the rest — bounded metrics, unsampled
+outcome events, cardinality fences:
+
+```go
+ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
+    Flow:       "invoice.pay",
+    EntityID:   invoiceID,
+    CustomerID: hashedAccountID, // pre-hashed — raw ids never enter biz.*
+    Money:      biz.Money{Amount: 4999, Currency: "USD", Exponent: 2},
+    Kind:       biz.KindFee,
+})
+// ...
+em.Record(ctx, "auth", biz.ResultSuccess)     // once per stage transition
+em.Record(ctx, "capture", biz.ResultFailed)
+```
+
+At incident time, ask the engine for the report over any window and scope
+— from your own code or the CLI:
+
+```go
+report, err := engine.Compute(ctx, &reg, querier, engine.Request{
+    Window: query.TimeRange{From: incidentStart, To: incidentEnd},
+    Flows:  []string{"invoice.pay"},
+})
+```
+
+```sh
+shortfall impact --registry registry.yaml --prometheus http://prom:9090 \
+  --from 2026-08-25T09:00:00Z --to 2026-08-25T12:00:00Z
+```
+
+Runnable versions of these snippets live in the package examples
+(`biz`, `emit`, `engine` on pkg.go.dev); the full path from `go get` to a
+rendered report is the [Quickstart](docs/quickstart.md).
+
 ## Documentation
 
 - [Quickstart](docs/quickstart.md) — `go get` to a rendered impact report in 10 minutes.
