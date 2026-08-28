@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "08ce5353d991086f865271d47369d276c5991a74",
+  "base_sha": "3995aecb8b3bbc18f483c33a658da23e0d5b2cbd",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-28T15:06:50+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context, examiner memory priors"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T15:06:50+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "08ce5353d991086f865271d47369d276c5991a74",
+      "base_sha": "3995aecb8b3bbc18f483c33a658da23e0d5b2cbd",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0015-go-performance-guidelines.md",
+      "line": 86,
+      "severity": "MEDIUM",
+      "finding": "Consequences called the advisory benchstat CI job 'the only performance gate', contradicting CONTRIBUTING ('a review convention, not a mechanical gate'), ci.yml ('benchmarks (advisory)... not in the required-check set'), and the ADR's own Decision item 3.",
+      "evidence": "ADR-0015 Consequences vs CONTRIBUTING.md Benchmarks section vs .github/workflows/ci.yml:82-85.",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Reworded to 'advisory benchstat CI job remain the only performance check (a review convention, not a mechanical gate \u2014 Decision item 3)'. Cross-examiner confirmed; all other factual claims (8 benchmark names, twoGenSet reuse, BCE idiom, go101 URL, ADR citations) verified accurate.",
+      "id": "fc110ee9c34d6598"
+    }
+  ]
+}
