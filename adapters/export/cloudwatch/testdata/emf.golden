@@ -1,0 +1,80 @@
+{
+  "_aws": {
+    "CloudWatchMetrics": [
+      {
+        "Dimensions": [
+          [
+            "flow",
+            "stage",
+            "outcome",
+            "currency",
+            "kind",
+            "segment"
+          ]
+        ],
+        "Metrics": [
+          {
+            "Name": "biz_value_total",
+            "Unit": "None"
+          }
+        ],
+        "Namespace": "shortfall"
+      }
+    ],
+    "Timestamp": 1787846400000
+  },
+  "biz_value_total": 14900,
+  "currency": "USD",
+  "flow": "invoice.pay",
+  "kind": "fee",
+  "outcome": "failed",
+  "segment": "smb",
+  "stage": "capture"
+}
+{
+  "_aws": {
+    "CloudWatchMetrics": [
+      {
+        "Dimensions": [
+          [
+            "flow",
+            "stage",
+            "age_bucket",
+            "currency"
+          ]
+        ],
+        "Metrics": [
+          {
+            "Name": "biz_inflight_value",
+            "Unit": "None"
+          }
+        ],
+        "Namespace": "shortfall"
+      }
+    ],
+    "Timestamp": 1787846400000
+  },
+  "age_bucket": "5m-30m",
+  "biz_inflight_value": 5568661,
+  "currency": "USD",
+  "flow": "invoice.pay",
+  "stage": "capture"
+}
+{
+  "_aws": {
+    "Timestamp": 1787846400000
+  },
+  "biz.amount.est": false,
+  "biz.amount_minor": 14900,
+  "biz.currency": "USD",
+  "biz.customer.id": "h:c",
+  "biz.entity.id": "inv_1",
+  "biz.exponent": 2,
+  "biz.flow": "invoice.pay",
+  "biz.outcome": "failed",
+  "biz.segment": "smb",
+  "biz.stage": "capture",
+  "biz.value.kind": "fee",
+  "event": "biz.outcome",
+  "source": "stripe:webhook"
+}

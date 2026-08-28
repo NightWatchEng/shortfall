@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "07e663a3817c111ecf2a289fb033434db146d7a2",
+  "base_sha": "e59dff7967359f92453adaf79bdbd4b6ab2f1940",
+  "rules_version": "531c7ace1924",
+  "reviewed_at": "2026-08-28T01:33:25+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude), independent context \u2014 verified EMF spec conformance, ADR-0004 dimension safety on both paths, gauge-immunity via per-record Timestamp, concurrency"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude), separate context \u2014 confirmed the double-count is real (CloudWatch aggregates, not dedupes) and the exclusivity fix loses nothing for Logs Insights"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-28T01:33:25+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "07e663a3817c111ecf2a289fb033434db146d7a2",
+      "base_sha": "e59dff7967359f92453adaf79bdbd4b6ab2f1940",
+      "rule_id": "unmapped:double-emission-footgun",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/cloudwatch/cloudwatch.go",
+      "line": 123,
+      "severity": "MEDIUM",
+      "finding": "With a putter configured, ExportMetrics wrote EMF metric records AND called PutMetricData for the same batch. The default writer is os.Stdout (agent-extracted), so this double-counts every metric \u2014 CloudWatch aggregates same name+dims+timestamp points, it does not dedupe. The package/WithMetricPutter docs contradicted (alternative vs in-addition).",
+      "evidence": "if err := e.writeMetricRecords(batch); err != nil { return err }; if e.putter != nil { return e.putMetricData(ctx, batch) }",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "The putter now REPLACES the EMF metric path (exactly one metric path runs): ExportMetrics calls putMetricData when a putter is set, else writeMetricRecords. Outcome events always take the writer (PutMetricData cannot carry them; event records declare no metric, so nothing is lost for Logs Insights). Docs corrected; TestPutMetricDataReplacesEMFMetricRecords asserts only the event record reaches the writer when a putter is set.",
+      "id": "46fe5912824189ce"
+    },
+    {
+      "ts": "2026-08-28T01:33:25+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "07e663a3817c111ecf2a289fb033434db146d7a2",
+      "base_sha": "e59dff7967359f92453adaf79bdbd4b6ab2f1940",
+      "rule_id": "tests-required",
+      "tags": [],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/cloudwatch/cloudwatch.go",
+      "line": 168,
+      "severity": "MEDIUM",
+      "finding": "The maxDatums=1000 chunking loop in putMetricData had its multi-chunk branch untested \u2014 the only putter test sent 2 datums and asserted 1 call, so the boundary math was unverified.",
+      "evidence": "for start := 0; start < len(datums); start += maxDatums { end := start + maxDatums; if end > len(datums) { end = len(datums) } ... datums[start:end] }",
+      "status": "fixed",
+      "origin": "day",
+      "reason": "Added TestPutMetricDataChunksAtServiceLimit (table-driven: 1000 -> [1000], 1001 -> [1000,1], 2500 -> [1000,1000,500]) asserting exact chunk sizes and that the datum total is preserved (no loss or duplication).",
+      "id": "99c9912e748b5b3a"
+    }
+  ]
+}
