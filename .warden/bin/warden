@@ -5,7 +5,7 @@
 # semantic version; warden fails closed if they disagree.
 # Bump procedure: update PIN_SHA here AND platform.pin in repo.yaml together
 # (one PR; both files are HIGH-tier).
-PIN_SHA="9d1bee823edf1ea928e85fa08c01144e92df7db4"   # = v1.0.0
+PIN_SHA="972f683b0ee035902ba32058adc3ed4a66d2c334"   # = v1.0.0 (post-tag main: adds rules recommend, skill-recurrence stats, decision shards)
 FROM="git+ssh://git@github.com/NightWatchEng/agentops@${PIN_SHA}"
 
 # Exit-code contract (review P2-3): 2 = gate DID NOT RUN. Resolve the platform
