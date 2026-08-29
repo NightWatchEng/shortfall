@@ -67,7 +67,7 @@ sequenceDiagram
         ST-->>RC: pages of PaymentIntent
         RC-->>S: stripe.Ledger{Rows []biz.LedgerRow, Scanned, Skipped}
     end
-    Note over S,RC: The third capture point and the only outbound one. These rows are<br/>the ledger side of the coverage ratio — shortfall reconcile passes<br/>them to engine.Coverage. They never enter the realized leg.
+    Note over S,RC: The third capture point, and the only one that polls rather than<br/>reacting. These rows are the ledger side of the coverage ratio —<br/>shortfall reconcile passes them to engine.Coverage, and they<br/>never enter the realized leg.
 
     Note over S,EM: Both capture points can fire for one PaymentIntent. The in-process<br/>de-dup key carries stage and result, so a stripe:client auth failure<br/>and a stripe:webhook capture success both emit — and the engine's<br/>realized leg then drops that entity as recovered.
 ```
@@ -125,9 +125,11 @@ sequenceDiagram
   `IgnoreAPIVersionMismatch` relaxes the SDK's version pin, not the
   signature.
 - **The reconciler is the third capture point, and the only one that
-  polls.** Webhooks and the wrapped backend are inbound and event-driven;
-  `Reconcile` calls Stripe's list API on a schedule and produces
-  `biz.LedgerRow`s for the coverage ratio. They are the *check* on the
+  polls.** The webhook receiver reacts to an event Stripe pushes, and the
+  wrapped backend fires on a call your own code makes outbound to Stripe —
+  neither one asks Stripe anything of its own. `Reconcile` does: it calls
+  Stripe's list API on a schedule and produces `biz.LedgerRow`s for the
+  coverage ratio. They are the *check* on the
   telemetry, never an input to it — a disagreement is a finding, not
   something to smooth over.
 - **A Stripe outage shows up as a shortfall in your own entry-stage

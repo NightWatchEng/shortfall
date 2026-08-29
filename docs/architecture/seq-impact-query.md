@@ -1,9 +1,9 @@
 # Sequence — an impact question becomes a four-leg report
 
 Query-time, not ingest-time: the engine asks any backend only the four verbs
-— sum, count, group-by and time range over metrics, filter/group-by/order/
-distinct-count over events — so nothing vendor-specific leaks past the
-adapter. Drawn to [the stencil](STYLE.md); a sequence keeps the label grammar
+— sum, count, group-by and time range — plus event order, so nothing
+vendor-specific leaks past the adapter. Drawn to
+[the stencil](STYLE.md); a sequence keeps the label grammar
 and the tables and skips the palette
 ([§5](STYLE.md#5--sequences-the-same-grammar-a-different-renderer)).
 
@@ -25,9 +25,7 @@ sequenceDiagram
         participant E as engine.Compute<br/>core module — five legs, strictly one at a time
     end
 
-    box rgba(140,140,140,0.10) adapters/query/* — nested modules
-        participant Q as query.Querier<br/>the CLI's combined adapter — promql for metrics, sql for events
-    end
+    participant Q as combined query.Querier<br/>cmd/shortfall — promql for metrics, sql for events
 
     participant B as Your backends<br/>Prometheus + your event store
 
@@ -92,7 +90,7 @@ sequenceDiagram
 |---|---|---|
 | 1 | on-call → CLI | `--registry`, `--from` and `--to` are required (RFC3339); `--scope k=v` and `--flow` repeat. With neither `--prometheus` nor `--sql` the command exits 2 before reaching the engine — there is no default backend |
 | 2 | CLI → registry | `registry.Load` parses and validates the co-signed YAML once. The result is an in-memory `*registry.Registry` value, passed by pointer from here on |
-| 3 | CLI → querier | With both backends the CLI builds its own `combined` `Querier`: `QueryMetric` routes to PromQL, `QueryEvents` to SQL, and `Capabilities()` is the **AND** of the two. That routing is why the realized leg's `alt` resolves the way it does |
+| 3 | CLI → querier | With both flags the CLI builds its own `combined` `Querier` — a `cmd/shortfall` type over the `adapters/query/promql` and `adapters/query/sql` nested modules. `QueryMetric` routes to PromQL, `QueryEvents` to SQL, and `Capabilities()` takes **each field from the backend that owns it**: `Metrics` and its history depth from the metric backend, `Events` and its history depth from the event backend. Not an intersection — PromQL reports `Events: false` and SQL reports `Metrics: false`, so ANDing them would leave every leg ungrounded. One flag alone yields that backend by itself, and that is what makes the realized leg's `alt` resolve either way |
 | 4 | CLI → engine | `Compute(ctx, reg, q, Request{Window, Scope, Flows})`. Everything the engine needs is an argument — no globals, no I/O of its own |
 | 5 | engine → querier | `Capabilities()` is asked **before every leg**, and it is the third method on the interface alongside `QueryMetric` and `QueryEvents`. A leg whose capability is absent is skipped and marked, so the unsupported verb is never issued |
 | 6 | engine → querier | The recovery sweep: successes in the window, grouped `(currency, entity)`, default aggregation. It reads no money — it exists only to build the set of entities to exclude |
@@ -112,7 +110,7 @@ sequenceDiagram
 | 20 | engine → itself | **No query.** `Compute` assigns `CoverageLeg{Evidence: EvidenceTrust, Unavailable: "…run shortfall reconcile…"}`. The trust number needs a provider ledger an impact request does not carry, so `shortfall reconcile` calls `engine.Coverage` separately and renders it on its own |
 | 21 | engine → registry | `SuggestSeverity` walks the registry's declared ladder against realized-plus-deferred per minute, evaluated **per currency** with no cross-currency sum (ADR-0001), taking the most severe level any one currency triggers (ADR-0013). Nothing clearing the lowest threshold returns `""`, never a fabricated severity. It is a suggestion the report carries, never a page it sends |
 | 22 | engine → CLI | The `Report`. Provenance is three fields — `GeneratedAt`, `RegistryVersion` and `LibraryVersion` (`v0.2.0`) — not a struct, and it is what makes a report reproducible in a postmortem |
-| 23 | CLI → on-call | `--format text` (default), `markdown` or `json`, all three from `engine/report`. Each leg renders with its evidence tag, and an unavailable leg renders as `n/a` off the marker rather than as a zero |
+| 23 | CLI → on-call | `--format text` (default), `markdown` or `json`, all three from `engine/report`. Every leg that has an `Evidence` field renders with its tag — `CustomersLeg` has none. An ungrounded money leg prints `none` with its caveat or note beneath it, and customers and coverage print `unavailable: <reason>`. The bare `n/a` form the `Unavailable` marker enables is in `report.Summary`, the one-line render for an incident tool's impact field, which `--format` does not reach |
 
 ## Key facts this diagram encodes
 
