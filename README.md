@@ -101,8 +101,8 @@ Where step 1 exported decides how you read back:
 
 - **CloudWatch** — the EMF records from step 1 are already in CloudWatch
   Logs; a small reporting job reads them back with the `cwinsights`
-  querier and hands it to `engine.Compute`, which renders the same
-  report. Loki (`logql`) and Splunk (`spl`) work the same way. These
+  querier, hands it to `engine.Compute`, and renders the same report.
+  Loki (`logql`) and Splunk (`spl`) work the same way. These
   are event stores, so they ground realized loss and customer impact;
   pair them with a promql-readable metrics store to ground the deferred
   and unrealized legs too.
