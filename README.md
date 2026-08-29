@@ -104,9 +104,8 @@ loss** (a range against the seasonal baseline — always an estimate,
 never merged with the deterministic legs), and **customer impact**
 (distinct entities, segments, top accounts) — plus a suggested severity
 from the registry's $/min ladder. Metrics ground the deferred and
-unrealized legs; events ground realized de-dup and customers — with
-only one source, the report says exactly which legs it could not
-ground rather than guessing. `shortfall reconcile --ledger` adds
+unrealized legs; events ground realized de-dup and customers — wire
+both, as above, and every leg is grounded. `shortfall reconcile --ledger` adds
 the coverage ratio: telemetry checked against your provider's ledger.
 Backends without CLI flags (CloudWatch, Loki, Splunk) gather through the
 same query adapters as libraries via `engine.Compute` — see
