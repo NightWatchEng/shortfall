@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "c61bcd6bdc9b732df33710dd96a9683336012f42",
+  "base_sha": "078b4507da7681d48069cc1895ea1acfb76196ec",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T04:28:45+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context; round 2 combined scoped re-review per trivial-diff clause"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T04:28:45+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "c61bcd6bdc9b732df33710dd96a9683336012f42",
+      "base_sha": "078b4507da7681d48069cc1895ea1acfb76196ec",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 99,
+      "severity": "MEDIUM",
+      "finding": "Gather example passed only --prometheus (metrics-only) while the following sentence promised realized de-dup by entity and a customer-impact leg, which need events; contradicted adapters.md's leg-grounding standard",
+      "evidence": "promql Caps{Metrics:true, Events:false}; engine/realized.go metrics-only caveat 'upper bound, not de-duped'; engine/customers.go NotAvailableReason without events; adapters.md matrix",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Example now wires --sql \"file:outcomes.db\" alongside --prometheus (combined querier: Metrics+Events); leg-grounding sentence added matching adapters.md; round-2 verdicted addressed",
+      "id": "19301228e2a68e00"
+    },
+    {
+      "ts": "2026-08-29T04:28:45+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "c61bcd6bdc9b732df33710dd96a9683336012f42",
+      "base_sha": "078b4507da7681d48069cc1895ea1acfb76196ec",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 106,
+      "severity": "LOW",
+      "finding": "Repair's added sentence promised 'the report says exactly which legs it could not ground' but text/markdown renderers never print Deferred.Caveats (markdown also drops Realized.Caveats/Unrealized.Notes)",
+      "evidence": "engine/report/render.go has no Deferred caveat loop; events-only fallback renders deferred as '[deterministic] none in-flight' with no reason",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Sentence scoped to the dual-source wiring the example shows ('wire both, as above, and every leg is grounded') \u2014 the remedy the re-review prescribed; underlying pre-existing renderer omission parked as tracked item workspace-72o",
+      "id": "4ab1812ec6de7a52"
+    }
+  ]
+}
