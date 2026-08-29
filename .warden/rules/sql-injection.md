@@ -18,5 +18,6 @@ shapes. Scope, stated honestly: the checks catch inline construction at
 the call site only — SQL assembled in a variable first (the sql
 adapter's own pattern) is beyond any regex and stays with review; that
 adapter is safe by design (bare-identifier table validation, values
-always parameterized) and the conformance suite pins it. Measured
-matches at adoption: 0.
+always parameterized) and its own unit tests pin it —
+TestBadTableRejected rejects a hostile table name, TestParityWithMemq
+pins query behavior. Measured matches at adoption: 0.
