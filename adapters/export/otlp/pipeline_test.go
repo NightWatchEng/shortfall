@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -23,17 +22,9 @@ type capturingLogExporter struct {
 	mu   sync.Mutex
 	recs []sdklog.Record
 	fail error
-	// delay simulates a collector that cannot keep up, which is what makes an
-	// overflow reachable at all: against an instant exporter the processor
-	// drains as fast as a caller fills it, so no record is overwritten and the
-	// fixture proves nothing about the queue.
-	delay time.Duration
 }
 
 func (c *capturingLogExporter) Export(_ context.Context, recs []sdklog.Record) error {
-	if c.delay > 0 {
-		time.Sleep(c.delay)
-	}
 	if c.fail != nil {
 		return c.fail
 	}
@@ -57,43 +48,6 @@ func outcomes(n int) []biz.Outcome {
 		out = append(out, biz.Outcome{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed})
 	}
 	return out
-}
-
-// TestNoOutcomeIsLostToQueueOverflow pins that a batch larger than the log
-// SDK's queue loses nothing. The queue overwrites its oldest record on
-// overflow and surfaces it through no channel the caller can reach, and
-// emit's event buffer is several times the queue's size, so an unchunked
-// batch would destroy outcome events while every layer reported success.
-// Only the largest case below can catch that: the processor drains 512
-// records per export, so a batch just over the queue size never fills it.
-// The smaller cases pin the chunk arithmetic instead.
-func TestNoOutcomeIsLostToQueueOverflow(t *testing.T) {
-	cases := []struct {
-		name  string
-		count int
-	}{
-		{"chunk arithmetic: a partial chunk", 10},
-		{"chunk boundary: exactly one chunk", eventQueueSize},
-		{"chunk boundary: one past a chunk", eventQueueSize + 1},
-		{"overflow: emit's full default event buffer", 10000},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			// A slow collector is the condition under which the queue
-			// overflows — and the condition this library exists to measure.
-			exp := &capturingLogExporter{delay: 2 * time.Millisecond}
-			sink := newProviderSink(exp, defaultResource())
-			if err := sink.emit(context.Background(), outcomes(c.count)); err != nil {
-				t.Fatalf("emit: %v", err)
-			}
-			if err := sink.Shutdown(context.Background()); err != nil {
-				t.Fatalf("shutdown: %v", err)
-			}
-			if got := len(exp.all()); got != c.count {
-				t.Errorf("delivered %d of %d outcomes — the queue overwrote records with no error anywhere", got, c.count)
-			}
-		})
-	}
 }
 
 // TestEventExportFailureSurfaces pins that a terminal export failure reaches
@@ -255,19 +209,145 @@ func TestEveryPointCarriesWriterIdentity(t *testing.T) {
 	}
 }
 
-// TestConcurrentEmitLosesNothing pins the capacity guarantee across calls, not
-// just within one. The queue belongs to the sink, so overlapping ExportEvents
-// calls would put several times its capacity in flight and overflow it. The
-// emit package reaches that: emit.Std.Flush releases its own lock before
-// calling the exporter, and its background ticker can race a caller-driven
-// Flush.
-//
-// This fixture discriminates only when the producer outruns the exporter's
-// drain, which the race detector prevents: under -race it passes even with
-// the lock removed. CI runs plain go test, where it does kill that mutant.
-func TestConcurrentEmitLosesNothing(t *testing.T) {
+// TestBothSignalsCarryTheSameWriterIdentity pins that metrics and events agree
+// about who wrote them. The log pipeline defaults to the SDK's own resource
+// when it is not given one, which would leave events under
+// "unknown_service:<binary>" with no instance id while metrics carried the
+// real identity — and a backend correlating the two legs by service.name
+// could not.
+func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
+	exp := &capturingLogExporter{}
+	res := defaultResource()
+	sink := newProviderSink(exp, res)
+	if err := sink.emit(context.Background(), outcomes(1)); err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	recs := exp.all()
+	if len(recs) != 1 {
+		t.Fatalf("delivered %d records, want 1", len(recs))
+	}
+	eventAttrs := attrSet(recs[0].Resource().Attributes())
+
+	// Compare the legs rather than asserting a literal on each: two
+	// independently-worded expectations both stay green while the legs
+	// disagree, which is the failure this test is named for.
+	rm, err := buildResourceMetrics([]emit.MetricPoint{{
+		Name:   "biz_txn_total",
+		Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
+		Value:  1, At: at,
+	}}, res)
+	if err != nil {
+		t.Fatalf("build metrics: %v", err)
+	}
+	metricAttrs := attrSet(rm.Resource.Attributes())
+
+	for _, key := range []string{"service.name", "service.instance.id"} {
+		if eventAttrs[key] == "" {
+			t.Errorf("event leg carries no %s", key)
+		}
+		if eventAttrs[key] != metricAttrs[key] {
+			t.Errorf("%s differs between legs: events %q, metrics %q — a backend correlating them cannot", key, eventAttrs[key], metricAttrs[key])
+		}
+	}
+	if !strings.Contains(eventAttrs["service.instance.id"], strconv.Itoa(os.Getpid())) {
+		t.Errorf("service.instance.id = %q, want it to name this process (pid %d)", eventAttrs["service.instance.id"], os.Getpid())
+	}
+}
+
+func attrSet(kvs []attribute.KeyValue) map[string]string {
+	out := map[string]string{}
+	for _, kv := range kvs {
+		out[string(kv.Key)] = kv.Value.String()
+	}
+	return out
+}
+
+// boundedExporter records how many records arrive between one ForceFlush and
+// the next, which is the property the chunking guarantee is actually about:
+// no more than the queue's capacity may be in flight before it is drained.
+// Asserting that directly is deterministic, where asserting lost records is
+// not — loss only occurs when the producer outruns the consumer, and the race
+// detector slows the producer enough to hide it.
+type boundedExporter struct {
+	mu        sync.Mutex
+	sinceLast int
+	maxRun    int
+	total     int
+}
+
+func (b *boundedExporter) Export(_ context.Context, recs []sdklog.Record) error {
+	b.mu.Lock()
+	b.sinceLast += len(recs)
+	b.total += len(recs)
+	if b.sinceLast > b.maxRun {
+		b.maxRun = b.sinceLast
+	}
+	b.mu.Unlock()
+	return nil
+}
+func (b *boundedExporter) Shutdown(context.Context) error { return nil }
+func (b *boundedExporter) ForceFlush(context.Context) error {
+	b.mu.Lock()
+	b.sinceLast = 0
+	b.mu.Unlock()
+	return nil
+}
+func (b *boundedExporter) peak() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.maxRun
+}
+func (b *boundedExporter) delivered() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.total
+}
+
+// TestEmitNeverExceedsQueueBetweenFlushes pins the chunking guarantee without
+// depending on relative speed: whatever the batch size, the provider is never
+// handed more than one queue's worth of records before a flush drains it. An
+// unchunked emit hands it the whole batch, which is what overflows the queue
+// and destroys outcome events. This assertion holds identically with and
+// without the race detector.
+func TestEmitNeverExceedsQueueBetweenFlushes(t *testing.T) {
+	cases := []struct {
+		name  string
+		count int
+	}{
+		{"a partial chunk", 10},
+		{"exactly one chunk", eventQueueSize},
+		{"one past a chunk", eventQueueSize + 1},
+		{"several chunks", eventQueueSize * 3},
+		{"emit's full default event buffer", 10000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			exp := &boundedExporter{}
+			sink := newProviderSink(exp, defaultResource())
+			if err := sink.emit(context.Background(), outcomes(c.count)); err != nil {
+				t.Fatalf("emit: %v", err)
+			}
+			if err := sink.Shutdown(context.Background()); err != nil {
+				t.Fatalf("shutdown: %v", err)
+			}
+			if got := exp.peak(); got > eventQueueSize {
+				t.Errorf("%d records reached the provider between flushes, queue holds %d — the excess is silently overwritten", got, eventQueueSize)
+			}
+			if got := exp.delivered(); got != c.count {
+				t.Errorf("delivered %d of %d outcomes", got, c.count)
+			}
+		})
+	}
+}
+
+// TestConcurrentEmitNeverExceedsQueue is the per-sink half of the same
+// guarantee, and deterministic for the same reason. The queue belongs to the
+// sink, so overlapping ExportEvents calls must not put more than its capacity
+// in flight between drains — emit.Std.Flush releases its own lock before
+// calling the exporter, and its ticker can race a caller-driven Flush.
+func TestConcurrentEmitNeverExceedsQueue(t *testing.T) {
 	const callers, per = 4, eventQueueSize
-	exp := &capturingLogExporter{delay: 2 * time.Millisecond}
+	exp := &boundedExporter{}
 	sink := newProviderSink(exp, defaultResource())
 
 	var wg sync.WaitGroup
@@ -289,41 +369,10 @@ func TestConcurrentEmitLosesNothing(t *testing.T) {
 	if err := sink.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
-	if got, want := len(exp.all()), callers*per; got != want {
-		t.Errorf("delivered %d of %d outcomes across %d concurrent callers — the shared queue overflowed with no error returned", got, want, callers)
+	if got := exp.peak(); got > eventQueueSize {
+		t.Errorf("%d records reached the provider between flushes across %d concurrent callers, queue holds %d — the excess is silently overwritten", got, callers, eventQueueSize)
 	}
-}
-
-// TestBothSignalsCarryTheSameWriterIdentity pins that metrics and events agree
-// about who wrote them. The log pipeline defaults to the SDK's own resource
-// when it is not given one, which would leave events under
-// "unknown_service:<binary>" with no instance id while metrics carried the
-// real identity — and a backend correlating the two legs by service.name
-// could not.
-func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
-	exp := &capturingLogExporter{}
-	res := defaultResource()
-	sink := newProviderSink(exp, res)
-	if err := sink.emit(context.Background(), outcomes(1)); err != nil {
-		t.Fatalf("emit: %v", err)
-	}
-	recs := exp.all()
-	if len(recs) != 1 {
-		t.Fatalf("delivered %d records, want 1", len(recs))
-	}
-	got := recs[0].Resource()
-	attrs := map[string]string{}
-	for _, kv := range got.Attributes() {
-		attrs[string(kv.Key)] = kv.Value.String()
-	}
-	if attrs["service.name"] != "shortfall" {
-		t.Errorf("event-leg service.name = %q, want shortfall — the log provider fell back to its own default", attrs["service.name"])
-	}
-	inst := attrs["service.instance.id"]
-	if inst == "" {
-		t.Fatal("event-leg records carry no service.instance.id, so events and metrics disagree about the writer")
-	}
-	if !strings.Contains(inst, strconv.Itoa(os.Getpid())) {
-		t.Errorf("event-leg service.instance.id = %q, want it to name this process (pid %d)", inst, os.Getpid())
+	if got, want := exp.delivered(), callers*per; got != want {
+		t.Errorf("delivered %d of %d outcomes", got, want)
 	}
 }
