@@ -81,9 +81,25 @@ CREATE TABLE biz_outcomes (
 
 | Adapter | Metrics | Events | Backend |
 |---|---|---|---|
+| `adapters/export/otlp` | ✅ | ✅ | Anything an OpenTelemetry Collector fans out to — **the vendor-neutral path** |
 | `adapters/export/prometheus` | ✅ | — | Prometheus (scrape) |
 | `adapters/export/cloudwatch` | ✅ | ✅ | CloudWatch (EMF / PutMetricData) |
 | `adapters/export/gcp` | ✅¹ | ✅ | Google Cloud (Cloud Monitoring / Cloud Logging) |
+
+**OTLP is the default answer for a backend without its own adapter here**,
+and the recommended one for Google Cloud: point it at the Google collector or
+Cloud Monitoring's OpenTelemetry exporter rather than reaching for a
+cloud-specific client. One integration reaches GCP, Datadog, Honeycomb,
+Grafana and anything else that speaks OTLP, which is why the supported
+surface stays small while the reachable backend set does not.
+
+Metric mapping is fixed by `emit`'s semantics, not chosen: the counter
+families become **delta** monotonic `Sum[int64]`s, because `emit.MetricPoint`
+carries a delta and not a running total, and the two in-flight families
+become `Gauge[int64]` levels (ADR-0012). Every instrument is `int64` — a
+`float64` aggregation would round money silently above 2^53 minor units, and
+a test pins that none is ever used. Each point keeps its own observation
+time, so a batch delayed by an incident is not restamped to flush time.
 
 ¹ The GCP adapter reports `Metrics: false` until a monitoring client is
 configured. Cloud Logging does not extract metrics from log entries the way
@@ -144,6 +160,17 @@ defer em.Close(ctx)
 // pulls a cloud SDK.
 exp := gcp.New(gcp.WithMonitoring("my-project", authedClient))
 em, _ := emit.New(&reg, exp)
+defer em.Close(ctx)
+```
+
+```go
+// OTLP: both signals to a collector, which fans out to whatever you run.
+// With no options the standard OTEL_EXPORTER_OTLP_* environment is read.
+otlpExp, err := otlp.New(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+em, _ := emit.New(&reg, otlpExp)
 defer em.Close(ctx)
 ```
 
