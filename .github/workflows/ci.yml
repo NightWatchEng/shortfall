@@ -240,11 +240,14 @@ jobs:
       # network-fragile path this file rejected for the core job, silently
       # acquired by a second required check (workspace-dfd).
       #
-      # Deliberately BEFORE the base-ref pin below, for two reasons: the
-      # installer is new in this PR and would not exist on an older base
-      # ref, and running it here means it runs before the deploy key is
-      # written to disk. All it does is fetch a release tarball and verify
-      # it against a checksum, refusing to install anything else.
+      # Placed BEFORE the base-ref pin so it runs before the deploy key is
+      # written to disk. That ordering is not what decides WHICH copy runs:
+      # the pin below restores five paths and none is under scripts/, so
+      # this job executes the PR's installer wherever the step sits — one
+      # of the PR-controlled executions that pin does not cover, alongside
+      # the ci-go.sh that `warden verify` invokes further down (tracked in
+      # workspace-8v0). The committed script only fetches a release tarball
+      # and installs it if it matches a hardcoded checksum.
       - name: install golangci-lint (pinned release binary, checksum-verified)
         run: ./scripts/install-golangci-lint.sh
       # The gate must never execute PR-controlled gate code: a PR could swap

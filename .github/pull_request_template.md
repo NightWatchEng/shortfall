@@ -42,10 +42,11 @@ its current head rather than from an earlier run.
 Those run across every Go module in the repository, nested adapter modules
 included. `.warden/bin/warden verify --scope core` runs the same six
 commands through the policy in repo.yaml, and they are the same six checks
-the required `core checks` job applies — so a check that fails there fails
-here too. (The job also installs the pinned linter, which has no local
-counterpart, so a green verify is not a guarantee the job goes green.)
-`vuln` and `lint` need no local install: both are pinned in
+the required `core checks` job applies — so no check can fail there that
+could not fail here. It is not a promise the two agree: the job also
+installs the pinned linter (no local counterpart), pins its own Go
+toolchain, and `vuln` queries a live advisory database that moves between
+runs. `vuln` and `lint` need no local install: both are pinned in
 scripts/ci-go.sh and run through `go run` when the pinned binary is absent.
 -->
 
