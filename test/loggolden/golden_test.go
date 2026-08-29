@@ -281,7 +281,7 @@ func TestSPLParityOverHECGolden(t *testing.T) {
 				hecLines = append(hecLines, line)
 			}
 		}
-		fmt.Fprint(w, `{"text":"Success","code":0}`)
+		_, _ = fmt.Fprint(w, `{"text":"Success","code":0}`)
 	}))
 	defer capture.Close()
 	exp := splunkhec.New(capture.URL, "hec-token")
@@ -319,7 +319,7 @@ func TestSPLParityOverHECGolden(t *testing.T) {
 		ndjson.WriteString("\n")
 	}
 	splunk := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, ndjson.String())
+		_, _ = fmt.Fprint(w, ndjson.String())
 	}))
 	defer splunk.Close()
 

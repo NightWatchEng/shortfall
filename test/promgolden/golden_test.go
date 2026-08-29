@@ -119,7 +119,16 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 				faults[i].From = start.Add(10 * time.Minute)
 				faults[i].To = start.Add(35 * time.Minute)
 			}
-			res := checkout.Run(checkout.Config{Seed: 5, Start: start, End: end, Faults: faults})
+			// A flat arrival curve makes the harness time-of-day
+			// independent: the scenario window is rebased near now, and the
+			// default hour-of-week curve's night trough once concentrated
+			// the sparse failures into a single stepped bucket, tripping
+			// the non-vacuity guard as a 02:00-UTC-only flake.
+			var flat [168]float64
+			for i := range flat {
+				flat[i] = 4.0
+			}
+			res := checkout.Run(checkout.Config{Seed: 5, Start: start, End: end, Faults: faults, Curve: &flat})
 			// Snapshot the in-flight gauge one minute before the window closes.
 			// A sample stamped exactly at To (MetricsFromResult's default, the
 			// run end == window end here) is dropped by the half-open [From,To)

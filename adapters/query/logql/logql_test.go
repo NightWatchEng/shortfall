@@ -95,7 +95,7 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 		})
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		fmt.Fprint(w, streamsBody(entries))
+		_, _ = fmt.Fprint(w, streamsBody(entries))
 	}))
 	defer srv.Close()
 
@@ -147,7 +147,7 @@ func TestPagination(t *testing.T) {
 				page = append(page, e)
 			}
 		}
-		fmt.Fprint(w, streamsBody(page))
+		_, _ = fmt.Fprint(w, streamsBody(page))
 	}))
 	defer srv.Close()
 
@@ -182,7 +182,7 @@ func TestPagination(t *testing.T) {
 // line in the selected streams is a misconfiguration, not data to drop.
 func TestForeignLineFailsLoudly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, streamsBody([][2]string{{strconv.FormatInt(from.UnixNano(), 10), `{"level":"info"}`}}))
+		_, _ = fmt.Fprint(w, streamsBody([][2]string{{strconv.FormatInt(from.UnixNano(), 10), `{"level":"info"}`}}))
 	}))
 	defer srv.Close()
 	lq := New(srv.URL)

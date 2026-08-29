@@ -83,7 +83,7 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 		raw, _ := io.ReadAll(req.Body)
 		form, _ := parseForm(string(raw))
 		gotSearch, gotEarliest, gotLatest = form["search"], form["earliest_time"], form["latest_time"]
-		fmt.Fprint(w, exportBody(events))
+		_, _ = fmt.Fprint(w, exportBody(events))
 	}))
 	defer srv.Close()
 
@@ -161,14 +161,14 @@ func TestUnsupportedMetricsAndErrors(t *testing.T) {
 		{
 			name: "foreign raw line fails loudly",
 			handler: func(w http.ResponseWriter, _ *http.Request) {
-				fmt.Fprint(w, `{"preview":false,"result":{"_raw":"{\"level\":\"info\"}","_time":"2026-08-25T09:01:00.000+00:00"}}`+"\n")
+				_, _ = fmt.Fprint(w, `{"preview":false,"result":{"_raw":"{\"level\":\"info\"}","_time":"2026-08-25T09:01:00.000+00:00"}}`+"\n")
 			},
 			wantErr: "not a biz outcome",
 		},
 		{
 			name: "unparsable time fails loudly",
 			handler: func(w http.ResponseWriter, _ *http.Request) {
-				fmt.Fprint(w, `{"preview":false,"result":{"_raw":"{}","_time":"yesterday"}}`+"\n")
+				_, _ = fmt.Fprint(w, `{"preview":false,"result":{"_raw":"{}","_time":"yesterday"}}`+"\n")
 			},
 			wantErr: "_time",
 		},

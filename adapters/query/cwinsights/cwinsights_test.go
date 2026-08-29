@@ -90,14 +90,14 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 		switch target {
 		case "Logs_20140328.StartQuery":
 			_ = json.Unmarshal(raw, &startBody)
-			fmt.Fprint(w, `{"queryId":"q-1"}`)
+			_, _ = fmt.Fprint(w, `{"queryId":"q-1"}`)
 		case "Logs_20140328.GetQueryResults":
 			polls++
 			if polls == 1 {
-				fmt.Fprint(w, `{"status":"Running","results":[]}`)
+				_, _ = fmt.Fprint(w, `{"status":"Running","results":[]}`)
 				return
 			}
-			fmt.Fprint(w, resultsBody(events))
+			_, _ = fmt.Fprint(w, resultsBody(events))
 		default:
 			t.Errorf("unexpected target %q", target)
 		}
@@ -185,10 +185,10 @@ func TestFailurePaths(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if req.Header.Get("X-Amz-Target") == "Logs_20140328.StartQuery" {
-					fmt.Fprint(w, `{"queryId":"q-1"}`)
+					_, _ = fmt.Fprint(w, `{"queryId":"q-1"}`)
 					return
 				}
-				fmt.Fprint(w, c.results)
+				_, _ = fmt.Fprint(w, c.results)
 			}))
 			defer srv.Close()
 			bad := New("us-east-1", "/g", "k", "s", WithEndpoint(srv.URL), WithPollInterval(time.Millisecond))
