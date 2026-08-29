@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "54d4ac0ff1cf11707e574976d249525f060591e8",
+  "base_sha": "9375d9023e3743a96136af4c5a9b74704201b246",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T18:12:44+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; docs-accuracy + secrets rule bodies verbatim, review charter, reviewer-side memory recall: no relevant history)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; received findings list + review package only, never the reviewer's reasoning; examiner-side memory recall: no relevant history)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T18:12:44+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "54d4ac0ff1cf11707e574976d249525f060591e8",
+      "base_sha": "9375d9023e3743a96136af4c5a9b74704201b246",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim",
+        "scope-misstatement"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 103,
+      "severity": "MEDIUM",
+      "finding": "The float ban was overstated as absolute and explicitly extended to the adapters, contradicting ADR-0001, the no-float-money gate rule, and the adapter code itself.",
+      "evidence": "README claimed 'Not float64, not decimal, nowhere, including in the adapters.' ADR-0001 scopes the ban to biz/ and blesses floats outside it; .warden/rules/no-float-money.md has applies_to biz/**/*.go only; money genuinely transits float64 at adapters/export/prometheus/prometheus.go:211,219, adapters/export/cloudwatch/cloudwatch.go:159, adapters/query/promql/promql.go:292.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-v5t",
+      "reason": "Rewritten to state the true and narrower claim: the library's own types and arithmetic are integer minor units, biz/ is float-free by an enforced gate rule, the float conversion is confined to the adapter at the TSDB wire boundary with the engine owning read-back, and statistical code uses floats outside biz/ by design. Round-2 scoped re-review verdicted addressed, verifying biz/ is float-free in fact (only comment-line matches), the rule exists with that applies_to, and query/query.go:97-99 states the same adapter-boundary contract verbatim.",
+      "id": "a14037f91b159f23"
+    },
+    {
+      "ts": "2026-08-29T18:12:44+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "54d4ac0ff1cf11707e574976d249525f060591e8",
+      "base_sha": "9375d9023e3743a96136af4c5a9b74704201b246",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 69,
+      "severity": "MEDIUM",
+      "finding": "The Coverage row supplied an evidence tag 'reconciled' that the engine never emits, in a column whose other four rows are verbatim tag constants.",
+      "evidence": "engine/engine.go:42-46 declares exactly three Evidence values (deterministic, estimate, trust); engine/coverage.go:39 sets EvidenceTrust; 'reconciled' is fixed prose in engine/report/render.go:93-95, not the tag. docs/money.md:50 states the same three-value standard, so the README disagreed with it after the diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-v5t",
+      "reason": "Changed to 'trust'. Round-2 scoped re-review confirmed the literal tag and re-verified the other four rows against their constants.",
+      "id": "d7f53d72e09a76ee"
+    },
+    {
+      "ts": "2026-08-29T18:12:44+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "54d4ac0ff1cf11707e574976d249525f060591e8",
+      "base_sha": "9375d9023e3743a96136af4c5a9b74704201b246",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 114,
+      "severity": "LOW",
+      "finding": "Candidate: the bullet backticks `NotAvailable` as the deferred leg's marker, but no such Go identifier exists and ADR-0017 names the field Unavailable.",
+      "evidence": "Grepping NotAvailable yields only CustomersLeg.NotAvailableReason (engine/engine.go:98).",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-v5t",
+      "reason": "REFUTED by the cross-examiner, which is the single arbiter. NotAvailable is the repo's established human-facing term for the ErrUnsupported degradation path, used generically (not customers-specific) in query/query.go:143-146, query/memq/memq.go:51-53, and docs/architecture/seq-impact-query.md:25 ('the leg reports NotAvailable(reason)'). ADR-0017 adds Leg.Unavailable as the machine-readable contract without retiring the term. Changing the README would have put it in disagreement with four other places in the tree, i.e. would have created the defect the rule exists to prevent.",
+      "id": "d48dbb6b71ab0f45"
+    },
+    {
+      "ts": "2026-08-29T18:12:44+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "54d4ac0ff1cf11707e574976d249525f060591e8",
+      "base_sha": "9375d9023e3743a96136af4c5a9b74704201b246",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 104,
+      "severity": "LOW",
+      "finding": "Introduced by the round-1 fix to the first finding: the replacement bullet glossed an amount as 'an integer count of cents'.",
+      "evidence": "ADR-0001 explicitly rejects that framing \u2014 'Currencies disagree about decimal places (JPY has zero, BHD has three), so \"cents\" alone is not a representation either' \u2014 which is why biz.Money carries Exponent int8 (biz/money.go:37).",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-v5t",
+      "reason": "Caught by the round-2 scoped re-review as a new issue in the fix lines. Now says minor units and names the currency disagreement outright; sentence split to remove stacked em-dash asides.",
+      "id": "121735b14e6683ce"
+    }
+  ]
+}
