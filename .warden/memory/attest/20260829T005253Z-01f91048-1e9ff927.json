@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "01f91048925eee0fb39c9e964c2882168c34f44f",
+  "base_sha": "ded8642410db48e5bf0968bde5aebeb617c84e56",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T00:52:53+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "session agent direct inspection (one-word gate-surface description fix; combined pass per the trivial-diff allowance)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "verified against cmd/shortfall/main.go's verb switch (validate/impact/reconcile) and warden explain output; no rule, tier, or verify command changed"
+    }
+  ],
+  "records": []
+}
