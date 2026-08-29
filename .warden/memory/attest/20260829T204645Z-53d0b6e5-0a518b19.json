@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "53d0b6e5d0569cf48a31850cd614bbef4177c9e9",
+  "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T20:46:45+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Claude Opus 5 1M), independent context, prompted with the docs-accuracy / vacuous-pass / tests-required / comment-hygiene rule bodies verbatim plus the policy's money-correctness review charter; judged the packaged main..HEAD diff"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Claude Opus 5 1M), separate context, given ONLY the findings list and the same review package \u2014 never the reviewer's reasoning; sole arbiter"
+    },
+    {
+      "role": "scoped re-reviewer",
+      "agent": "general-purpose subagent (Claude Opus 5 1M), separate context; verdicted the one confirmed finding addressed / not addressed after the fix and checked the fix for new defects"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T20:46:45+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "53d0b6e5d0569cf48a31850cd614bbef4177c9e9",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/adapters.md",
+      "line": 125,
+      "severity": "MEDIUM",
+      "finding": "The closing paragraph of the export-adapter section asserted that 'every exporter here rejects a family it does not recognise rather than guessing a kind for it' and that 'Each adapter pins this in its own unit tests'. 'here' quantifies over the export-adapter table, whose fourth row is adapters/export/gcp. This branch deleted gcp's monitoring.go (labelsFor / unknownFamilyError) and monitoring_test.go (TestMetricExportRejections, subtest 'unknown family surfaces rather than being dropped'), so gcp's ExportMetrics now accepts any family and discards it, and no gcp test pins family recognition. cloudwatch, otlp and prometheus still reject. The sentence over-claimed by exactly one adapter after the diff.",
+      "evidence": "docs/adapters.md:124-129 (pre-fix) \u2014 'The exporter you write ships the same fixed `biz_*` families, and every exporter here rejects a family it does not recognise rather than guessing a kind for it ... Each adapter pins this in its own unit tests'. Contradicting artifact, adapters/export/gcp/gcp.go:91-93: `func (e *Exporter) ExportMetrics(context.Context, []emit.MetricPoint) error { return nil }` \u2014 no family check, no error.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.4",
+      "reason": "Fixed in 53d0b6e by scoping the claim to the exporters that ship metrics and naming gcp as an exception with its reason ('declaring Metrics: false, it ships no metric point of any family, so there is no kind for it to guess at'). Restoring a family table in gcp was rejected as the fix: it would be validation logic in an exporter that ships nothing to validate, and the tracked item's scope is to delete everything serving the metrics path. The scoped re-reviewer verdicted 'addressed' and verified every sentence of the new paragraph against the tree \u2014 exactly three table rows declare Metrics:true (otlp/otlp.go:201, prometheus/prometheus.go:154, cloudwatch/cloudwatch.go:114), all three reject in code (otlp/metrics.go:55, prometheus/prometheus.go:188, cloudwatch/cloudwatch.go:155 and emf.go:81), all three pin it in their own package unit tests (otlp/pipeline_test.go:195, prometheus_test.go:98, cloudwatch_test.go:72), and testkit/conformance's Check() runs no family check. new_issues: [].",
+      "id": "697c4ea5c32536a8"
+    },
+    {
+      "ts": "2026-08-29T20:46:45+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "53d0b6e5d0569cf48a31850cd614bbef4177c9e9",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/ISSUE_TEMPLATE",
+      "file": ".github/ISSUE_TEMPLATE/1-bug-report.yml",
+      "line": 70,
+      "severity": "MEDIUM",
+      "finding": "The bug-report form's export-adapter dropdown still offers 'adapters/export/gcp \u2014 Cloud Monitoring metrics + Cloud Logging events'. After this diff the adapter declares Metrics:false unconditionally, so that option describes a configuration that cannot exist.",
+      "evidence": ".github/ISSUE_TEMPLATE/1-bug-report.yml:70 \u2014 `- \"adapters/export/gcp \u2014 Cloud Monitoring metrics + Cloud Logging events\"`. Contradicted by adapters/export/gcp/gcp.go:83-85: `return emit.Caps{Metrics: false, Events: true}`.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-vhc.4",
+      "reason": "REFUTED by the cross-examiner, the sole arbiter, on two independent scope grounds, and I accept that ruling. (1) docs-accuracy's applies_to is **/*.md, **/*.go, **/*.sh \u2014 .yml is absent, and deliberately so, since security-misconfiguration globs **/*.yml and **/*.yaml explicitly where the rule set means to reach YAML; no rule in .warden/rules/ covers doc accuracy in YAML, so there is no other id to refile under. (2) The rule body scopes to files 'in this diff', and no .yml is among the nine changed paths. The underlying drift is real and diff-caused, so it is PARKED, not discarded: tracked item workspace-sle carries it. .github/ is gate surface that .warden/skills-policy.md's Forbidden paths section permits changing only in a PR whose tracked item is explicitly about policy, CI or enrollment \u2014 workspace-sle is that item.",
+      "id": "a9ef933856eb4d85"
+    },
+    {
+      "ts": "2026-08-29T20:46:45+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "53d0b6e5d0569cf48a31850cd614bbef4177c9e9",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/ISSUE_TEMPLATE",
+      "file": ".github/ISSUE_TEMPLATE/2-adapter-request.yml",
+      "line": 173,
+      "severity": "MEDIUM",
+      "finding": "The adapter-request form cites the GCP exporter's caller-supplied authenticated HTTP client as the worked example of the repo's SDK-free convention. This diff deleted the Doer interface, WithMonitoring(projectID, doer) and every HTTP call in the module, so the named example no longer resolves to anything in the tree.",
+      "evidence": ".github/ISSUE_TEMPLATE/2-adapter-request.yml:169-175 \u2014 'the GCP exporter takes an authenticated client from the caller rather than importing the Google SDK'. No Doer, WithMonitoring or net/http import remains under adapters/export/gcp/; the module imports only bufio, context, fmt, io, os, sync plus biz/emit, makes no API call and takes no client.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-vhc.4",
+      "reason": "REFUTED by the cross-examiner on the same scope grounds as the finding above (.yml is outside docs-accuracy's applies_to; the file is not among this diff's nine changed paths). PARKED on tracked item workspace-sle, which also carries it. Entirely diff-caused and the stronger of the two follow-ups, so the bead names a replacement: adapters/query/promql and adapters/query/cwinsights both still expose a caller-injected Doer and can carry the SDK-free worked example.",
+      "id": "08e6840536539230"
+    },
+    {
+      "ts": "2026-08-29T20:46:45+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "53d0b6e5d0569cf48a31850cd614bbef4177c9e9",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 795,
+      "severity": "MEDIUM",
+      "finding": "Raised by the cross-examiner as a cross-cutting note rather than by the reviewer. Section 6.2 states the unrecognised-family invariant as an unscoped MUST \u2014 'An exporter handed a metric point whose family it does not recognise MUST surface an error for that batch. It MUST NOT drop the point' \u2014 and the port checklist repeats it. As literally written that binds adapters/export/gcp, which after this diff recognises no families at all and neither errors nor keeps the point. Until it is scoped, portability.md and the reworded docs/adapters.md state one standard at two widths.",
+      "evidence": "docs/portability.md:796-799 and the checklist line at :968 ('an unrecognised `biz_*` family errors rather than dropping'), against adapters/export/gcp/gcp.go:91 `ExportMetrics` returning an unconditional nil.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-vhc.4",
+      "reason": "Raised by the cross-examiner as a cross-cutting NOTE, not filed as a finding against this diff \u2014 it explicitly declined to raise one, being an examiner rather than a filer. PARKED on tracked item workspace-82c (P2). docs/portability.md was explicitly out of scope for this branch (a concurrently-edited path), so it could not be fixed here. The bead records the correct fix and rules out the wrong one: scope 6.2 and its checklist line to exporters declaring Metrics:true, matching what testkit/conformance's metricHonesty already encodes ('An incapable signal may return an error (signalling a drop) \u2014 that is honest. What it must never do is silently deliver'). Making gcp error instead would have emit.Std.Flush treat every flush as a failed metric batch \u2014 a warning logged and biz_dropped_events_total re-credited forever, and a non-nil error returned from every Flush, for a signal the exporter never claimed. The tension is real, tracked, and out of scope rather than resolved.",
+      "id": "73705ad7d5e64f26"
+    }
+  ]
+}

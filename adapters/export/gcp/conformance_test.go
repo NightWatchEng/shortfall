@@ -3,50 +3,12 @@ package gcp
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/NightWatchEng/shortfall/emit"
 	"github.com/NightWatchEng/shortfall/testkit/conformance"
 )
-
-// countingDoer tallies the time series Cloud Monitoring received. Overlapping
-// flushes (emit's contract) can call ExportMetrics on separate goroutines, so
-// the tally is guarded.
-type countingDoer struct {
-	mu     sync.Mutex
-	series int
-}
-
-func (d *countingDoer) Do(req *http.Request) (*http.Response, error) {
-	raw, err := io.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-	var parsed timeSeriesRequest
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil, fmt.Errorf("monitoring payload is not valid JSON: %w", err)
-	}
-	d.mu.Lock()
-	d.series += len(parsed.TimeSeries)
-	d.mu.Unlock()
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Status:     "200 OK",
-		Body:       io.NopCloser(strings.NewReader("{}")),
-		Header:     make(http.Header),
-	}, nil
-}
-
-func (d *countingDoer) count() int {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.series
-}
 
 // syncBuffer is a concurrency-safe io.Writer: the exporter serialises its own
 // bufio writer, but the harness reads the buffer too.
@@ -61,64 +23,59 @@ func (s *syncBuffer) Write(p []byte) (int, error) {
 	return s.buf.Write(p)
 }
 
-// gcpBackend counts what reached each backend: time series posted to Cloud
-// Monitoring, and outcome lines written for Cloud Logging. It reads the
-// buffer the exporter flushed into, so it is consulted after Shutdown.
-type gcpBackend struct {
-	doer *countingDoer
-	sb   *syncBuffer
+func (s *syncBuffer) snapshot() []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]byte(nil), s.buf.Bytes()...)
 }
 
-func (b gcpBackend) MetricPoints() int { return b.doer.count() }
+// gcpBackend reads what reached Cloud Logging out of the buffer the exporter
+// flushed into, so it is consulted after Shutdown.
+//
+// This exporter declares Metrics=false, so the suite runs the capability
+// honesty invariant against it rather than the no-loss one. MetricPoints is
+// therefore a real observation, not a constant: the log writer is this
+// exporter's ONLY output channel, so anything a metric path leaked would have
+// to appear there. Counting the lines that are not outcome events is exactly
+// the measurement that would catch such a leak — a hardcoded 0 would make the
+// invariant unfalsifiable.
+type gcpBackend struct{ sb *syncBuffer }
 
-func (b gcpBackend) Events() int {
-	b.sb.mu.Lock()
-	data := append([]byte(nil), b.sb.buf.Bytes()...)
-	b.sb.mu.Unlock()
+func (b gcpBackend) MetricPoints() int { return b.count(false) }
 
-	events := 0
+func (b gcpBackend) Events() int { return b.count(true) }
+
+// count tallies written lines, either the outcome events or everything else.
+// A line that is not valid JSON returns -1 to force a conformance failure
+// rather than hide malformed output.
+func (b gcpBackend) count(events bool) int {
+	data := b.sb.snapshot()
+	n := 0
 	for _, line := range bytes.Split(bytes.TrimSpace(data), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
 		var m map[string]any
 		if err := json.Unmarshal(line, &m); err != nil {
-			return -1 // force a conformance failure on malformed output
+			return -1
 		}
-		if m["event"] == eventMarker {
-			events++
+		if (m["event"] == eventMarker) == events {
+			n++
 		}
 	}
-	return events
+	return n
 }
 
+// gcpHarness runs the suite against the only configuration this exporter has:
+// events to a writer, no metrics. The honest-incapable path is the path every
+// GCP user runs.
 type gcpHarness struct{}
 
 func (gcpHarness) New() (emit.Exporter, conformance.Backend) {
 	sb := &syncBuffer{}
-	d := &countingDoer{}
-	e := New(
-		WithWriter(sb),
-		WithMonitoring("proj-conformance", d),
-		WithMonitoringEndpoint("https://monitoring.example"),
-	)
-	return e, gcpBackend{doer: d, sb: sb}
+	return New(WithWriter(sb), WithProject("proj-conformance")), gcpBackend{sb: sb}
 }
 
 func TestGCPConformance(t *testing.T) {
 	conformance.RunExporter(t, gcpHarness{})
-}
-
-// eventsOnlyHarness exercises the suite against the default configuration —
-// no monitoring client — so the capability-honesty invariant is checked on
-// the path most GCP users will actually run.
-type eventsOnlyHarness struct{}
-
-func (eventsOnlyHarness) New() (emit.Exporter, conformance.Backend) {
-	sb := &syncBuffer{}
-	return New(WithWriter(sb)), gcpBackend{doer: &countingDoer{}, sb: sb}
-}
-
-func TestGCPEventsOnlyConformance(t *testing.T) {
-	conformance.RunExporter(t, eventsOnlyHarness{})
 }
