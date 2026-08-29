@@ -91,7 +91,7 @@ func buildResourceMetrics(batch []emit.MetricPoint, res *resource.Resource) (*me
 
 // defaultResource identifies this process as the writer of its series. The
 // ADR-0004 label sets carry no writer identity, so without a per-process
-// service.instance.id every replica publishes the SAME gauge series for the
+// service.instance.id every replica publishes one shared gauge series for the
 // in-flight families — and a gauge is a level, so the backend keeps one
 // replica's value and the deferred leg under-reports by roughly the replica
 // count. Delta sums are unaffected (a backend adds them across writers); the

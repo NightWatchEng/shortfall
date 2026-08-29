@@ -35,9 +35,8 @@ import (
 
 // eventQueueSize bounds the log SDK's record queue and the chunk size
 // providerSink.emit hands it. The two must agree: an overflowing queue
-// discards records with no error anywhere the caller can observe. It is
-// deliberately not tied to emit's larger event buffer — chunking already
-// makes that size irrelevant, and matching it would hold 10k records in
+// discards records with no error anywhere the caller can observe. It is not tied
+// to emit's larger event buffer: chunking already makes that size irrelevant, and matching it would hold 10k records in
 // memory before any drain. Setting it explicitly also overrides
 // OTEL_BLRP_MAX_QUEUE_SIZE, which the chunking contract depends on.
 const eventQueueSize = 2048
@@ -65,10 +64,11 @@ type providerSink struct {
 	provider *sdklog.LoggerProvider
 	logger   otellog.Logger
 
-	// mu serialises emit. The queue below is per-sink, not per-call, so two
-	// overlapping ExportEvents calls would put twice its capacity in flight
-	// and overflow it — emit releases its own lock before calling the
-	// exporter, and its ticker can race a caller-driven Flush.
+	// mu serialises this sink's emit. The queue is per-sink, not per-call, so
+	// two overlapping ExportEvents calls would put twice its capacity in
+	// flight and overflow it. The emit package reaches that: emit.Std.Flush
+	// releases its own lock before calling the exporter, and its background
+	// ticker can race a caller-driven Flush.
 	mu sync.Mutex
 }
 

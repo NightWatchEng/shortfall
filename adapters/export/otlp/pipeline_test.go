@@ -142,8 +142,8 @@ func TestTraceLinking(t *testing.T) {
 				if got := recs[0].TraceID().String(); got != c.traceID {
 					t.Errorf("linked trace id = %s, want %s", got, c.traceID)
 				}
-				// The sampled flag is set deliberately: backends that gate
-				// log-to-trace correlation on it drop the link otherwise.
+				// Backends that gate log-to-trace correlation on the sampled
+				// flag drop the link when it is unset.
 				if !recs[0].TraceFlags().IsSampled() {
 					t.Error("record is not marked sampled — backends that gate correlation on the flag will not link it")
 				}
@@ -257,9 +257,14 @@ func TestEveryPointCarriesWriterIdentity(t *testing.T) {
 
 // TestConcurrentEmitLosesNothing pins the capacity guarantee across calls, not
 // just within one. The queue belongs to the sink, so overlapping ExportEvents
-// calls would put several times its capacity in flight and overflow it — and
-// emit reaches this: Flush releases its own lock before calling the exporter,
-// and its background ticker can race a caller-driven Flush.
+// calls would put several times its capacity in flight and overflow it. The
+// emit package reaches that: emit.Std.Flush releases its own lock before
+// calling the exporter, and its background ticker can race a caller-driven
+// Flush.
+//
+// This fixture discriminates only when the producer outruns the exporter's
+// drain, which the race detector prevents: under -race it passes even with
+// the lock removed. CI runs plain go test, where it does kill that mutant.
 func TestConcurrentEmitLosesNothing(t *testing.T) {
 	const callers, per = 4, eventQueueSize
 	exp := &capturingLogExporter{delay: 2 * time.Millisecond}
