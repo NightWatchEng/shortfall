@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"os"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +12,8 @@ import (
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/emit"
 )
+
+var testTime = time.Date(2026, 8, 28, 14, 0, 0, 0, time.UTC)
 
 func sampleOutcome() biz.Outcome {
 	return biz.Outcome{
@@ -31,49 +31,37 @@ func sampleOutcome() biz.Outcome {
 	}
 }
 
+// TestCapabilitiesAreHonest pins that the exporter declares what it does:
+// Cloud Logging extracts no metrics from log entries, and this module ships
+// no Cloud Monitoring client, so Metrics is false on every configuration.
+// Google Cloud metrics ship through adapters/export/otlp.
 func TestCapabilitiesAreHonest(t *testing.T) {
 	cases := []struct {
-		name        string
-		opts        []func(*Options)
-		wantMetrics bool
-		wantEvents  bool
+		name string
+		opts []func(*Options)
 	}{
-		{
-			name:        "no monitoring client means events only",
-			opts:        []func(*Options){WithWriter(io.Discard)},
-			wantMetrics: false,
-			wantEvents:  true,
-		},
-		{
-			name:        "monitoring client enables metrics",
-			opts:        []func(*Options){WithWriter(io.Discard), WithMonitoring("p", &recordingDoer{})},
-			wantMetrics: true,
-			wantEvents:  true,
-		},
-		{
-			name:        "a project without a doer does not enable metrics",
-			opts:        []func(*Options){WithWriter(io.Discard), WithMonitoring("p", nil)},
-			wantMetrics: false,
-			wantEvents:  true,
-		},
+		{name: "default configuration", opts: nil},
+		{name: "with a writer", opts: []func(*Options){WithWriter(io.Discard)}},
+		{name: "with a project", opts: []func(*Options){WithWriter(io.Discard), WithProject("p")}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			caps := New(c.opts...).Capabilities()
-			if caps.Metrics != c.wantMetrics {
-				t.Errorf("Metrics = %v, want %v", caps.Metrics, c.wantMetrics)
+			if caps.Metrics {
+				t.Error("Metrics = true — this exporter has no metric path; OTLP is the GCP metrics path")
 			}
-			if caps.Events != c.wantEvents {
-				t.Errorf("Events = %v, want %v", caps.Events, c.wantEvents)
+			if !caps.Events {
+				t.Error("Events = false, want true")
 			}
 		})
 	}
 }
 
-// TestMetricExportWithoutMonitoringIsNoOp pins the honest-incapable path: an
-// exporter declaring Metrics false does not attempt the call, and does not
+// TestMetricExportIsAnHonestNoOp pins the honest-incapable path: an exporter
+// declaring Metrics false delivers no metric data anywhere — in particular
+// not down the one output channel it has, the log writer — and does not
 // report an error for a capability it never claimed.
-func TestMetricExportWithoutMonitoringIsNoOp(t *testing.T) {
+func TestMetricExportIsAnHonestNoOp(t *testing.T) {
 	var buf bytes.Buffer
 	e := New(WithWriter(&buf))
 	pt := emit.MetricPoint{
@@ -84,8 +72,11 @@ func TestMetricExportWithoutMonitoringIsNoOp(t *testing.T) {
 	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
 		t.Fatalf("metric export on an events-only exporter: %v", err)
 	}
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
 	if buf.Len() != 0 {
-		t.Errorf("metric data reached the log writer: %q — metrics and events are separate paths", buf.String())
+		t.Errorf("metric data reached the log writer: %q — an events-only exporter ships no metrics", buf.String())
 	}
 }
 
@@ -249,8 +240,7 @@ func TestEventsAreLineDelimitedAndFlushOnShutdown(t *testing.T) {
 // a stray blank line would break the one-object-per-line contract.
 func TestEmptyBatchesAreNoOps(t *testing.T) {
 	var buf bytes.Buffer
-	d := &recordingDoer{}
-	e := New(WithWriter(&buf), WithMonitoring("p", d))
+	e := New(WithWriter(&buf))
 	if err := e.ExportEvents(context.Background(), nil); err != nil {
 		t.Fatalf("empty event batch: %v", err)
 	}
@@ -262,9 +252,6 @@ func TestEmptyBatchesAreNoOps(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("wrote %q for empty batches, want nothing", buf.String())
-	}
-	if len(d.reqs) != 0 {
-		t.Errorf("sent %d requests for an empty batch, want none", len(d.reqs))
 	}
 }
 
@@ -285,151 +272,57 @@ type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
 
-// TestMetricPrefixIsConfigurable covers the override and its empty-string
-// fallback, and pins that the family's biz_ prefix is what gets replaced.
-func TestMetricPrefixIsConfigurable(t *testing.T) {
+// TestWithProjectDrivesTraceCorrelation pins that the project reaches the
+// record through the exporter, not only through buildEventRecord. WithProject
+// is the events path's own configuration now that the metric options which
+// used to carry the project id are gone — without it the Cloud Trace
+// correlation key would be unreachable in production.
+func TestWithProjectDrivesTraceCorrelation(t *testing.T) {
+	const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
 	cases := []struct {
-		name   string
-		prefix string
-		want   string
-	}{
-		{"default prefix", "", "custom.googleapis.com/biz/txn_total"},
-		{"explicit default", "custom.googleapis.com/biz/", "custom.googleapis.com/biz/txn_total"},
-		{"custom domain prefix", "custom.googleapis.com/acme/money/", "custom.googleapis.com/acme/money/txn_total"},
-		{"external metric prefix", "external.googleapis.com/prometheus/", "external.googleapis.com/prometheus/txn_total"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			d := &recordingDoer{}
-			opts := []func(*Options){
-				WithWriter(io.Discard),
-				WithMonitoring("proj-1", d),
-				WithMonitoringEndpoint("https://monitoring.example"),
-			}
-			if c.prefix != "" {
-				opts = append(opts, WithMetricPrefix(c.prefix))
-			}
-			pt := emit.MetricPoint{
-				Name:   "biz_txn_total",
-				Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
-				Value:  1, At: testTime,
-			}
-			if err := New(opts...).ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
-				t.Fatalf("export: %v", err)
-			}
-			if got := d.allSeries()[0].Metric.Type; got != c.want {
-				t.Errorf("metric type = %q, want %q", got, c.want)
-			}
-		})
-	}
-}
-
-// TestCumulativeSeriesAreWriterScoped pins that the monitored resource
-// distinguishes one writer from another. Cloud Monitoring keys a series by
-// metric type, metric labels, and resource — and the ADR-0004 label sets carry
-// no writer identity — so a resource shared across replicas would put N
-// independent running totals, each with its own start time, on one series.
-func TestCumulativeSeriesAreWriterScoped(t *testing.T) {
-	d := &recordingDoer{}
-	e, _ := newTestExporter(t, d)
-	pt := emit.MetricPoint{
-		Name:   "biz_txn_total",
-		Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
-		Value:  1, At: testTime,
-	}
-	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
-		t.Fatalf("export: %v", err)
-	}
-	res := d.allSeries()[0].Resource
-	if res.Type == "global" {
-		t.Error("resource type is global — it carries no writer identity, so replicas share one cumulative series")
-	}
-	taskID := res.Labels["task_id"]
-	if taskID == "" {
-		t.Fatal("resource carries no task_id — replicas would overwrite each other's running totals")
-	}
-	if !strings.Contains(taskID, strconv.Itoa(os.Getpid())) {
-		t.Errorf("task_id = %q, want it to distinguish this process (pid %d)", taskID, os.Getpid())
-	}
-	// generic_task is only a valid resource with its full required label set.
-	for _, name := range []string{"project_id", "location", "namespace", "job", "task_id"} {
-		if res.Labels[name] == "" {
-			t.Errorf("resource label %s is empty — generic_task requires all five", name)
-		}
-	}
-	if res.Labels["project_id"] != "proj-1" {
-		t.Errorf("resource project_id = %q, want proj-1", res.Labels["project_id"])
-	}
-}
-
-func TestWithResourceOverrides(t *testing.T) {
-	cases := []struct {
-		name    string
-		resType string
-		labels  map[string]string
+		name string
+		opts []func(*Options)
+		want any // the correlation field's value, or nil when it must be absent
 	}{
 		{
-			name:    "k8s container",
-			resType: "k8s_container",
-			labels:  map[string]string{"project_id": "proj-1", "pod_name": "payments-7d9", "container_name": "app"},
+			name: "a project produces the reserved correlation key",
+			opts: []func(*Options){WithProject("proj-1")},
+			want: "projects/proj-1/traces/" + traceID,
 		},
 		{
-			name:    "gce instance",
-			resType: "gce_instance",
-			labels:  map[string]string{"project_id": "proj-1", "instance_id": "1234567890"},
+			name: "no project leaves the trace id a plain payload field",
+			opts: nil,
+			want: nil,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			d := &recordingDoer{}
-			e := New(
-				WithWriter(io.Discard),
-				WithMonitoring("proj-1", d),
-				WithMonitoringEndpoint("https://monitoring.example"),
-				WithResource(c.resType, c.labels),
-			)
-			pt := emit.MetricPoint{
-				Name:   "biz_dropped_events_total",
-				Labels: map[string]string{"reason": "export"},
-				Value:  1, At: testTime,
-			}
-			if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
+			var buf bytes.Buffer
+			e := New(append([]func(*Options){WithWriter(&buf)}, c.opts...)...)
+			o := sampleOutcome()
+			o.TraceID = traceID
+			if err := e.ExportEvents(context.Background(), []biz.Outcome{o}); err != nil {
 				t.Fatalf("export: %v", err)
 			}
-			res := d.allSeries()[0].Resource
-			if res.Type != c.resType {
-				t.Errorf("resource type = %q, want %q", res.Type, c.resType)
+			if err := e.Shutdown(context.Background()); err != nil {
+				t.Fatalf("shutdown: %v", err)
 			}
-			for k, want := range c.labels {
-				if res.Labels[k] != want {
-					t.Errorf("resource label %s = %q, want %q", k, res.Labels[k], want)
+			var got map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got); err != nil {
+				t.Fatalf("record is not valid JSON: %v", err)
+			}
+			if got["trace.id"] != traceID {
+				t.Errorf("trace.id = %#v, want %q", got["trace.id"], traceID)
+			}
+			if c.want == nil {
+				if v, present := got["logging.googleapis.com/trace"]; present {
+					t.Errorf("correlation key present without a project: %#v", v)
 				}
+				return
+			}
+			if got["logging.googleapis.com/trace"] != c.want {
+				t.Errorf("logging.googleapis.com/trace = %#v, want %#v", got["logging.googleapis.com/trace"], c.want)
 			}
 		})
-	}
-}
-
-// TestWithResourceCopiesItsLabels pins that a caller mutating its map after
-// construction cannot change what the exporter writes.
-func TestWithResourceCopiesItsLabels(t *testing.T) {
-	labels := map[string]string{"project_id": "proj-1", "instance_id": "one"}
-	d := &recordingDoer{}
-	e := New(
-		WithWriter(io.Discard),
-		WithMonitoring("proj-1", d),
-		WithMonitoringEndpoint("https://monitoring.example"),
-		WithResource("gce_instance", labels),
-	)
-	labels["instance_id"] = "mutated"
-	pt := emit.MetricPoint{
-		Name:   "biz_dropped_events_total",
-		Labels: map[string]string{"reason": "export"},
-		Value:  1, At: testTime,
-	}
-	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
-		t.Fatalf("export: %v", err)
-	}
-	if got := d.allSeries()[0].Resource.Labels["instance_id"]; got != "one" {
-		t.Errorf("instance_id = %q, want one — the option must copy its labels", got)
 	}
 }
