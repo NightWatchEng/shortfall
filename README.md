@@ -2,55 +2,136 @@
 
 **What an incident cost, who it hit, and how sure you are.**
 
-A vendor-neutral Go library for incident dollar impact. Instrument once —
-attach context where a request enters, call `Record()` per stage — and
-for any incident window shortfall answers with four numbers, each
-labelled by the kind of evidence behind it:
+shortfall is a Go library that measures the dollar impact of an incident
+from telemetry your services already emit, and reports it in a form
+Finance can audit.
+
+## The empty field in the postmortem
+
+The incident is over. The timeline is written, the root cause is
+understood, and one field in the template is still blank: **customer and
+revenue impact**.
+
+It gets filled in the usual way. Someone takes a failure count off a
+dashboard, multiplies by an average order value that somebody remembers,
+puts a `~` in front of it, and moves on. Finance reads the number, finds
+nothing to reconcile it against, and files it as an anecdote. Two
+quarters later, when the reliability roadmap needs defending, there is
+still no figure anyone trusts enough to cite.
+
+That estimate is not wrong because the person writing it was careless.
+It is wrong because a failure count is not money, and four specific
+things sit between the two.
+
+**A retry is not a second loss.** Your checkout service retried that
+failed capture four times before giving up. The dashboard counted four
+failures. The customer lost one payment. Any honest figure has to
+collapse those four events onto the entity they share — the payment
+intent, the invoice, the order — and a count cannot do that, because by
+the time a request becomes a metric increment the identity is gone.
+
+**Delayed money is not lost money.** During the incident your queues
+backed up. That value is real and it is at risk, but most of it will
+drain in twenty minutes and some of it will breach an SLA and become a
+credit you owe. Adding the backlog to your loss figure overstates it.
+Ignoring it understates it. The difference between the two is a deadline
+that lives in a config file, not in the telemetry.
+
+**The largest loss leaves no record at all.** Checkouts abandoned while
+the payment page was timing out never became a request, never became a
+log line, and never became a metric. They are absent from every system
+you have. The only way to size them is against what the same hour of the
+same weekday normally looks like, and that is an estimate with an error
+bar, not a measurement.
+
+**Sampled traces cannot count money.** If your business events ride the
+same sampling decision as your spans, a 10% sample means every dollar
+figure is a 10× extrapolation, and the error bar is invisible in the
+number that reaches the postmortem.
+
+Then there is the thing that decides whether any of it matters: if the
+number cannot be tied back to the payment provider's ledger, Finance has
+no way to check it, and a number Finance cannot check is a number
+Finance will not use.
+
+## What shortfall reports instead
+
+One incident window in, four legs and a trust line out — each labelled
+by the kind of evidence behind it, because the difference between a
+measurement and an estimate is the whole point:
 
 | Leg | What it is | Evidence |
 |---|---|---|
-| **Realized loss** | Transactions that failed, summed, de-duplicated by entity | deterministic |
-| **Deferred value** | In-flight or backlogged value, by age, with SLA conversion to lost | deterministic |
-| **Unrealized loss** | Value that never happened, from a seasonal baseline — always a range | estimate |
+| **Realized loss** | Transactions that terminally failed, summed, de-duplicated by entity and net of anything that later succeeded | deterministic |
+| **Deferred value** | In-flight and backlogged value, bucketed by age, with the registry's SLA deciding what has become lost | deterministic |
+| **Unrealized loss** | Demand that never arrived, sized against a seasonal baseline — always a range | estimate |
 | **Customer impact** | Distinct entities, segments, top accounts | deterministic |
+| **Coverage ratio** | Of the money your provider's ledger recorded, how much your telemetry also saw | trust |
 
-plus a **coverage ratio** — telemetry reconciled against your ledger —
-because a number Finance cannot audit is a number Finance will not use.
+Coverage is the leg that makes the other four defensible. It is computed
+per (flow, currency) against the reconciled ledger and reported as the
+**worst** slice, not the average, because a trust number is a
+weakest-link number: a silently dropped exporter should show up as a low
+figure, not get smoothed away. When it reads 0.62, `shortfall reconcile`
+attributes the gap per slice, so you can see which flow and which
+currency the missing 38% is in.
 
-## Why it's easy to adopt
+## What it is, concretely
 
-- **Your backend, not a new one.** Signals ship through export adapters
-  (Prometheus, CloudWatch EMF) and reports read back through query
-  adapters — no new datastore, no agent, no service to run.
-- **No dependency bloat.** The core module has no heavy deps; every
-  adapter is its own nested Go module, so a Prometheus user never pulls
-  a payments SDK.
-- **Cheap on the hot path.** One `Record()` is ~650 ns / 3 allocs
-  (benchmarks below) and money accounting never depends on trace
-  sampling.
-- **Numbers you can defend.** Money is `int64` minor units (never
-  float), realized and estimated value are never merged, PII is guarded
-  by code, and coverage tells you how much telemetry actually saw.
+A Go library and a CLI. There is no service to run, no datastore to
+install, and no agent to deploy.
+
+You attach the business facts where a request enters — flow, entity id,
+pre-hashed customer id, the amount in minor units — and call `Record()`
+at each stage transition. Each call produces two things: a bounded
+`biz_*` metric family for the cheap always-on aggregate view, and one
+outcome event carrying the exact amount and the ids, emitted regardless
+of any sampling decision. Both ship to the backend you already run
+through an export adapter. At incident time the engine reads them back
+through a query adapter and computes the legs.
+
+Adapters are the only vendor-aware code, and each one is its own nested
+Go module — a Prometheus shop never pulls the AWS SDK, and nobody pulls
+stripe-go by accident.
+
+## The opinions, stated up front
+
+These are decisions, not defaults, and they are the reason the output is
+worth reconciling. If you disagree with one, you will disagree with the
+library.
+
+- **Money is `int64` minor units.** Every amount the library holds,
+  propagates, and does arithmetic on is an integer count of minor units,
+  and `biz/` is float-free by a gate rule rather than by convention.
+  Currencies disagree about how many decimal places that is (USD two,
+  JPY zero, BHD three), so `Money` carries its own `Exponent` instead of
+  assuming cents. Where a backend imposes floats, the conversion is
+  confined to the adapter: a TSDB stores `float64`, so the metric
+  exporters and the PromQL querier convert at that boundary and the
+  engine owns reading money back out. Statistical code — baselines,
+  recovery fractions — uses floats freely and lives outside `biz/` by
+  design (ADR-0001).
+- **Deterministic and estimated values never merge into one figure.**
+  No renderer sums realized loss with unrealized loss. You can add them
+  yourself; the library will not do it silently on your behalf.
+- **Amounts and ids ride events, never metric labels.** A customer id in
+  a label set is an unbounded-cardinality incident waiting to happen, so
+  the metric families carry a fixed label vocabulary and nothing else.
+- **A leg that cannot be grounded says so.** An events-only backend
+  cannot answer the deferred leg. That leg reports `NotAvailable` with a
+  reason rather than a confident zero, because a zero is a claim.
+- **No severity ladder in the registry means no severity suggestion.**
+  The library does not invent a threshold it was not given.
+- **PII is fenced in code.** Raw emails, PANs, and IBANs are rejected at
+  the `biz.*` boundary rather than discouraged in a style guide.
 
 ## Get started
 
 Three questions, in order: how value signals get **emitted** from your
 services, how they are **gathered** back into an incident answer, and
-what ships in the box for both. (The [Quickstart](docs/quickstart.md)
-walks the same path hands-on — nothing to a rendered report in 10
-minutes with zero external services.)
-
-**How it works, in one breath.** `biz.WithValueContext` attaches the
-business facts — flow, entity id, hashed customer, minor-unit amount —
-to the request context, and they ride W3C Baggage across service hops.
-Every `Record()` turns a stage transition into two signal kinds: bounded
-`biz_*` metric families (transaction counts, value) and one unsampled
-outcome event carrying the exact amount and ids; queue consumers add the
-in-flight backlog gauge through `emit.InFlightTracker`. Your
-exporter ships both to the backend you already run — **Prometheus** for
-metrics, **CloudWatch** for metrics and events — and at incident time
-the engine queries them back and computes the four legs, each labelled
-by its evidence.
+what ships in the box for both. The
+[Quickstart](docs/quickstart.md) walks the same path hands-on — nothing
+to a rendered report in ten minutes, with zero external services.
 
 ### 1. Emit — instrument where value flows
 
@@ -87,8 +168,14 @@ func main() {
 }
 ```
 
-One `Record()` is ~650 ns / 3 allocs, and money never depends on trace
-sampling.
+`EntityID` is the field doing the real work. It is what lets four retried
+failures collapse into one lost payment at report time, so it should be
+the identifier you already treat as the idempotency key.
+
+The context rides W3C Baggage across service hops, so a flow that spans
+three services is still one flow. Queue consumers wrap their backlog in
+`emit.InFlightTracker`, which publishes the gauge the deferred leg
+reads.
 
 ### Your services call other HTTP APIs — what integrates, what leaks?
 
@@ -114,86 +201,78 @@ func newClient(reg *registry.Registry) *http.Client {
   For provider health, `adapters/payment/stripe`'s wrapped client
   observes each call for the `biz_provider_calls_total` family.
 - **Queues instead of HTTP**: the `kafka`, `sqs`, `amqp` carriers do the
-  same job on message headers, and consumers wrap their backlog in
-  `emit.InFlightTracker`, which publishes the `biz_inflight_value` gauge
-  the deferred leg reads.
+  same job on message headers.
 
 A worked two-service example (webhook Lambdas → payments-service) lives
 in [docs/integration-webhook-lambdas.md](docs/integration-webhook-lambdas.md).
 
 ### 2. Gather — ask for the damage
 
-Where step 1 exported decides how you read back:
+Where step 1 exported decides how you read back.
 
-- **Prometheus (metrics) and/or a SQL outcomes table (events)** — the
-  CLI reads both directly. For any incident window:
+**Prometheus (metrics) and/or a SQL outcomes table (events).** The CLI
+reads both directly:
 
-  ```sh
-  shortfall impact --registry registry.yaml \
-    --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
-    --flow invoice.pay --format markdown \
-    --prometheus http://prometheus:9090 \
-    --sql "file:outcomes.db"
-  ```
+```sh
+shortfall impact --registry registry.yaml \
+  --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
+  --flow invoice.pay --format markdown \
+  --prometheus http://prometheus:9090 \
+  --sql "file:outcomes.db"
+```
 
-  For ad-hoc triage, the same `biz_*` families answer PromQL directly
-  (label sets below are verbatim from the exporter's exposition):
+For ad-hoc triage, the same `biz_*` families answer PromQL directly
+(label sets below are verbatim from the exporter's exposition):
 
-  ```promql
-  # failure rate per flow, last 5 minutes
-  sum by (flow) (rate(biz_txn_total{outcome="failed"}[5m]))
-    / sum by (flow) (rate(biz_txn_total[5m]))
+```promql
+# failure rate per flow, last 5 minutes
+sum by (flow) (rate(biz_txn_total{outcome="failed"}[5m]))
+  / sum by (flow) (rate(biz_txn_total[5m]))
 
-  # failed value, minor units per minute
-  sum by (flow, currency) (rate(biz_value_total{outcome="failed"}[5m])) * 60
+# failed value, minor units per minute
+sum by (flow, currency) (rate(biz_value_total{outcome="failed"}[5m])) * 60
 
-  # deferred backlog by age bucket, right now
-  sum by (age_bucket, currency) (biz_inflight_value{flow="invoice.pay"})
-  ```
+# deferred backlog by age bucket, right now
+sum by (age_bucket, currency) (biz_inflight_value{flow="invoice.pay"})
+```
 
-- **CloudWatch** — the EMF records from step 1 are already in CloudWatch
-  Logs; a small reporting job reads them back with the `cwinsights`
-  querier, hands it to `engine.Compute`, and renders the same report.
-  CloudWatch Logs is an event store, so it grounds realized loss and
-  customer impact; pair it with a promql-readable metrics store to
-  ground the deferred and unrealized legs too.
+**CloudWatch.** The EMF records from step 1 are already in CloudWatch
+Logs; a reporting job reads them back with the `cwinsights` querier,
+hands it to `engine.Compute`, and renders the same report. CloudWatch
+Logs is an event store, so it grounds realized loss and customer impact;
+pair it with a promql-readable metrics store to ground the deferred and
+unrealized legs too.
 
-  For ad-hoc triage, query the outcome records in Logs Insights (the
-  `cwinsights` querier automates the same `filter event = "biz.outcome"`
-  scan; field names are verbatim from the EMF record):
+The equivalent ad-hoc scan in Logs Insights (field names verbatim from
+the EMF record):
 
-  ```
-  filter event = "biz.outcome" and `biz.outcome` = "failed"
-  | stats sum(`biz.amount_minor`) as failed_minor, count(*) as txns
-      by `biz.flow`, `biz.currency`
-  | sort failed_minor desc
-  ```
+```
+filter event = "biz.outcome" and `biz.outcome` = "failed"
+| stats sum(`biz.amount_minor`) as failed_minor, count(*) as txns
+    by `biz.flow`, `biz.currency`
+| sort failed_minor desc
+```
 
-  ```
-  filter event = "biz.outcome" and `biz.outcome` = "failed"
-  | stats sum(`biz.amount_minor`) as failed_minor
-      by `biz.customer.id`, `biz.segment`
-  | sort failed_minor desc | limit 10
-  ```
+```
+filter event = "biz.outcome" and `biz.outcome` = "failed"
+| stats sum(`biz.amount_minor`) as failed_minor
+    by `biz.customer.id`, `biz.segment`
+| sort failed_minor desc | limit 10
+```
 
-One honesty note covering both query sets: the ad-hoc sums — PromQL
-value rates and Logs Insights sums alike — are triage numbers. They are
-not de-duplicated by entity, and entities that later succeeded are not
-excluded. `shortfall impact` applies both on the events path; that is
-the number Finance sees.
+**One honesty note covering both query sets.** Those ad-hoc sums are
+triage numbers. They are not de-duplicated by entity, and entities that
+later succeeded are not excluded — which is to say they have exactly the
+retry problem described at the top of this page. `shortfall impact`
+applies both corrections on the events path. That is the number Finance
+sees; the queries above are the number you eyeball at 3am.
 
-Out come the four legs, each labelled by its evidence: **realized loss**
-(failed transactions summed, de-duplicated by entity), **deferred
-value** (backlog by age, SLA-converted to projected loss), **unrealized
-loss** (a range against the seasonal baseline — always an estimate,
-never merged with the deterministic legs), and **customer impact**
-(distinct entities, segments, top accounts) — plus a suggested severity
-from the registry's $/min ladder. Metrics ground the deferred and
-unrealized legs; events ground realized de-dup and customers — wire
-both signal kinds and every leg is grounded. `shortfall reconcile
---ledger` adds the coverage ratio: telemetry checked against your
-provider's ledger. See [adapters.md](docs/adapters.md) for the full
-backend-to-leg matrix.
+Which backend grounds which leg is a real constraint, not a footnote:
+metrics ground the deferred and unrealized legs, events ground realized
+de-dup and customer impact, and wiring both signal kinds is what makes
+every leg answerable. The full matrix is in
+[adapters.md](docs/adapters.md). `shortfall reconcile --ledger` adds the
+coverage ratio on top.
 
 ### 3. What ships in the box
 
@@ -211,11 +290,13 @@ backend-to-leg matrix.
 Runnable examples live in the `biz`, `emit`, and `engine` packages
 (`go doc`, and pkg.go.dev once the repo is public).
 
-## Benchmarks
+## Performance
 
-Performance is part of the contract — shortfall runs inside your request
-path. Apple M-class laptop, Go defaults; CI tracks every PR with
-benchstat:
+`Record()` runs inside your request path, so its cost is part of the
+contract rather than an implementation detail. Apple M-class laptop, Go
+defaults. Every PR is compared against `main` with benchstat and the
+delta is written into the CI job summary; that job is advisory today and
+becomes a required check once the hot-path baselines stabilise:
 
 | Path | ns/op | allocs/op |
 |---|---:|---:|
@@ -223,6 +304,9 @@ benchstat:
 | `biz.vc` encode / decode | 128 / 187 | 3 / 1 |
 | In-flight age bucketing | 0.23 | 0 |
 | `engine.Compute`, 200k events | 0.75 s | — |
+
+These are single-goroutine figures on an idle machine. Behaviour under
+sustained concurrent load is not yet characterised.
 
 ## Documentation
 
