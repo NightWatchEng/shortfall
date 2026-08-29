@@ -241,7 +241,7 @@ func TestEveryPointCarriesWriterIdentity(t *testing.T) {
 	}
 	attrs := map[string]string{}
 	for _, kv := range m.got.Resource.Attributes() {
-		attrs[string(kv.Key)] = kv.Value.Emit()
+		attrs[string(kv.Key)] = kv.Value.String()
 	}
 	if attrs["service.name"] == "" {
 		t.Error("resource carries no service.name")
@@ -314,7 +314,7 @@ func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
 	got := recs[0].Resource()
 	attrs := map[string]string{}
 	for _, kv := range got.Attributes() {
-		attrs[string(kv.Key)] = kv.Value.Emit()
+		attrs[string(kv.Key)] = kv.Value.String()
 	}
 	if attrs["service.name"] != "shortfall" {
 		t.Errorf("event-leg service.name = %q, want shortfall — the log provider fell back to its own default", attrs["service.name"])
