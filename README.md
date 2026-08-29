@@ -40,6 +40,18 @@ what ships in the box for both. (The [Quickstart](docs/quickstart.md)
 walks the same path hands-on — nothing to a rendered report in 10
 minutes with zero external services.)
 
+**How it works, in one breath.** `biz.WithValueContext` attaches the
+business facts — flow, entity id, hashed customer, minor-unit amount —
+to the request context, and they ride W3C Baggage across service hops.
+Every `Record()` turns a stage transition into two signal kinds: bounded
+`biz_*` metric families (transaction counts, value) and one unsampled
+outcome event carrying the exact amount and ids; queue consumers add the
+in-flight backlog gauge through `emit.InFlightTracker`. Your
+exporter ships both to the backend you already run — **Prometheus** for
+metrics, **CloudWatch** for metrics and events — and at incident time
+the engine queries them back and computes the four legs, each labelled
+by its evidence.
+
 ### 1. Emit — instrument where value flows
 
 Attach business context where a request enters, then record every stage
@@ -75,13 +87,39 @@ func main() {
 }
 ```
 
-Calls that cross a service boundary keep their context: wrap outbound
-HTTP in `propagate/httpmw`'s Transport (it injects only toward
-registry-allowlisted hosts) and inbound handlers in its Middleware, or
-use the `kafka`, `sqs`, `amqp` carriers for queues. Queue consumers wrap
-their backlog in `emit.InFlightTracker`, which publishes the
-`biz_inflight_value` gauge the deferred leg reads. One `Record()` is
-~650 ns / 3 allocs, and money never depends on trace sampling.
+One `Record()` is ~650 ns / 3 allocs, and money never depends on trace
+sampling.
+
+### Your services call other HTTP APIs — what integrates, what leaks?
+
+Payment-path services call HTTP APIs constantly: your own downstream
+services, and providers like Stripe. Route both through one client whose
+Transport is the egress fence:
+
+```go
+// One client per service. biz context (amounts, customer hashes) is
+// injected ONLY toward hosts the registry's propagation.allow_hosts
+// names; toward everything else — your payment provider included — it
+// is stripped, never forwarded.
+func newClient(reg *registry.Registry) *http.Client {
+    return &http.Client{Transport: httpmw.NewTransport(reg, http.DefaultTransport)}
+}
+```
+
+- **Your own services** (allowlisted, e.g. `*.internal.example.com`):
+  the value context rides along, so the downstream service wraps its
+  handlers in `httpmw.Middleware(&reg)` and its `Record()` calls land on
+  the same entity and dollars — one flow, measured across every hop.
+- **External providers** (not allowlisted): the request leaves clean.
+  For provider health, `adapters/payment/stripe`'s wrapped client
+  observes each call for the `biz_provider_calls_total` family.
+- **Queues instead of HTTP**: the `kafka`, `sqs`, `amqp` carriers do the
+  same job on message headers, and consumers wrap their backlog in
+  `emit.InFlightTracker`, which publishes the `biz_inflight_value` gauge
+  the deferred leg reads.
+
+A worked two-service example (webhook Lambdas → payments-service) lives
+in [docs/integration-webhook-lambdas.md](docs/integration-webhook-lambdas.md).
 
 ### 2. Gather — ask for the damage
 
@@ -98,12 +136,51 @@ Where step 1 exported decides how you read back:
     --sql "file:outcomes.db"
   ```
 
+  For ad-hoc triage, the same `biz_*` families answer PromQL directly
+  (label sets below are verbatim from the exporter's exposition):
+
+  ```promql
+  # failure rate per flow, last 5 minutes
+  sum by (flow) (rate(biz_txn_total{outcome="failed"}[5m]))
+    / sum by (flow) (rate(biz_txn_total[5m]))
+
+  # failed value, minor units per minute
+  sum by (flow, currency) (rate(biz_value_total{outcome="failed"}[5m])) * 60
+
+  # deferred backlog by age bucket, right now
+  sum by (age_bucket, currency) (biz_inflight_value{flow="invoice.pay"})
+  ```
+
 - **CloudWatch** — the EMF records from step 1 are already in CloudWatch
   Logs; a small reporting job reads them back with the `cwinsights`
   querier, hands it to `engine.Compute`, and renders the same report.
   CloudWatch Logs is an event store, so it grounds realized loss and
   customer impact; pair it with a promql-readable metrics store to
   ground the deferred and unrealized legs too.
+
+  For ad-hoc triage, query the outcome records in Logs Insights (the
+  `cwinsights` querier automates the same `filter event = "biz.outcome"`
+  scan; field names are verbatim from the EMF record):
+
+  ```
+  filter event = "biz.outcome" and `biz.outcome` = "failed"
+  | stats sum(`biz.amount_minor`) as failed_minor, count(*) as txns
+      by `biz.flow`, `biz.currency`
+  | sort failed_minor desc
+  ```
+
+  ```
+  filter event = "biz.outcome" and `biz.outcome` = "failed"
+  | stats sum(`biz.amount_minor`) as failed_minor
+      by `biz.customer.id`, `biz.segment`
+  | sort failed_minor desc | limit 10
+  ```
+
+One honesty note covering both query sets: the ad-hoc sums — PromQL
+value rates and Logs Insights sums alike — are triage numbers. They are
+not de-duplicated by entity, and entities that later succeeded are not
+excluded. `shortfall impact` applies both on the events path; that is
+the number Finance sees.
 
 Out come the four legs, each labelled by its evidence: **realized loss**
 (failed transactions summed, de-duplicated by entity), **deferred

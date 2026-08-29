@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "4176e6d70eeb8d708d2b3b0192fe035ea5d11d91",
+  "base_sha": "924c7da40b5af4bd1cfeb28d6e7d3be26cd5bf39",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T12:50:04+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T12:50:04+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "4176e6d70eeb8d708d2b3b0192fe035ea5d11d91",
+      "base_sha": "924c7da40b5af4bd1cfeb28d6e7d3be26cd5bf39",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 47,
+      "severity": "LOW",
+      "finding": "One-breath paragraph attributed the in-flight backlog family to Record(); it is published only by SetInFlight/InFlightTracker",
+      "evidence": "emit/emitter.go Record() emits only biz_txn_total/biz_value_total; inflight gauges come solely from SetInFlight fed by InFlightTracker",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Paragraph now lists counts and value for Record() and attributes the backlog gauge to InFlightTracker \u2014 the examiner-prescribed rewording, self-verified against emitter.go",
+      "id": "7e0c5fad6e5a4891"
+    },
+    {
+      "ts": "2026-08-29T12:50:04+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "4176e6d70eeb8d708d2b3b0192fe035ea5d11d91",
+      "base_sha": "924c7da40b5af4bd1cfeb28d6e7d3be26cd5bf39",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 180,
+      "severity": "LOW",
+      "finding": "Honesty note claimed the engine's de-dup unconditionally for shortfall impact",
+      "evidence": "engine/realized.go metrics-only fallback does not de-dup and self-labels an upper bound",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner: the note was scoped inside the CloudWatch bullet where the operative querier (cwinsights) is events-only, so realizedFromEvents applies and the claim is contextually true; the closing paragraph and the engine's own caveat state the condition. (The repair for the third finding nonetheless conditions the claim to the events path.)",
+      "id": "cb26d6bc6f2a4833"
+    },
+    {
+      "ts": "2026-08-29T12:50:04+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "4176e6d70eeb8d708d2b3b0192fe035ea5d11d91",
+      "base_sha": "924c7da40b5af4bd1cfeb28d6e7d3be26cd5bf39",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 147,
+      "severity": "LOW",
+      "finding": "Triage caveat covered only the Logs Insights bullet; the PromQL failed-value sum has identical no-de-dup, no-recovery-exclusion properties",
+      "evidence": "twoGenSet de-dup is in-process only (emitter.go:389); realized.go:111 labels metric sums 'upper bound, not de-duped by entity'",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Note moved to top level, explicitly covering both query sets, with the engine claim conditioned to the events path \u2014 the examiner-prescribed remedy",
+      "id": "1b0b354d6a9376b9"
+    }
+  ]
+}
