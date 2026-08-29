@@ -6,7 +6,9 @@ In short: be respectful, assume good faith, and keep discussion about the
 work. Harassment, personal attacks, and discriminatory language have no
 place here, in issues, reviews, or any project space.
 
-Report conduct concerns privately to the maintainer via the contact
-listed on the GitHub organization profile. Reports are handled
-confidentially. Maintainers may edit, remove, or reject contributions and
+Report conduct concerns privately to the maintainer through this
+repository's GitHub private-advisory form (the same channel SECURITY.md
+uses — the Security tab's "Report a vulnerability" reaches the
+maintainer confidentially and works for conduct reports too). Reports
+are handled confidentially. Maintainers may edit, remove, or reject contributions and
 comments that violate this code, and may ban repeat offenders.

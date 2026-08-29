@@ -13,7 +13,7 @@ take, and **the visibility flip itself is the founder's alone**.
 | CONTRIBUTING | ✅ | `CONTRIBUTING.md` (commands, benchmarks, commits, releases, tests, docs discipline, code style) |
 | CODE_OF_CONDUCT | ✅ | `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) |
 | SECURITY.md | ✅ | `SECURITY.md` — private advisory reporting; webhook signatures, PII guard, egress allowlist, and secret handling named in scope |
-| Name clearance: GitHub org/repo | ✅ | `github.com/NightWatchEng/shortfall` exists and is ours |
+| Name clearance: GitHub account/repo | ✅ | `github.com/NightWatchEng/shortfall` exists and is ours (NightWatchEng is a personal account, not an org) |
 | Name clearance: pkg.go.dev | ⏳ at flip | pkg.go.dev indexes on first public fetch; the module path is unclaimed by others by construction (it is this repo's path) |
 | Name clearance: trademark search | 👤 **founder** | a real clearance search is a legal judgment; not executed by automation |
 | Employer IP review email | 👤 **founder** | a personal action ("one email now beats a problem later") |
