@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "0f879d5724b29466e2fc73edb5d6d621c553bdc7",
+  "base_sha": "1bafb798d6aeb6ea6dc756dcb3a818ec08230d20",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T00:59:07+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "session agent direct inspection (single-line pin bump per the documented bump procedure; combined pass per the trivial-diff allowance)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "dry-ran the target SHA against shortfall before the edit (verify PASS, graph OK, review exit 0, rules recommend + skill-recurrence functional) and re-ran through the edited shim after; SHA verified present on origin/main; version-string lockstep verified (platform declares 1.0.0, platform.pin v1.0.0 unchanged)"
+    }
+  ],
+  "records": []
+}
