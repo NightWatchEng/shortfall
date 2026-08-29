@@ -26,9 +26,12 @@ func TestEveryFamilyMapsToItsKind(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.family, func(t *testing.T) {
-			rm := buildResourceMetrics([]emit.MetricPoint{
+			rm, err := buildResourceMetrics([]emit.MetricPoint{
 				{Name: c.family, Labels: map[string]string{"flow": "invoice.pay"}, Value: 7, At: at},
-			})
+			}, nil)
+			if err != nil {
+				t.Fatalf("build: %v", err)
+			}
 			metrics := rm.ScopeMetrics[0].Metrics
 			if len(metrics) != 1 {
 				t.Fatalf("got %d metrics, want 1", len(metrics))
@@ -70,10 +73,13 @@ func TestAmountsNeverUseAFloatInstrument(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			rm := buildResourceMetrics([]emit.MetricPoint{
+			rm, err := buildResourceMetrics([]emit.MetricPoint{
 				{Name: "biz_value_total", Labels: map[string]string{"currency": "USD"}, Value: c.value, At: at},
 				{Name: "biz_inflight_value", Labels: map[string]string{"currency": "USD"}, Value: c.value, At: at},
-			})
+			}, nil)
+			if err != nil {
+				t.Fatalf("build: %v", err)
+			}
 			for _, m := range rm.ScopeMetrics[0].Metrics {
 				switch d := m.Data.(type) {
 				case metricdata.Sum[float64], metricdata.Gauge[float64]:
@@ -99,10 +105,13 @@ func TestAmountsNeverUseAFloatInstrument(t *testing.T) {
 // falls in decides which incident it is counted against.
 func TestPointsKeepTheirObservationTime(t *testing.T) {
 	earlier := at.Add(-90 * time.Minute)
-	rm := buildResourceMetrics([]emit.MetricPoint{
+	rm, err := buildResourceMetrics([]emit.MetricPoint{
 		{Name: "biz_txn_total", Labels: map[string]string{"flow": "f"}, Value: 1, At: earlier},
 		{Name: "biz_txn_total", Labels: map[string]string{"flow": "f"}, Value: 1, At: at},
-	})
+	}, nil)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
 	sum, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
 	if !ok {
 		t.Fatalf("biz_txn_total is not an int64 sum")

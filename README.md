@@ -92,10 +92,9 @@ through a query adapter and computes the legs.
 
 Adapters are the only vendor-aware code, and each one is its own nested
 Go module — a Prometheus shop never pulls the AWS SDK, a GCP shop pulls
-neither, and nobody pulls stripe-go by accident. If your backend has no
-adapter of its own, the OTLP one reaches anything an OpenTelemetry
-Collector fans out to, which is also the recommended path for Google
-Cloud.
+neither, and nobody pulls stripe-go by accident. If you already run an
+OpenTelemetry Collector, or your backend has no adapter of its own, the
+OTLP one reaches anything a collector fans out to.
 
 ## The opinions, stated up front
 

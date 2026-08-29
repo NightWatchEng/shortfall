@@ -87,11 +87,18 @@ CREATE TABLE biz_outcomes (
 | `adapters/export/gcp` | ✅¹ | ✅ | Google Cloud (Cloud Monitoring / Cloud Logging) |
 
 **OTLP is the default answer for a backend without its own adapter here**,
-and the recommended one for Google Cloud: point it at the Google collector or
-Cloud Monitoring's OpenTelemetry exporter rather than reaching for a
-cloud-specific client. One integration reaches GCP, Datadog, Honeycomb,
-Grafana and anything else that speaks OTLP, which is why the supported
-surface stays small while the reachable backend set does not.
+and the one to reach for when you already run an OpenTelemetry Collector: one
+integration reaches Datadog, Honeycomb, Grafana, Google Cloud and anything
+else a collector fans out to, which is why the supported surface stays small
+while the reachable backend set does not.
+
+For Google Cloud both paths work today and the choice is a real trade:
+`adapters/export/gcp` needs no collector and pulls nothing beyond the standard
+library, but is GCP-shaped and reimplements aggregation and writer identity
+that the OpenTelemetry SDK already owns; OTLP hands those to the SDK and is
+the path Google itself documents, at the cost of running a collector and
+pulling the gRPC stack into that module. Prefer OTLP if you run a collector or
+expect a second backend.
 
 Metric mapping is fixed by `emit`'s semantics, not chosen: the counter
 families become **delta** monotonic `Sum[int64]`s, because `emit.MetricPoint`
@@ -133,9 +140,13 @@ you read a dashboard built on it:
   back on any export error and a chunk-scoped commit would count them twice.
 
 Pair a metrics exporter with an events exporter (or use one that does both) to
-ground every leg. The exporter you write ships the same fixed `biz_*` families
-— an exporter that does not recognise a family fails loudly rather than
-silently dropping the batch (a conformance test pins this).
+ground every leg. The exporter you write ships the same fixed `biz_*` families,
+and every exporter here rejects a family it does not recognise rather than
+guessing a kind for it — shipping an unrecognised *level* family as a
+monotonic counter would have the backend sum it, which is silently wrong
+arithmetic on money rather than a loud stop. Each adapter pins this in its own
+unit tests; the shared `testkit/conformance` suite covers no-loss, capability
+honesty, and empty batches, not family recognition.
 
 Wiring a write boundary — hand the exporter to `emit.New` and record stage
 transitions as usual:

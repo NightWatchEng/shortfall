@@ -2,11 +2,12 @@ package otlp
 
 import (
 	"context"
+	"sync"
 	"testing"
 
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/emit"
 	"github.com/NightWatchEng/shortfall/testkit/conformance"
 )
@@ -30,33 +31,53 @@ func (c *countingMetric) Export(_ context.Context, rm *metricdata.ResourceMetric
 }
 func (c *countingMetric) Shutdown(context.Context) error { return nil }
 
-// countingEvents is an eventSink that tallies the outcomes it receives.
-type countingEvents struct{ events int }
+// countingLogExporter is an otel log Exporter that tallies the records
+// actually DELIVERED to it. The seam is deliberately here, at the outermost
+// transport, rather than at the eventSink interface: substituting the sink
+// would excise buildRecord, the LoggerProvider, the BatchProcessor and
+// ForceFlush, and "events flush on shutdown with no loss" would reduce to
+// counting what the exporter accepted — arithmetically incapable of failing,
+// and blind to exactly the buffering layer the suite exists to judge.
+type countingLogExporter struct {
+	mu      sync.Mutex
+	records int
+}
 
-func (c *countingEvents) emit(_ context.Context, batch []biz.Outcome) error {
-	c.events += len(batch)
+func (c *countingLogExporter) Export(_ context.Context, recs []sdklog.Record) error {
+	c.mu.Lock()
+	c.records += len(recs)
+	c.mu.Unlock()
 	return nil
 }
-func (c *countingEvents) Shutdown(context.Context) error { return nil }
+func (c *countingLogExporter) Shutdown(context.Context) error   { return nil }
+func (c *countingLogExporter) ForceFlush(context.Context) error { return nil }
+
+func (c *countingLogExporter) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.records
+}
 
 // otlpBackend exposes the two counters to the conformance suite.
 type otlpBackend struct {
 	m *countingMetric
-	l *countingEvents
+	l *countingLogExporter
 }
 
 func (b otlpBackend) MetricPoints() int { return b.m.points }
-func (b otlpBackend) Events() int       { return b.l.events }
+func (b otlpBackend) Events() int       { return b.l.count() }
 
-// otlpHarness constructs the real OTLP Exporter over the counting backends,
-// exercising the actual ExportMetrics/ExportEvents/Shutdown mapping — not a
-// stand-in — so the suite judges this adapter's true behavior.
+// otlpHarness constructs the real OTLP Exporter over counting transports:
+// the real metric mapping and the real log pipeline (records, provider,
+// batch processor, flush) both run, so the suite judges delivery rather than
+// acceptance.
 type otlpHarness struct{}
 
 func (otlpHarness) New() (emit.Exporter, conformance.Backend) {
 	m := &countingMetric{}
-	l := &countingEvents{}
-	return newWith(m, l), otlpBackend{m: m, l: l}
+	l := &countingLogExporter{}
+	e := &Exporter{metrics: m, logs: newProviderSink(l), resource: defaultResource()}
+	return e, otlpBackend{m: m, l: l}
 }
 
 func TestOTLPConformance(t *testing.T) {

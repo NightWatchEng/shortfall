@@ -61,7 +61,10 @@ func TestBuildResourceMetricsFamilyKinds(t *testing.T) {
 		{Name: "biz_txn_total", Labels: map[string]string{"flow": "invoice.pay"}, Value: 1, At: at},
 		{Name: "biz_inflight_value", Labels: map[string]string{"flow": "invoice.pay"}, Value: 500, At: at},
 	}
-	rm := buildResourceMetrics(batch)
+	rm, err := buildResourceMetrics(batch, nil)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
 	if len(rm.ScopeMetrics) != 1 {
 		t.Fatalf("scope metrics: %d", len(rm.ScopeMetrics))
 	}

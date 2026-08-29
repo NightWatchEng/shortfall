@@ -1,7 +1,8 @@
-// Package otlp is the default shortfall exporter: bounded metrics through
-// the OpenTelemetry metric OTLP exporter and per-transaction outcome
-// events through the OTLP Log exporter (event.name=biz.outcome), so one
-// integration reaches any backend an OpenTelemetry Collector fans out to.
+// Package otlp exports shortfall's two signal kinds over OpenTelemetry:
+// bounded metrics through the OTLP metric exporter and per-transaction
+// outcome events through the OTLP Log exporter (event.name=biz.outcome),
+// so one integration reaches any backend an OpenTelemetry Collector fans
+// out to.
 //
 // It is a nested module: a Prometheus-only user never pulls the otel
 // OTLP/gRPC stack into their build. Per ADR-0002 the experimental
@@ -9,8 +10,9 @@
 // nowhere in the core.
 //
 // Metric temporality is delta for the counter families (matching
-// emit.MetricPoint's delta semantics) and gauge for biz_inflight_value;
-// each point is stamped with its own observation time, never flush time.
+// emit.MetricPoint's delta semantics) and gauge for the two in-flight
+// families (ADR-0012); each point is stamped with its own observation
+// time, never flush time.
 package otlp
 
 import (
@@ -23,11 +25,18 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/resource"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/emit"
 )
+
+// eventQueueSize bounds the log SDK's record queue and, with it, the chunk
+// size emit ships in. The two must agree: the queue drops its oldest record
+// on overflow with no error anywhere the caller can observe, so the only
+// safe batch is one that cannot overflow it.
+const eventQueueSize = 2048
 
 // metricPusher is the narrow slice of the otel metric exporter this
 // adapter drives — an interface so a test substitutes an in-memory
@@ -49,11 +58,47 @@ type eventSink interface {
 // from the emit ctx, so each outcome carrying a trace id is emitted under
 // a reconstructed span context; ForceFlush ships the batch synchronously.
 type providerSink struct {
-	provider *sdklog.LoggerProvider
-	logger   otellog.Logger
+	provider  *sdklog.LoggerProvider
+	logger    otellog.Logger
+	queueSize int
 }
 
+// newProviderSink builds the real event pipeline over an otel log exporter.
+// The queue is sized explicitly rather than left to the SDK default, because
+// emit's chunking guarantee below is stated in terms of it.
+func newProviderSink(exp sdklog.Exporter) *providerSink {
+	// WithAttributeCountLimit(-1) disables the attribute cap so every biz.*
+	// field survives however many an outcome carries. The SDK default (128)
+	// clears today's ~12, but is a silent cliff — pin the safe value rather
+	// than lean on a default that could change under us (ADR-0002).
+	provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(exp, sdklog.WithMaxQueueSize(eventQueueSize))),
+		sdklog.WithAttributeCountLimit(-1),
+	)
+	return &providerSink{
+		provider:  provider,
+		logger:    provider.Logger("github.com/NightWatchEng/shortfall"),
+		queueSize: eventQueueSize,
+	}
+}
+
+// emit ships outcomes in chunks no larger than the processor's queue,
+// flushing each chunk before the next. The log SDK's queue DROPS THE OLDEST
+// record on overflow and reports it nowhere the caller can see — Emit
+// returns no error and ForceFlush reports only export failures — so a batch
+// larger than the queue would lose outcome events silently, which ADR-0002
+// makes a defect. Chunking keeps the queue from ever overflowing.
 func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
+	for start := 0; start < len(batch); start += s.queueSize {
+		end := min(start+s.queueSize, len(batch))
+		if err := s.emitChunk(ctx, batch[start:end]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error {
 	for _, o := range batch {
 		emitCtx := ctx
 		if o.TraceID != "" {
@@ -78,16 +123,26 @@ func (s *providerSink) Shutdown(ctx context.Context) error { return s.provider.S
 
 // Exporter implements emit.Exporter over OTLP.
 type Exporter struct {
-	metrics metricPusher
-	logs    eventSink
+	metrics  metricPusher
+	logs     eventSink
+	resource *resource.Resource
 }
 
 var _ emit.Exporter = (*Exporter)(nil)
 
 // Options carries otel exporter options for each signal.
 type Options struct {
-	metric []metricexp.Option
-	log    []logexp.Option
+	metric   []metricexp.Option
+	log      []logexp.Option
+	resource *resource.Resource
+}
+
+// WithResource overrides the resource every exported point carries. The
+// default names this service and gives it a per-process instance id, which
+// is what keeps replicas off each other's gauge series; an override must
+// still distinguish one writer from another.
+func WithResource(res *resource.Resource) func(*Options) {
+	return func(o *Options) { o.resource = res }
 }
 
 // WithMetricOptions passes options to the OTLP metric exporter
@@ -104,9 +159,12 @@ func WithLogOptions(o ...logexp.Option) func(*Options) {
 
 // New builds an OTLP exporter wired to real otel HTTP exporters.
 func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
-	var o Options
+	o := Options{resource: defaultResource()}
 	for _, f := range opts {
 		f(&o)
+	}
+	if o.resource == nil {
+		o.resource = defaultResource()
 	}
 	m, err := metricexp.New(ctx, o.metric...)
 	if err != nil {
@@ -117,22 +175,13 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 		_ = m.Shutdown(ctx)
 		return nil, fmt.Errorf("otlp: log exporter: %w", err)
 	}
-	// WithAttributeCountLimit(-1) disables the attribute cap so every biz.*
-	// field survives however many an outcome carries. The SDK default (128)
-	// clears today's ~12, but is a silent cliff — pin the safe value rather
-	// than lean on a default that could change under us (ADR-0002).
-	provider := sdklog.NewLoggerProvider(
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(l)),
-		sdklog.WithAttributeCountLimit(-1),
-	)
-	sink := &providerSink{provider: provider, logger: provider.Logger("github.com/NightWatchEng/shortfall")}
-	return &Exporter{metrics: m, logs: sink}, nil
+	return &Exporter{metrics: m, logs: newProviderSink(l), resource: o.resource}, nil
 }
 
 // newWith wires arbitrary pushers — the seam the unit tests and the
 // testkit/conformance suite drive with in-memory collectors.
 func newWith(m metricPusher, l eventSink) *Exporter {
-	return &Exporter{metrics: m, logs: l}
+	return &Exporter{metrics: m, logs: l, resource: defaultResource()}
 }
 
 // Capabilities: OTLP writes both signals; it is write-only, so read-side
@@ -142,12 +191,17 @@ func (e *Exporter) Capabilities() emit.Caps {
 }
 
 // ExportMetrics translates the batch to OTLP metric data (delta sums +
-// gauges, per-point timestamps) and ships it.
+// gauges, per-point timestamps) and ships it. An unrecognised biz_* family
+// surfaces as an error rather than being shipped under a guessed kind.
 func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) error {
 	if len(batch) == 0 {
 		return nil
 	}
-	return e.metrics.Export(ctx, buildResourceMetrics(batch))
+	rm, err := buildResourceMetrics(batch, e.resource)
+	if err != nil {
+		return err
+	}
+	return e.metrics.Export(ctx, rm)
 }
 
 // ExportEvents translates outcomes to OTLP log records and ships them.
