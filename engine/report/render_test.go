@@ -170,8 +170,11 @@ func TestComputedEventsOnlyReportStatesDeferredGap(t *testing.T) {
 			t.Fatalf("%s render of an events-only report must state the deferred leg's missing metric source, got:\n%s", name, out)
 		}
 	}
-	if s := Summary(rep); !strings.Contains(s, "deferred n/a") {
-		t.Fatalf("summary of an events-only report must say the deferred leg is n/a, got: %q", s)
+	s := Summary(rep)
+	for _, marker := range []string{"deferred n/a", "unrealized n/a"} {
+		if !strings.Contains(s, marker) {
+			t.Fatalf("summary of an events-only report must carry %q, got: %q", marker, s)
+		}
 	}
 }
 

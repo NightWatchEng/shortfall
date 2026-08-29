@@ -22,3 +22,4 @@ that rewrites history.
 | [0014](0014-go-readability-conventions.md) | Go readability conventions: line breaks, comment density, doc style | accepted |
 | [0015](0015-go-performance-guidelines.md) | Go performance guidelines: reviewed reference checklist for hot paths | accepted |
 | [0016](0016-value-stage-anchoring.md) | Success value is read at one declared value stage (ADR-0011 amendment) | accepted |
+| [0017](0017-unavailable-leg-marker.md) | Unavailable marker on report legs; contract v0.2.0 (frozen-interface amendment) | accepted |

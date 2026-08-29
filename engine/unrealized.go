@@ -37,10 +37,12 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 	}
 	if reg == nil {
 		leg.Notes = []string{"unavailable: the counterfactual leg needs a registry (baseline lookback, stages, recovery)"}
+		leg.Unavailable = true
 		return leg, nil
 	}
 	if !q.Capabilities().Metrics {
 		leg.Notes = []string{"unavailable: the counterfactual leg needs a metric source for stage-entry history"}
+		leg.Unavailable = true
 		return leg, nil
 	}
 
@@ -49,12 +51,14 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 	target := hourlyInstants(req.Window)
 	if len(target) == 0 {
 		leg.Notes = []string{"window shorter than one hour — no counterfactual estimate"}
+		leg.Unavailable = true
 		return leg, nil
 	}
 
 	flows := req.Flows
 	if len(flows) == 0 {
 		leg.Notes = append(leg.Notes, "no flow named in the request — the counterfactual leg needs per-flow baseline configuration")
+		leg.Unavailable = true
 		return leg, nil
 	}
 

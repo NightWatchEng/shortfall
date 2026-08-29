@@ -4,9 +4,11 @@
 // gate rule enforces exactly that, and the Querier's four verbs are the
 // only questions it may ask a backend.
 //
-// The Request/Report shapes and the Compute signature are frozen
-// (v0.1.0). Until a leg is implemented, Compute says so explicitly
-// rather than returning a plausible-looking zero.
+// The Request/Report shapes and the Compute signature are frozen; the
+// one amendment since the v0.1.0 freeze is the additive Unavailable
+// marker on the legs (ADR-0017, contract v0.2.0). Until a leg is
+// implemented, Compute says so explicitly rather than returning a
+// plausible-looking zero.
 package engine
 
 import (
@@ -124,7 +126,9 @@ type Report struct {
 }
 
 // LibraryVersion identifies the engine's report contract for provenance.
-const LibraryVersion = "v0.1.0"
+// v0.2.0: the Report shape gained the additive Unavailable markers on
+// Leg and EstLeg (ADR-0017).
+const LibraryVersion = "v0.2.0"
 
 // defaultTopN is how many accounts the customers leg lists when Compute
 // assembles a report.
