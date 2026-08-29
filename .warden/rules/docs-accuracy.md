@@ -2,12 +2,12 @@
 id: docs-accuracy
 severity: MEDIUM
 engine: claude
-applies_to: ["**/*.md", "**/*.go"]
+applies_to: ["**/*.md", "**/*.go", "**/*.sh"]
 excludes: [".warden/memory/**"]
 covers: [docs-drift, enforcement-claim-drift, scope-misstatement, misleading-comment]
 ---
-Documentation tells the truth (ADR-0008). For Markdown files and Go doc
-comments in this diff, flag when:
+Documentation tells the truth (ADR-0008). For Markdown files and code
+comments — doc and inline, Go and shell — in this diff, flag when:
 
 - A present-tense claim describes machinery that does not exist in the
   tree (an implementation, rule, suite, CLI verb, or adapter that is
@@ -22,8 +22,9 @@ comments in this diff, flag when:
 - Two statements of one standard (ADR vs CONTRIBUTING vs rule body vs
   comment) disagree after this diff.
 - A comment's description of the adjacent code's behavior is contradicted
-  by that code — wrong condition, wrong consumer, wrong direction
-  (retro 2026-08-29: the misleading-comment candidate, 3/3 upheld).
+  by that code — wrong condition, wrong consumer, wrong direction (retro
+  2026-08-29: the misleading-comment candidate — 2 distinct findings
+  across 3 corpus records, one attested twice on consecutive rounds).
 
 Do NOT flag: clearly future-tensed roadmap text, ADR Context sections
 describing history, test names, or planned-and-marked design diagrams.
