@@ -93,7 +93,8 @@ For any incident window, point the CLI at the backend you already run —
 shortfall impact --registry registry.yaml \
   --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
   --flow invoice.pay --format markdown \
-  --prometheus http://prometheus:9090
+  --prometheus http://prometheus:9090 \
+  --sql "file:outcomes.db"
 ```
 
 Out come the four legs, each labelled by its evidence: **realized loss**
@@ -102,7 +103,10 @@ value** (backlog by age, SLA-converted to projected loss), **unrealized
 loss** (a range against the seasonal baseline — always an estimate,
 never merged with the deterministic legs), and **customer impact**
 (distinct entities, segments, top accounts) — plus a suggested severity
-from the registry's $/min ladder. `shortfall reconcile --ledger` adds
+from the registry's $/min ladder. Metrics ground the deferred and
+unrealized legs; events ground realized de-dup and customers — with
+only one source, the report says exactly which legs it could not
+ground rather than guessing. `shortfall reconcile --ledger` adds
 the coverage ratio: telemetry checked against your provider's ledger.
 Backends without CLI flags (CloudWatch, Loki, Splunk) gather through the
 same query adapters as libraries via `engine.Compute` — see
