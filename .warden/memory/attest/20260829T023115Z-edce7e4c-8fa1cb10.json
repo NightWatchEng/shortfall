@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "edce7e4cc8ba364c1b15b25ab5fa6d16d5aceb95",
+  "base_sha": "893eac1af50ad3c3c3e966916843821646641fa2",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T02:31:15+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5) \u2014 combined pass; verified every SECURITY/checklist claim against the tree, independently re-ran full-history gitleaks via docker, and checked the owner account live via the GitHub API"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same combined pass; the one surviving candidate was confirmed with API evidence, all others refuted with citations"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T02:31:15+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "edce7e4cc8ba364c1b15b25ab5fa6d16d5aceb95",
+      "base_sha": "893eac1af50ad3c3c3e966916843821646641fa2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CODE_OF_CONDUCT.md",
+      "line": 9,
+      "severity": "MEDIUM",
+      "finding": "The conduct-report channel referenced a GitHub organization profile that does not exist (NightWatchEng is a personal User account with no public email) \u2014 a reporter following it found no contact.",
+      "evidence": "gh api users/NightWatchEng type User, email null; orgs/NightWatchEng 404.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reports now route through the repository's private-advisory form \u2014 the same channel SECURITY.md uses, which verifiably exists; the checklist's org/repo misnomer corrected in the same commit.",
+      "id": "f506da353a5d31b0"
+    }
+  ]
+}
