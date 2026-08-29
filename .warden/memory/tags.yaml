@@ -5,9 +5,11 @@
 # are not required to appear here.
 tags:
   ci-gate: a CI job or gate whose wiring weakens or skips enforcement
+  dishonest-zero: a renderer or computation presenting ungrounded data as a measured zero
   docs-drift: documentation describing behavior the code does not have
   enforcement-claim: a doc or comment claiming a check that does not exist
   gauge-parity: gauge semantics diverging between backends or from the reference
+  http-response-body-leak: an HTTP response body left unclosed or undrained, leaking the connection
   memq-parity: the in-memory reference disagreeing with a real backend
   scope-misstatement: a doc or ADR misstating what a change or pass covers
   vacuous-pass: a test, gate, or assertion that can pass on empty inputs
@@ -16,3 +18,5 @@ aliases:
   # 'gauge' (1 shard) and 'gauge-parity' (1 shard) named one class; merged
   # per the retro. Shards keep their historical key; readers fold it.
   gauge: gauge-parity
+  # one class, two names (retro 2026-08-29, workspace-9d2); readers fold it.
+  response-body-not-drained: http-response-body-leak
