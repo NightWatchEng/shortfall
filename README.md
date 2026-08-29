@@ -35,29 +35,91 @@ because a number Finance cannot audit is a number Finance will not use.
 
 ## Get started
 
-```sh
-go build -o shortfall ./cmd/shortfall
-./shortfall validate registry/testdata/registry.yaml
-./shortfall impact --registry registry/testdata/registry.yaml \
-  --from 2026-08-27T14:00:00Z --to 2026-08-27T15:00:00Z --sql "file:demo.db" --sql-driver sqlite
-```
+Three questions, in order: how value signals get **emitted** from your
+services, how they are **gathered** back into an incident answer, and
+what ships in the box for both. (The [Quickstart](docs/quickstart.md)
+walks the same path hands-on — nothing to a rendered report in 10
+minutes with zero external services.)
 
-The third command wants a few outcome rows to read — the
-[Quickstart](docs/quickstart.md) walks from nothing to a rendered report
-in 10 minutes with zero external services. In your own services,
-instrumentation is:
+### 1. Emit — instrument where value flows
+
+Attach business context where a request enters, then record every stage
+transition. Everything below is real, resolvable API:
 
 ```go
-ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
-    Flow:       "invoice.pay",
-    EntityID:   invoiceID,
-    CustomerID: hashedAccountID, // pre-hashed — raw ids never enter biz.*
-    Money:      biz.Money{Amount: 4999, Currency: "USD", Exponent: 2},
-    Kind:       biz.KindFee,
-})
-// ...
-em.Record(ctx, "auth", biz.ResultSuccess) // once per stage transition
+func main() {
+    reg, err := registry.Load("registry.yaml") // the Finance-co-signed flow registry
+    if err != nil {
+        log.Fatal(err)
+    }
+    em, err := emit.New(&reg, cloudwatch.New()) // EMF exporter — swap for your backend
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    http.HandleFunc("POST /invoices/{invoice}/pay", func(w http.ResponseWriter, r *http.Request) {
+        ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
+            Flow:       "invoice.pay",
+            EntityID:   r.PathValue("invoice"),
+            CustomerID: r.Header.Get("X-Account-Hash"), // pre-hashed — raw ids never enter biz.*
+            Money:      biz.Money{Amount: 4999, Currency: "USD", Exponent: 2},
+            Kind:       biz.KindFee,
+        })
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusBadRequest)
+            return
+        }
+        em.Record(ctx, "auth", biz.ResultSuccess) // once per stage transition —
+        w.WriteHeader(http.StatusAccepted)        // failed/deferred on those paths
+    })
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
 ```
+
+Calls that cross a service boundary keep their context: wrap outbound
+HTTP in `propagate/httpmw`'s Transport (it injects only toward
+registry-allowlisted hosts) and inbound handlers in its Middleware, or
+use the `kafka`, `sqs`, `amqp` carriers for queues. Queue consumers wrap
+their backlog in `emit.InFlightTracker`, which publishes the
+`biz_inflight_value` gauge the deferred leg reads. One `Record()` is
+~650 ns / 3 allocs, and money never depends on trace sampling.
+
+### 2. Gather — ask for the damage
+
+For any incident window, point the CLI at the backend you already run —
+`--prometheus` for metrics, `--sql` for outcome events:
+
+```sh
+shortfall impact --registry registry.yaml \
+  --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
+  --flow invoice.pay --format markdown \
+  --prometheus http://prometheus:9090
+```
+
+Out come the four legs, each labelled by its evidence: **realized loss**
+(failed transactions summed, de-duplicated by entity), **deferred
+value** (backlog by age, SLA-converted to projected loss), **unrealized
+loss** (a range against the seasonal baseline — always an estimate,
+never merged with the deterministic legs), and **customer impact**
+(distinct entities, segments, top accounts) — plus a suggested severity
+from the registry's $/min ladder. `shortfall reconcile --ledger` adds
+the coverage ratio: telemetry checked against your provider's ledger.
+Backends without CLI flags (CloudWatch, Loki, Splunk) gather through the
+same query adapters as libraries via `engine.Compute` — see
+[adapters.md](docs/adapters.md) for which backend grounds which leg.
+
+### 3. What ships in the box
+
+| Surface | What you get | Where |
+|---|---|---|
+| Instrument | `ValueContext`, int64 minor-unit `Money`, the PII guard | `biz` |
+| Record | `Record` per stage, `InFlightTracker`/`SetInFlight` backlog gauges, `Flush` | `emit` |
+| Propagate | HTTP Baggage middleware + egress-fenced Transport; Kafka, SQS, AMQP carriers | `propagate/*` |
+| Export | OTLP, Prometheus, CloudWatch EMF, Datadog, StatsD, Splunk HEC, Loki | `adapters/export/*` |
+| Query back | `promql` (metrics); `sql`, `logql`, `cwinsights`, `spl` (events) | `adapters/query/*` |
+| Compute & render | four legs + coverage + suggested severity, as text/JSON/markdown | `engine`, `cmd/shortfall` |
+| Reconcile | Stripe ledger reconciler feeding the coverage ratio | `adapters/payment/stripe` |
+| Notify | impact writers for PagerDuty, incident.io, FireHydrant, Rootly, Slack | `adapters/incident/*` |
 
 Runnable examples live in the `biz`, `emit`, and `engine` packages
 (`go doc`, and pkg.go.dev once the repo is public).
