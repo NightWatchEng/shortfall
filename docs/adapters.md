@@ -118,16 +118,19 @@ metrics, and says so. Cloud Logging does not extract metrics from log entries
 the way CloudWatch EMF does, so there is nothing to declare: outcome events
 need no credentials at all (structured JSON on stdout, which the logging agent
 parses into a `jsonPayload`), and `adapters/export/otlp` carries the metric
-families. Pair the two to ground every leg.
+families.
 
 Pair a metrics exporter with an events exporter (or use one that does both) to
 ground every leg. The exporter you write ships the same fixed `biz_*` families,
-and every exporter here rejects a family it does not recognise rather than
-guessing a kind for it — shipping an unrecognised *level* family as a
-monotonic counter would have the backend sum it, which is silently wrong
-arithmetic on money rather than a loud stop. Each adapter pins this in its own
-unit tests; the shared `testkit/conformance` suite covers no-loss, capability
-honesty, and empty batches, not family recognition.
+and every exporter here that ships metrics rejects a family it does not
+recognise rather than guessing a kind for it — shipping an unrecognised *level*
+family as a monotonic counter would have the backend sum it, which is silently
+wrong arithmetic on money rather than a loud stop. Those three pin the
+behaviour in their own unit tests. `adapters/export/gcp` is the exception and
+not a gap in it: declaring `Metrics: false`, it ships no metric point of any
+family, so there is no kind for it to guess at. The shared
+`testkit/conformance` suite covers no-loss, capability honesty, and empty
+batches, not family recognition.
 
 Wiring a write boundary — hand the exporter to `emit.New` and record stage
 transitions as usual:
