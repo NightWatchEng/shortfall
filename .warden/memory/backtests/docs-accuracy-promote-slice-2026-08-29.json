@@ -1,0 +1,18 @@
+{
+  "rule_id": "docs-accuracy",
+  "action": "promote-mechanical-slice",
+  "change": "fenced-Go-compiles and registry-fence-loads delegated to the deterministic test/docsnippets checker; the judgment lens is unchanged and unnarrowed",
+  "judged": 85,
+  "confirmed": 0,
+  "fixed": 82,
+  "refuted": 0,
+  "dismissed": 3,
+  "wilson_lb": 0.901,
+  "window": "2026-08-27..2026-08-29",
+  "source": "stats line verbatim at authoring head fc01f4f-era corpus refreshed to head of this branch: 'rule docs-accuracy: n=85 confirmed=0 fixed=82 refuted=0 dismissed=3 wilson_lb=0.901'",
+  "slice_evidence": "uncompilable-snippet class confirmed 3x in-window (workspace-c5s round 1 x2 plus a recurrence-marked recall); registry-example-fails-validate confirmed 1x with recurrence; the checker's first run caught 2 further live instances in docs/adapters.md (report/err bound unconsumed), fixed in the same PR",
+  "backtest": "The deterministic slice was exercised against the live tree at adoption: 2 true positives (adapters.md), 0 false positives across all governed docs; three broken fixtures pin the rejection paths in TestCheckerCatchesBroken",
+  "rules_version": "3e622735412d",
+  "bead": "workspace-ohq",
+  "stats_as_of": "pre-attestation head of feat/docsnippets-checker; this branch's own closing attestation adds its records after this artifact by construction"
+}

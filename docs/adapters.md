@@ -49,6 +49,10 @@ to route both at once):
 // metrics legs
 q := promql.New("http://prom:9090")
 report, err := engine.Compute(ctx, &reg, q, req)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(report.Severity)
 ```
 
 ```go
@@ -57,6 +61,10 @@ report, err := engine.Compute(ctx, &reg, q, req)
 db, _ := sql.Open("sqlite", "file:outcomes.db")
 q, _ := sqlq.New(db)
 report, err := engine.Compute(ctx, &reg, q, req)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(report.Customers.Distinct)
 ```
 
 The SQL adapter's expected table (override the name with `WithTable`):
