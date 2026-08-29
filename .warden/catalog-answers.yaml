@@ -1,0 +1,165 @@
+version: 1
+answers:
+  - id: review-lens-documentation
+    verdict: not-applicable
+    reason: >-
+      Enforced locally under a different id: the docs-accuracy rule
+      (n=83 judged, wilson floor 0.899, promotable) IS this lens, with a
+      deterministic slice delegated to test/docsnippets. Adopting the
+      catalog id would double-fire one class.
+    decided_in: workspace-a74
+  - id: authentication-failures
+    verdict: not-applicable
+    reason: >-
+      The library ships no authentication surface: no login, sessions, or
+      minted tokens. Backend credentials (SigV4 keys) are supplied and
+      owned by the consumer. Flips if shortfall ever ships a service.
+    decided_in: workspace-a74
+  - id: broken-access-control
+    verdict: not-applicable
+    reason: >-
+      No authorization model exists to break: the library runs in-process
+      with its caller's authority. The one access boundary — biz-context
+      egress — is enforced deny-by-default by the httpmw fence (ADR-0003)
+      and tested. Flips if a service or multi-tenant surface lands.
+    decided_in: workspace-a74
+  - id: csrf-protection
+    verdict: not-applicable
+    reason: >-
+      No browser-facing session state anywhere in the tree; consumers own
+      their handlers and cookies.
+    decided_in: workspace-a74
+  - id: data-integrity-failures
+    verdict: not-applicable
+    reason: >-
+      No update, plugin, or artifact-download mechanism to tamper with;
+      CI actions are sha-pinned and the platform shim is pin-verified.
+      The deserialization slice is answered at unsafe-deserialization.
+    decided_in: workspace-a74
+  - id: hardcoded-credentials
+    verdict: not-applicable
+    reason: >-
+      Enforced locally by the secrets-in-diff and secrets-extra rules —
+      both carry gate detections on record in this corpus.
+    decided_in: workspace-a74
+  - id: logging-and-alerting-gaps
+    verdict: not-applicable
+    reason: >-
+      The library is itself the telemetry layer; its own failure modes
+      are governed by the review charter's fail-open-exporter item
+      (silent outcome drops are defects) and visible drop counters.
+    decided_in: workspace-a74
+  - id: missing-authorization
+    verdict: not-applicable
+    reason: >-
+      Same ground as broken-access-control: no authorization model in a
+      library that runs with its caller's authority.
+    decided_in: workspace-a74
+  - id: path-traversal
+    verdict: not-applicable
+    reason: >-
+      No user-supplied paths cross a trust boundary: CLI paths come from
+      the operator's own flags; the library reads no request-derived
+      filenames. Flips if any adapter ever maps external input to paths.
+    decided_in: workspace-a74
+  - id: review-lens-comments
+    verdict: not-applicable
+    reason: >-
+      Enforced locally: comment-hygiene (declarative) plus docs-accuracy's
+      comment bullets (doc and inline, Go and shell) carry this lens.
+    decided_in: workspace-a74
+  - id: review-lens-complexity
+    verdict: not-applicable
+    reason: >-
+      The local review organization holds this through ADR-0014/0015
+      conventions and the pre-pr-review defect hunt; no ADR has set a
+      numeric complexity threshold, and adopting a metric nobody declared
+      would enforce a standard the org never chose. Revisit if complexity
+      escapes appear in the corpus.
+    decided_in: workspace-a74
+  - id: review-lens-consistency
+    verdict: not-applicable
+    reason: >-
+      The declared slice is enforced locally: ADR-0007 (test shape),
+      ADR-0014 (conventions), and docs-accuracy's disagreeing-wordings
+      bullet.
+    decided_in: workspace-a74
+  - id: review-lens-functionality
+    verdict: not-applicable
+    reason: >-
+      This is the pre-pr-review chain's core mandate ("hunt real defects
+      beyond the rules"), declared in the skills-policy review charter
+      and exercised on every PR in this corpus.
+    decided_in: workspace-a74
+  - id: review-lens-naming
+    verdict: not-applicable
+    reason: >-
+      ADR-0014's readability conventions carry naming; violations are
+      judged findings in this corpus (comment/naming sweep).
+    decided_in: workspace-a74
+  - id: review-lens-style
+    verdict: not-applicable
+    reason: >-
+      gofmt is enforced deterministically — scripts/ci-go.sh fmt fails CI
+      on any unformatted file, parse errors included.
+    decided_in: workspace-a74
+  - id: review-lens-tests
+    verdict: not-applicable
+    reason: >-
+      Enforced locally under a different id: the tests-required rule
+      (n=40 judged, wilson floor 0.835, promotable).
+    decided_in: workspace-a74
+  - id: ssrf
+    verdict: not-applicable
+    reason: >-
+      Every outbound URL is operator-configured (querier and exporter
+      base URLs); no request- or event-derived URL is ever fetched.
+      Flips the moment any adapter derives a target from payload data.
+    decided_in: workspace-a74
+  - id: supply-chain-pinning
+    verdict: not-applicable
+    reason: >-
+      Pinning is practiced and reviewed rather than mechanically checked:
+      CI actions by sha, govulncheck by version, harness images by tag,
+      the warden shim by platform pin with a version backstop. A checker
+      would re-verify what the gate-surface review already owns; revisit
+      on the first unpinned-dependency escape.
+    decided_in: workspace-a74
+  - id: swallowed-exceptions
+    verdict: not-applicable
+    reason: >-
+      The catalog starter's patterns are Python idioms (bare except) with
+      no Go analog; the Go class (discarded error returns) is guarded by
+      go vet in CI plus the review charter's fail-open item, and silent
+      error swallowing has judged corpus findings under those lenses.
+    decided_in: workspace-a74
+  - id: unbounded-resource-use
+    verdict: not-applicable
+    reason: >-
+      Bounded cardinality and bounded tracking are library invariants
+      enforced by design and review (charter item 4; max-items bounds on
+      the in-flight tracker with overflow counters; judged corpus
+      findings exist for the map-high-water class). A general lens would
+      duplicate the charter item.
+    decided_in: workspace-a74
+  - id: unsafe-deserialization
+    verdict: not-applicable
+    reason: >-
+      Starter patterns are pickle/yaml.unsafe_load — no Go analog exists
+      in this tree; gopkg.in/yaml.v3 has no unsafe mode and encoding/json
+      does not execute. Flips if a gob/plugin/exec-decoding surface lands.
+    decided_in: workspace-a74
+  - id: xss-unescaped-output
+    verdict: not-applicable
+    reason: >-
+      Nothing renders HTML to a browser: the renderers emit terminal
+      text, JSON, and markdown consumed by incident tools as text fields.
+    decided_in: workspace-a74
+  - id: weak-cryptography
+    verdict: not-applicable
+    reason: >-
+      No cryptographic surface: the library mints no tokens and stores no
+      passwords; in-tree hashing is non-security keying (xxhash) and
+      customer ids arrive pre-hashed by the consumer (the PII guard
+      requires it). Flips if any crypto-bearing feature lands.
+    decided_in: workspace-a74
