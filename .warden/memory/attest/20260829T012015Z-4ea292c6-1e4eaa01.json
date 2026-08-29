@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "4ea292c6f29df0df5ee1d361d14f8d8c20daebc0",
+  "base_sha": "07937d646a7b548277ed111585fab072db065df9",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T01:20:15+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; verified summary/CSV money discipline, PII fixtures, module hygiene, endpoint shapes vs grounded specs"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context; ran PathEscape against real id shapes and hostile inputs, verified moneyRange honesty vs engine lockstep fill, re-ran all module tests + vet fresh"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T01:20:15+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "4ea292c6f29df0df5ee1d361d14f8d8c20daebc0",
+      "base_sha": "07937d646a7b548277ed111585fab072db065df9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/adapters.md",
+      "line": 116,
+      "severity": "LOW",
+      "finding": "Bullet said WriteImpact 'PATCHes' but only FireHydrant literally PATCHes (incidentio POST, rootly/pagerduty PUT).",
+      "evidence": "vendor client methods vs the doc line.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reads 'writes'.",
+      "id": "22549c8c970ccc6b"
+    },
+    {
+      "ts": "2026-08-29T01:20:15+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "4ea292c6f29df0df5ee1d361d14f8d8c20daebc0",
+      "base_sha": "07937d646a7b548277ed111585fab072db065df9",
+      "rule_id": "unmapped:unescaped-path-interpolation",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": "adapters/incident",
+      "file": "adapters/incident/firehydrant/client.go",
+      "line": 71,
+      "severity": "LOW",
+      "finding": "All six call sites interpolated incidentID raw into URL paths; a slash or space silently retargets the request.",
+      "evidence": "fmt.Sprintf path builds, no PathEscape under adapters/.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "neturl.PathEscape at all six sites; examiner verified ULID/UUID/P-code/numeric ids pass byte-identical and hostile inputs neutralize; literal-path tests unchanged.",
+      "id": "47311e5631d14b8e"
+    },
+    {
+      "ts": "2026-08-29T01:20:15+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "4ea292c6f29df0df5ee1d361d14f8d8c20daebc0",
+      "base_sha": "07937d646a7b548277ed111585fab072db065df9",
+      "rule_id": "unmapped:inverted-money-range-on-asymmetric-maps",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/summary.go",
+      "line": 58,
+      "severity": "LOW",
+      "finding": "A Low-only currency rendered an inverted 'USD 500\u20130'; a Mid-only leg rendered 'none'.",
+      "evidence": "zero-value map lookups; emptiness check omitted MidMinor.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Per-currency min/max over available bounds, Mid included in emptiness; table test pins low-only/mid-only/full/empty; engine-produced legs render exactly as before (lockstep fill verified; exact-string TestSummary unchanged).",
+      "id": "1b28d903f72c8c2d"
+    },
+    {
+      "ts": "2026-08-29T01:20:15+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "4ea292c6f29df0df5ee1d361d14f8d8c20daebc0",
+      "base_sha": "07937d646a7b548277ed111585fab072db065df9",
+      "rule_id": "unmapped:response-body-not-drained",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": "adapters/incident",
+      "file": "adapters/incident/incidentio/client.go",
+      "line": 88,
+      "severity": "LOW",
+      "finding": "Bodies closed unread (no keep-alive reuse); non-2xx errors discarded the vendor's error body.",
+      "evidence": "close-without-read in all four call paths.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Success paths drain; non-2xx errors carry a 512-byte bounded snippet (secrets ride headers only \u2014 examiner judged no leak channel); fail-loud tests still pass.",
+      "id": "a3aafdc692527948"
+    }
+  ]
+}

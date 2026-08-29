@@ -30,3 +30,11 @@ use (
 )
 
 use ./test/promgolden
+
+use ./adapters/incident/incidentio
+
+use ./adapters/incident/rootly
+
+use ./adapters/incident/firehydrant
+
+use ./adapters/incident/pagerduty
