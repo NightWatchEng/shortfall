@@ -1,0 +1,15 @@
+{
+  "bead": "workspace-tgn",
+  "head_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "rules_version": "b51f166ce220",
+  "decided_at": "2026-08-29T14:14:53+00:00",
+  "decided": "The misleading-comment candidate (3 judged, 3 upheld) lands as an extension of the existing docs-accuracy rule \u2014 an explicit bullet for a comment whose description of adjacent code is contradicted by that code, plus covers: [misleading-comment] \u2014 not as a new rule file.",
+  "why": "The class is documentation-tells-the-truth applied to comments, which docs-accuracy's charter (ADR-0008) already claims in spirit; reviewers filed it unmapped because the body's bullets all speak of docs and machinery claims, not adjacent-code contradiction. Extending the body closes that gap without adding a second per-review judgment lens whose cost is unmeasured, and covers: makes the candidate row read covered so the retro stops re-proposing it.",
+  "cost_if_wrong": "If the bullet proves noisy, the retro's reword/pause machinery applies to docs-accuracy as a whole; the bullet is one line to remove. A separate rule would have been easier to pause independently \u2014 accepted trade for not growing the per-review lens count.",
+  "alternatives": [
+    "New .warden/rules/misleading-comment.md \u2014 rejected: second claude lens paid on every review forever, cost unmeasured, for a class the existing lens can name",
+    "Do nothing and let the candidate age \u2014 rejected: 3/3 upheld meets the candidate bar and the founder accepted the proposal"
+  ],
+  "scope": ".warden/rules/docs-accuracy.md body + covers list (rules_version changes; backtest artifact committed at the new version per agentops-a5p.17.13, honestly UNBACKTESTED for a claude judgment rule). Explicitly a policy item."
+}
