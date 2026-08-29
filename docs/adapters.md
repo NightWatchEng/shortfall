@@ -40,6 +40,7 @@ backend grounds deferred + unrealized + a metrics realized upper bound; a
 | `adapters/query/promql` | ✅ | — | Prometheus; gauges via `last_over_time`, counters via a non-extrapolating `@`-diff |
 | `adapters/query/sql` | — | ✅ | any `database/sql` outcomes table; the events source (and the ledger source for coverage) |
 | `adapters/query/cwinsights` | — | ✅ | CloudWatch Logs Insights over the cloudwatch exporter's EMF records (stdlib SigV4); metric legs come from CloudWatch's metric store |
+| `adapters/query/gcplogging` | — | ✅ | Cloud Logging entries, read as SQL through the Log Analytics bucket's linked BigQuery dataset (stdlib REST); metric legs come from Managed Service for Prometheus through the promql adapter |
 
 Wiring a read boundary — each adapter is one constructor away from
 `engine.Compute` (either querier alone grounds its legs; the CLI shows how
@@ -66,6 +67,42 @@ if err != nil {
 }
 fmt.Println(report.Customers.Distinct)
 ```
+
+```go
+// GCP event legs — the outcome entries adapters/export/gcp writes to Cloud
+// Logging, read back as SQL through the log bucket's linked BigQuery
+// dataset. Credentials ride the injected HTTP client or WithBearerToken;
+// there is no cloud SDK in the module.
+gq, err := gcplogging.New("my-project", "logs_analytics", gcplogging.WithLocation("us"))
+if err != nil {
+    log.Fatal(err)
+}
+report, err := engine.Compute(ctx, &reg, gq, req)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(report.Realized.ByCurrency)
+```
+
+**Pairing a backend's two read adapters.** No single GCP read boundary
+serves both signals, so the engine gets one adapter per signal kind and each
+declares the other unsupported: `adapters/query/gcplogging` grounds the
+realized and customer-impact legs from Cloud Logging entries, and
+`adapters/query/promql` grounds the deferred, unrealized and baseline legs
+against Managed Service for Prometheus, whose Prometheus-compatible query
+API answers PromQL over the metrics a collector wrote through
+`adapters/export/otlp`. This is the same split AWS has — `cwinsights` for
+events, a promql-readable metrics store for the metric legs — and it is why
+`query.Caps` carries `Metrics` and `Events` independently: an events-only
+querier returns `query.ErrUnsupported` from `QueryMetric`, and the engine
+turns that into a leg marked unavailable with a reason rather than a zero
+that reads like a measurement.
+
+Both GCP query adapters are honest about one more thing: an events-only
+backend cannot de-duplicate realized loss on its own. The per-entity de-dup
+and the later-success exclusion (ADR-0009) live in the engine; the adapter's
+job is to hand back the per-entity groups and the success set faithfully,
+which its conformance test asserts against `memq` rather than assumes.
 
 The SQL adapter's expected table (override the name with `WithTable`):
 

@@ -96,6 +96,7 @@ var importsFor = map[string]string{
 	"gcp":        "github.com/NightWatchEng/shortfall/adapters/export/gcp",
 	"otlp":       "github.com/NightWatchEng/shortfall/adapters/export/otlp",
 	"promexport": "github.com/NightWatchEng/shortfall/adapters/export/prometheus",
+	"gcplogging": "github.com/NightWatchEng/shortfall/adapters/query/gcplogging",
 	"promql":     "github.com/NightWatchEng/shortfall/adapters/query/promql",
 	"sqlq":       "github.com/NightWatchEng/shortfall/adapters/query/sql",
 	"promhttp":   "github.com/prometheus/client_golang/prometheus/promhttp",
@@ -174,6 +175,7 @@ require (
 	github.com/NightWatchEng/shortfall/adapters/export/gcp v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/otlp v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/prometheus v0.0.0
+	github.com/NightWatchEng/shortfall/adapters/query/gcplogging v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/promql v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/sql v0.0.0
 )
@@ -187,6 +189,8 @@ replace github.com/NightWatchEng/shortfall/adapters/export/gcp => ROOT/adapters/
 replace github.com/NightWatchEng/shortfall/adapters/export/otlp => ROOT/adapters/export/otlp
 
 replace github.com/NightWatchEng/shortfall/adapters/export/prometheus => ROOT/adapters/export/prometheus
+
+replace github.com/NightWatchEng/shortfall/adapters/query/gcplogging => ROOT/adapters/query/gcplogging
 
 replace github.com/NightWatchEng/shortfall/adapters/query/promql => ROOT/adapters/query/promql
 

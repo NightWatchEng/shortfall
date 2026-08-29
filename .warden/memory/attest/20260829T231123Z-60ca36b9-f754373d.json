@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "60ca36b96ccd6cf45e3b294c8c4e0cbd06a4c0ad",
+  "base_sha": "d71d8d1c3b0a70276f84c0f31b14ea1c505dd0e1",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T23:11:23+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; engine:claude rule bodies verbatim, project review charter incl. the Querier pushdown lens, reviewer-split memory recall; ran the suite, coverage and 25 mutations of its own in a dedicated worktree at the head under review)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; received only the findings list and the review package, never the reviewer's reasoning; examiner-split memory recall as non-binding precedent)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T23:11:23+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "60ca36b96ccd6cf45e3b294c8c4e0cbd06a4c0ad",
+      "base_sha": "d71d8d1c3b0a70276f84c0f31b14ea1c505dd0e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 287,
+      "severity": "MEDIUM",
+      "finding": "This diff adds a shipping query adapter and updates four of the five enumerations of the query-adapter family, but README.md's 'What ships in the box' table still listed the pre-gcplogging set, leaving the repo's front-page capability table describing the old behavior.",
+      "evidence": "README.md:287 read '| Query back | `promql` (metrics); `cwinsights`, `sql` (events) | `adapters/query/*` |' while adapters/README.md:9, docs/adapters.md:43, docs/quickstart.md:38 and docs/architecture/c4-l2-containers.md:35 were all updated in this same diff to name gcplogging. CONTRIBUTING.md:98-100 requires the affected README section, usage doc AND diagram to move in the same PR.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "96",
+      "bead": "workspace-vhc.2",
+      "reason": "CONFIRMED by the cross-examiner, which killed the 'curated list' defence on evidence: the same table is exhaustive in every other row (Export names all 4 of adapters/export/*, Notify all 5 of adapters/incident/*, Reconcile the 1 payment adapter), so Query at 3-of-4 was the sole undercount and the omission was drift this diff introduced. The stated failure scenario is concrete \u2014 a reader sees the Export row promise Google Cloud events while the Query row offers only cwinsights and sql for events, and concludes shortfall can emit GCP events but cannot read them back, mis-planning the backend pairing. Bead workspace-qnr had parked it, but parking is a triage decision about when to fix, not a refutation that the drift ships. Fixed here rather than deferred: the row now reads 'promql (metrics); cwinsights, gcplogging, sql (events)', and workspace-qnr is closed. The examiner also noted .github/ISSUE_TEMPLATE/1-bug-report.yml:88-90 carries the same stale enumeration; it is outside docs-accuracy's applies_to globs and, more importantly, .github/ is gate surface that skills-policy forbids changing as a side effect of a feature branch \u2014 filed as workspace-2ut instead.",
+      "id": "e6916cd0fb679353"
+    },
+    {
+      "ts": "2026-08-29T23:11:23+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "60ca36b96ccd6cf45e3b294c8c4e0cbd06a4c0ad",
+      "base_sha": "d71d8d1c3b0a70276f84c0f31b14ea1c505dd0e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "misleading-comment"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/gcplogging/gcplogging.go",
+      "line": 387,
+      "severity": "MEDIUM",
+      "finding": "validProjectID's doc comment enumerated the accepted character set as 'lowercase letters, digits and hyphens, plus the dot and colon', but the function also accepts A-Z and the underscore. The enumeration is load-bearing because the next sentence rests the no-injection argument on it ('none of these characters can close the backtick...'), so an auditor checks the listed set and never learns two further classes are admitted.",
+      "evidence": "Comment at gcplogging.go:387-391 versus code at gcplogging.go:396-401: \"case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':\" / \"case r == '-', r == '.', r == ':', r == '_':\". The comment predicted validProjectID(\"MyProject\") and validProjectID(\"my_project\") were false; both returned true.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "96",
+      "bead": "workspace-vhc.2",
+      "reason": "CONFIRMED by the cross-examiner. It established the injection framing is real and asserted twice \u2014 statement()'s doc at gcplogging.go:272-275 rests the whole no-injection guarantee on 'a character set that cannot close a backtick or open a string', and New gates projectID through validProjectID before interpolating it into the table reference \u2014 so the enumeration being complete is load-bearing, not an illustrative gloss. The sibling validBigQueryID comment writes its set correctly, showing the narrower wording here was a real mismatch rather than shared shorthand. Not exploitable: A-Z and '_' cannot break the backtick quoting, so the consequence was audit cost. Fixed by rewriting the comment to name every admitted class and to say explicitly that the set below is the whole of what is admitted. Because no test pinned the accepted set \u2014 which is how the comment drifted \u2014 two named cases were added to the existing table-driven TestIdentifierValidation ('uppercase project accepted', 'underscore in project accepted'). Mutation-checked: narrowing the switch back to the old comment's claim fails both new cases and passes with them restored.",
+      "id": "ad704e779e5b4098"
+    }
+  ]
+}
