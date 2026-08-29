@@ -1,0 +1,168 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+  "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T02:02:58+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, reviewer memory priors; verified memq refilter semantics, ci sweep, exporter timestamp behavior across all three backends"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), findings-only context; probed the pager redesign with transient adversarial tests (-race), traced termination for all server behaviors, verified Loki's own dedup semantics match the boundary key"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T02:02:58+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+      "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+      "rule_id": "unmapped:insights-10k-silent-truncation",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/cwinsights/cwinsights.go",
+      "line": 114,
+      "severity": "HIGH",
+      "finding": "The Insights 10000-row cap silently truncated a failure storm's events \u2014 a smaller dollar figure with no disclosure.",
+      "evidence": "limit 10000 in the query, no count check on Complete.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "A full 10000-row result errors loudly telling the caller to narrow the window; over-triggering on exactly-10k is the honest side.",
+      "id": "217f33157ffc1d18"
+    },
+    {
+      "ts": "2026-08-29T02:02:58+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+      "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+      "rule_id": "unmapped:logql-page-boundary-same-ns-drop",
+      "tags": [
+        "memq-parity"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/logql/logql.go",
+      "line": 139,
+      "severity": "MEDIUM",
+      "finding": "start=lastTS+1 dropped entries sharing a cut page's final nanosecond.",
+      "evidence": "The pre-fix comment admitted the skip.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Pager re-requests the boundary ns with a carry-grown limit and (ns,line) de-dup; single-ns overflow fails loudly. Examiner probed with adversarial same-ns bursts, stuck servers, and identical-line duplicates (Loki's own ingest dedup makes the key exact): no loss, no dup, guaranteed termination.",
+      "id": "203b58d8fa5658a1"
+    },
+    {
+      "ts": "2026-08-29T02:02:58+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+      "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+      "rule_id": "unmapped:spl-latest-time-floor-narrows-window",
+      "tags": [
+        "memq-parity"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/spl/spl.go",
+      "line": 112,
+      "severity": "MEDIUM",
+      "finding": "Floored exclusive latest_time excluded in-window events.",
+      "evidence": "Contrast with cwinsights' widened bounds in the same diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Both bounds widen a second; memq re-applies the exact half-open window, so widening cannot over-count.",
+      "id": "b1b354bcae14c175"
+    },
+    {
+      "ts": "2026-08-29T02:02:58+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+      "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+      "rule_id": "unmapped:cwinsights-unparsable-record-fail-open",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/cwinsights/cwinsights.go",
+      "line": 194,
+      "severity": "LOW",
+      "finding": "Parse failure and marker absence shared one silent skip.",
+      "evidence": "single continue branch.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The trade is now stated explicitly in the code (shared groups legitimately carry EMF metric records and foreign lines; LocalStack ignores the pushdown); examiner judged the accepted-trade disposition sound.",
+      "id": "29d54714fba42c13"
+    },
+    {
+      "ts": "2026-08-29T02:02:58+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+      "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+      "rule_id": "unmapped:eventline-absent-amount-counts-zero",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "eventline",
+      "file": "eventline/eventline.go",
+      "line": 50,
+      "severity": "LOW",
+      "finding": "A marked line without an amount parsed as $0 into sums.",
+      "evidence": "implicit zero branch.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Loud error + test; all three exporters write the amount unconditionally so no legitimate line is refused (examiner verified all three write sites).",
+      "id": "d2dbf359f8a62c8f"
+    },
+    {
+      "ts": "2026-08-29T02:02:58+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+      "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+      "rule_id": "unmapped:eventline-result-unvalidated",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "eventline",
+      "file": "eventline/eventline.go",
+      "line": 71,
+      "severity": "LOW",
+      "finding": "Arbitrary result strings were silently invisible to outcome filters.",
+      "evidence": "no Valid() check.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "biz.Result.Valid() rejection + test; the valid set covers everything exporters ship.",
+      "id": "4bdea122bbe5266d"
+    },
+    {
+      "ts": "2026-08-29T02:02:58+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "69e226f2c4e61f98fb52ff7bb2e0e673235b3f71",
+      "base_sha": "bd4e53723c7e549918fee8456751ba55f491dc2f",
+      "rule_id": "unmapped:spl-golden-time-roundtrip-flake",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/loggolden",
+      "file": "test/loggolden/golden_test.go",
+      "line": 309,
+      "severity": "LOW",
+      "finding": "Truncating the HEC time round trip could shift a replayed timestamp 1ms and flake window inclusion.",
+      "evidence": "int64(secs*1000) on a float-divided value.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "math.Round; shipped spl.go parses RFC3339 _time and was never affected.",
+      "id": "3d0fea9e89f7e281"
+    }
+  ]
+}

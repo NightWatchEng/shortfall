@@ -39,6 +39,9 @@ backend grounds deferred + unrealized + a metrics realized upper bound; a
 | `query/memq` | ✅ | ✅ | in-memory reference; the conformance oracle every other adapter is checked against |
 | `adapters/query/promql` | ✅ | — | Prometheus; gauges via `last_over_time`, counters via a non-extrapolating `@`-diff |
 | `adapters/query/sql` | — | ✅ | any `database/sql` outcomes table; the events source (and the ledger source for coverage) |
+| `adapters/query/logql` | — | ✅ | Grafana Loki; reads the loki exporter's outcome lines, aggregation delegated to the memq reference |
+| `adapters/query/cwinsights` | — | ✅ | CloudWatch Logs Insights over the cloudwatch exporter's EMF records (stdlib SigV4); metric legs come from CloudWatch's metric store |
+| `adapters/query/spl` | — | ✅ | Splunk export search over the splunkhec exporter's outcome events |
 
 Wiring a read boundary — each adapter is one constructor away from
 `engine.Compute` (either querier alone grounds its legs; the CLI shows how
