@@ -40,7 +40,7 @@ flowchart LR
         COV["<b>coverage</b><br/><i>trust — reconcile-time, needs the ledger</i><br/>telemetry Σ at the value stage<br/>vs ledger (ADR-0016)"]
         REP["<b>Report + provenance</b><br/><i>evidence tags per leg</i><br/>realized NEVER summed with estimate"]
         REQ --> REAL & DEF & UNREAL & CUST --> REP
-        COV -.->|"shortfall reconcile only"| REP
+        COV -.->|"a field on the Report;<br/>a real number only from reconcile"| REP
     end
 
     classDef core fill:#1168bd,stroke:#0b4884,color:#fff;
@@ -57,7 +57,7 @@ flowchart LR
 | label enforcement → MetricPoints | Bounded by construction: segment must be in the registry's enum, and an unregistered flow or stage falls back to a literal `unregistered` rather than minting a new label value |
 | label enforcement → `biz.Outcome` | One outcome event per stage transition, linked by trace id and emitted **regardless of trace sampling** — money accounting never depends on a sampler. Amounts and entity/customer ids ride the event, never a metric label |
 | `Request` → the four legs | One `Compute()` fans out to realized, deferred, unrealized and customers; each answers independently and each carries its own evidence tag (`deterministic` / `estimate`). A leg whose query fails is marked unavailable on itself rather than failing the report |
-| `coverage` ⇢ `Report` | **Dotted, because `Compute()` does not compute it.** `engine.Coverage` needs a provider ledger an impact `Request` does not carry, so `Compute()` fills the leg with an explicit unavailable reason ("run shortfall reconcile for the trust number") rather than a fabricated 100%. The real number comes from `shortfall reconcile` |
+| `coverage` ⇢ `Report` | **Dotted, because `Compute()` does not compute it.** `engine.Coverage` needs a provider ledger an impact `Request` does not carry, so `Compute()` fills the `Report`'s coverage field with an explicit unavailable reason ("run shortfall reconcile for the trust number") rather than a fabricated 100%. The real number comes from a separate `engine.Coverage` call that `shortfall reconcile` makes with a ledger, and it is rendered on its own — it never flows back into a `Report` |
 | the legs → `Report` | Assembly, not arithmetic across legs. The `Report` is the four legs plus the coverage trust line, a severity suggestion (ADR-0013), and the provenance (`GeneratedAt`, `RegistryVersion`, `LibraryVersion`) a postmortem needs — never a single blended number |
 
 ## Key facts this diagram encodes
@@ -93,5 +93,6 @@ flowchart LR
 - **An impact report never carries a real coverage number.** Coverage needs
   the provider ledger, which an impact `Request` does not carry, so
   `Compute()` writes an unavailable reason and points at `shortfall
-  reconcile`. Rendering that absence as 100% would invert the meaning of
-  the one line whose job is to say how much you can trust the rest.
+  reconcile`, which calls `engine.Coverage` directly and renders the trust
+  line on its own. Rendering that absence as 100% would invert the meaning
+  of the one line whose job is to say how much you can trust the rest.

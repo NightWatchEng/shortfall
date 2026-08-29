@@ -78,7 +78,7 @@ flowchart TB
 | `engine` → query adapter | The `query.Querier` interface — the only questions the engine may ask a backend. An adapter that serves no events answers with a `NotAvailableReason`, never zeros |
 | `registry` / `query` → `engine` | Compile-time dependency. The `engine-import-boundary` rule enforces the allowlist mechanically: `engine` may import only `query`, `registry`, `biz`, and its own subpackages |
 | `adapters/payment/stripe` → `emit` | Provider webhooks and wrapped-client responses become `biz.Outcome`s and enter the same capture path your own code uses |
-| `engine` → `cmd/shortfall` | The CLI calls `engine.Compute` and renders the report to stdout via `engine/report` — text, JSON or markdown. Its verbs are `validate`, `impact`, `reconcile`, and it depends on no incident adapter |
+| `engine` → `cmd/shortfall` | The CLI calls `engine.Compute` and renders the report to stdout via `engine/report` — text, JSON or markdown. Its working verbs are `validate`, `impact` and `reconcile` (plus `version`), and it depends on no incident adapter |
 | `engine` → incident adapter | Separately: an incident adapter takes an `engine.Report` value directly (`slack.Client.Post` / `.Refresh`) and posts and refreshes it. Your program wires that call — it is not a CLI hand-off |
 | `examples/checkout` → `testkit` → `engine` | The harness knows the true answer by construction; `testkit` turns it into golden fixtures that judge the engine. Test-only — no production import path reaches either |
 
