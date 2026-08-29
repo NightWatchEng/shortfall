@@ -625,9 +625,13 @@ rule it is named for.
 | `reconcile_stage_unknown` | `reconcile.stage` naming a stage the flow does not declare |
 
 **One known gap in the reference implementation.** The `[0, 1]` bound on
-`recovered_fraction` is a pair of ordinary comparisons, so a YAML `.nan`
-fails both and the document loads. That is a defect in the reference
-implementation, tracked separately — not a licence to copy it. A
+`recovered_fraction` is a pair of ordinary comparisons, and a YAML `.nan`
+fails both — so a flow declaring `recovered_fraction: .nan` with no
+`within` window loads. (One declaring `.nan` *and* a window is rejected,
+but as `recovery_within_without_fraction`, because NaN fails the `> 0`
+test too: the right verdict for the wrong reason.) That is a defect in
+the reference implementation, tracked separately — not a licence to copy
+it. A
 conforming implementation MUST reject a non-finite `recovered_fraction`
 under `recovery_fraction`. There is no vector for it yet, because a
 vector asserts what the reference implementation does, and here that is

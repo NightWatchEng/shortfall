@@ -365,13 +365,19 @@ func FactsOf(r registry.Registry) RegistryFacts {
 	return f
 }
 
-// Equal compares two fact sets structurally, over their JSON rendering
-// so that map key ordering never masquerades as drift — the same reason
-// the scenario goldens round-trip before comparing. (Nil and empty
-// slices are NOT folded together: the fact fields carry no omitempty, so
-// `null` and `[]` render differently and compare unequal. FactsOf clones
-// what the loader produced, so the two forms track a real difference in
-// what the loader returned.)
+// Equal compares two fact sets structurally, over their JSON rendering,
+// so map key ordering never masquerades as drift — the same reason the
+// scenario goldens round-trip before comparing.
+//
+// The rendering is not a normalizer, and this struct is mixed on that
+// point: the omitempty fields (Severity, Currencies, SLA, BySegment)
+// drop out when empty, so nil and empty compare EQUAL there; the fields
+// without it (Segments, AllowHosts, Flows, Stages, Signals) render nil
+// as `null` and empty as `[]`, which compare UNEQUAL. A validated
+// registry yields non-nil collections for all of them, so no committed
+// vector carries a `null` — but a port comparing its own derived facts
+// against these should know which half of the struct forgives an empty
+// collection. TestRegistryFactsEqualNilVersusEmpty pins both halves.
 //
 // A fact set with no JSON rendering has no comparable form, so Equal
 // fails closed rather than comparing two error strings: reporting

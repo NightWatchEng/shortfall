@@ -368,6 +368,65 @@ func TestRegistryFactsEqualFailsClosed(t *testing.T) {
 	}
 }
 
+// TestRegistryFactsEqualNilVersusEmpty turns Equal's documented
+// nil-vs-empty behaviour into an enforced one. The fact struct is mixed:
+// omitempty fields forgive an empty collection, the rest do not. A
+// comment claiming either half uniformly has twice now been wrong, so
+// the claim lives here where it fails when it stops being true.
+func TestRegistryFactsEqualNilVersusEmpty(t *testing.T) {
+	withFlow := func(f FlowFact) RegistryFacts {
+		return RegistryFacts{Version: 1, Segments: []string{"smb"},
+			AllowHosts: []string{}, Flows: map[string]FlowFact{"invoice.pay": f}}
+	}
+	base := func() RegistryFacts { return withFlow(FlowFact{Stages: []StageFact{}}) }
+	cases := []struct {
+		name  string
+		nilly RegistryFacts
+		empty RegistryFacts
+		equal bool
+	}{
+		{"severity (omitempty)", base(), func() RegistryFacts {
+			f := base()
+			f.Severity = []SeverityFact{}
+			return f
+		}(), true},
+		{"currencies (omitempty)", base(), withFlow(FlowFact{Stages: []StageFact{}, Currencies: []string{}}), true},
+		{"sla (omitempty)", base(), withFlow(FlowFact{Stages: []StageFact{}, SLA: map[string]SLAFact{}}), true},
+		{"by_segment (omitempty)", withFlow(FlowFact{Stages: []StageFact{}, Estimator: &EstimatorFact{}}),
+			withFlow(FlowFact{Stages: []StageFact{}, Estimator: &EstimatorFact{BySegment: map[string]int64{}}}), true},
+		{"segments", func() RegistryFacts {
+			f := base()
+			f.Segments = nil
+			return f
+		}(), base(), false},
+		{"allow_hosts", func() RegistryFacts {
+			f := base()
+			f.AllowHosts = nil
+			return f
+		}(), base(), false},
+		{"flows", func() RegistryFacts {
+			f := base()
+			f.Flows = nil
+			return f
+		}(), func() RegistryFacts {
+			f := base()
+			f.Flows = map[string]FlowFact{}
+			return f
+		}(), false},
+		{"stages", withFlow(FlowFact{Stages: nil}), base(), false},
+		{"signals", withFlow(FlowFact{Stages: []StageFact{{Name: "auth"}}}),
+			withFlow(FlowFact{Stages: []StageFact{{Name: "auth", Signals: []string{}}}}), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.nilly.Equal(c.empty); got != c.equal {
+				t.Fatalf("Equal(nil-form, empty-form) = %v, want %v\n nil-form: %s\n empty-form: %s",
+					got, c.equal, c.nilly, c.empty)
+			}
+		})
+	}
+}
+
 // TestRegistryFactsRenderingSurfacesItsError pins the other half of the
 // fix: a fact set with no JSON rendering reports that as an error rather
 // than as a string two different fact sets can share.
