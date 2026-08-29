@@ -295,26 +295,32 @@ Runnable examples live in the `biz`, `emit`, and `engine` packages
 ## Performance
 
 `Record()` runs inside your request path, so its cost is part of the
-contract rather than an implementation detail. Apple M-class laptop, Go
-defaults. Every PR is compared against `main` with benchstat and the
-delta is written into the CI job summary; that job is advisory today and
-becomes a required check once the hot-path baselines stabilise:
+contract rather than an implementation detail. Headline figures, Apple
+M5 Pro / Go 1.27, medians of six samples:
 
-| Path | ns/op | allocs/op |
-|---|---:|---:|
-| `emit.Record` (accepted) | 647 | 3 |
-| `biz.vc` encode / decode | 128 / 187 | 3 / 1 |
-| In-flight age bucketing | 0.23 | 0 |
-| `engine.Compute`, 200k events | 0.75 s | — |
+| | |
+|---|---|
+| `emit.Record`, accepted outcome | 2.3 µs on one core, 1.0 µs on eight |
+| `emit.Record` throughput ceiling | ~950k outcomes/s, reached at 8 cores — it does **not** scale past that |
+| `emit.InFlightTracker`, `Track`+`Done` | 56 ns uncontended; throughput *falls* to 0.19× as consumers are added |
+| Slow backend (25 ms/batch) | never reaches the caller as latency — it costs outcomes instead, dropped and counted |
+| `engine.Compute`, 2M events | 4.3 s, 4.35 GB allocated |
 
-These are single-goroutine figures on an idle machine. Behaviour under
-sustained concurrent load is not yet characterised.
+**[docs/performance.md](docs/performance.md)** carries the methodology,
+the full core-scaling curves, the `engine.Compute` shape across two orders
+of magnitude, the back-pressure behaviour, and an explicit statement of
+what was not measured — read that before sizing anything.
+
+Every PR is compared against `main` with benchstat and the delta is
+written into the CI job summary; that job is advisory today and becomes a
+required check once the hot-path baselines stabilise.
 
 ## Documentation
 
 - [Quickstart](docs/quickstart.md) — `go get` to a rendered impact report in 10 minutes.
 - [Adapters & capability matrix](docs/adapters.md) — which backend grounds which leg, with wiring snippets.
 - [Example integration: webhook Lambdas → payments-service](docs/integration-webhook-lambdas.md) — a two-system flow end to end, and which leg covers which outage direction.
+- [Performance](docs/performance.md) — concurrency and scaling numbers, how to reproduce them, and where they stop applying.
 - [Architecture](docs/architecture/README.md) — C4 diagrams, the money-path sequences, and the repository layout.
 - [Registry reference](docs/registry.md) — every field of the flow registry.
 - [What is a "dollar" here](docs/money.md) — kind semantics, lost vs delayed, why ranges (for Finance).

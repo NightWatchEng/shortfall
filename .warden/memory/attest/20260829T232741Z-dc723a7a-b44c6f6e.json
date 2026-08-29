@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "dc723a7aac3f521a7e2105436acb147fd59a36b5",
+  "base_sha": "50c09f91b772764f50dd475a1e43387fb306876f",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T23:27:41+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; engine:claude rule bodies verbatim, project review charter, reviewer-split memory recall; re-ran the entire published benchmark suite on the reference host, verified ci-bench.sh count, ran the new test under -race)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; received only the findings list and the review package, never the reviewer's reasoning; independently re-measured RSS, gctrace live heap and publish variance rather than judging on the reviewer's numbers)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T23:27:41+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "dc723a7aac3f521a7e2105436acb147fd59a36b5",
+      "base_sha": "50c09f91b772764f50dd475a1e43387fb306876f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/performance.md",
+      "line": 62,
+      "severity": "MEDIUM",
+      "finding": "The peak-memory figure justifying BenchmarkComputeScale's exclusion from the gate was roughly 3x too large, and the out-of-memory rationale built on it does not hold. Stated in four places without hedging: docs/performance.md:62, :404 and engine/compute_load_bench_test.go:7, :22.",
+      "evidence": "docs/performance.md:62 read '# engine.Compute scaling series (peaks around 8 GB resident at the 2M step)'; :404 'Several GB of live heap per sample at the top of the series \u2014 an out-of-memory kill on a hosted runner, not a slow job'; compute_load_bench_test.go:22 '// Peak resident memory at the 2M step is roughly 8 GB.' Measured on the reference host: full series peak RSS 2.26 GB at -count 1 and 2.72 GB at -count 6; 2M step alone at -count 6 also 2.72 GB; GODEBUG=gctrace=1 live heap peaks at 1033-1059 MB against a ~2.07 GB goal.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "97",
+      "bead": "workspace-doz",
+      "reason": "CONFIRMED. The cross-examiner re-measured independently (max RSS 2.38 GB full series, 2.74 GB for the 2M step alone, live heap 1074 MB) and I re-measured a third time before editing (2.26 GB / 2.72 GB / 1033-1059 MB live heap). 'Resident' is exactly what /usr/bin/time -l reports, so there is no reading in which the doc named a different quantity \u2014 it named RSS and stated it wrongly, and overstated live heap by ~3x as well. The examiner also checked the obvious alibi: the 'q = nil; runtime.GC()' dataset drop was present from the file's first commit, so 8 GB was never a pre-correction figure. With peak RSS at 2.7 GB and GOGC pinning the heap goal near 2.1 GB, no hosted runner OOMs on this, so the exclusion rationale as written was unsupported by the harness in its own diff. Fixed by correcting all four sites to the measured figures and replacing the OOM rationale with the real one, which is wall clock: I timed the full series at 41.68 s at -count 6, and the gate would run it twice (PR head and main). A fifth stale reference at compute_load_bench_test.go:73 ('turns a 8 GB benchmark into a 20 GB one') was found by grep during the fix and corrected too.",
+      "id": "549b08d42436d9ad"
+    },
+    {
+      "ts": "2026-08-29T23:27:41+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "dc723a7aac3f521a7e2105436acb147fd59a36b5",
+      "base_sha": "50c09f91b772764f50dd475a1e43387fb306876f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/performance.md",
+      "line": 287,
+      "severity": "MEDIUM",
+      "finding": "The host-sizing instruction pointed adopters at the B/op column \u2014 cumulative bytes allocated over the call, not simultaneous residency \u2014 and drew a false operational claim from it, telling readers to size a host on a number that means something else.",
+      "evidence": "docs/performance.md:283-287 read '**Memory is the binding constraint, not time.** 2M events allocates 4.35 GB in a single `Compute` call \u2014 more than the process is likely to have on a modest instance, and 2.2 GB/s of allocation churn for the collector to chase. If you are sizing a host to run `shortfall impact` over a large window, size it on this column.' Measured peak RSS 2.72 GB, live heap peak ~1.06 GB, so a 4 GB instance completes the run the sentence says it cannot. B/op at 2M is 4,350,420,808 \u2014 the table figure itself is exact.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "97",
+      "bead": "workspace-doz",
+      "reason": "CONFIRMED, and distinct from the previous finding: that one attacks a wrong number, this one a correct number applied to the wrong purpose. The cross-examiner established that B/op bears no fixed relationship to residency \u2014 lifetime and GOGC govern it, and here it is 4x peak live heap, while on a churn-heavier path the ratio could be far larger \u2014 so 'size the host on this column' is not a sizing rule at all rather than merely being off by a factor here. It also caught corroborating looseness in the same sentence: 4.35 GB over the measured ~4.2-4.4 s is ~1.0 GB/s, not the 2.2 GB/s claimed, and no row in the table yields 2.2. Fixed by rewriting the paragraph to separate allocator pressure from residency, give the measured peak RSS and live heap with the method that produced them, correct the churn rate, and state that 4 GB clears 2M events.",
+      "id": "75fb13afcfdff70f"
+    },
+    {
+      "ts": "2026-08-29T23:27:41+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "dc723a7aac3f521a7e2105436acb147fd59a36b5",
+      "base_sha": "50c09f91b772764f50dd475a1e43387fb306876f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/performance.md",
+      "line": 408,
+      "severity": "MEDIUM",
+      "finding": "The same measured quantity for BenchmarkTrackerTrackDoneUnderPublish was stated twice in one document an order of magnitude apart \u2014 \u00b1321% in the prose, \u00b134% in the exclusion table 165 lines later \u2014 with nothing left in the text to tell a reader they were different measurements.",
+      "evidence": "docs/performance.md:243 read 'the completed-publish count varying by \u00b1321% within the second'; :408 'Measures lock starvation, which is inherently high-variance (publish count varied \u00b134%)'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "97",
+      "bead": "workspace-doz",
+      "reason": "CONFIRMED. The cross-examiner tried to refute this on the 'within the second' scoping and the git history killed the defence: the commit under review deletes the prose's original '\u00b134% run to run' sentence, replaces it with the \u00b1321% statement, and in the same diff adds '(publish count varied \u00b134%)' to the exclusion table stripped of the 'run to run' qualifier that was the only thing distinguishing the two statistics \u2014 against a byte-identical benchmark function, so 'different harness' was unavailable. I then measured three runs of six samples myself: within-run publish spreads of 31.7%, 42.0% and 34.3%. So \u00b134% is the reproducible figure and \u00b1321% did not reproduce in any run, mine or the examiner's. Fixed by correcting the prose to the reproducible number and naming the statistic it describes (spread across samples within a single run), so both sites now state one quantity in one wording. Note for the corpus: the code-reviewer's supporting observation for this finding ('104502 and 7229 publishes') misread the iteration-count column as the publish column; the finding stands on the examiner's and my measurements, not on that.",
+      "id": "03316b5dfba08f82"
+    },
+    {
+      "ts": "2026-08-29T23:27:41+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "dc723a7aac3f521a7e2105436acb147fd59a36b5",
+      "base_sha": "50c09f91b772764f50dd475a1e43387fb306876f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "misleading-comment"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter_test.go",
+      "line": 695,
+      "severity": "MEDIUM",
+      "finding": "This diff publishes a document establishing that BenchmarkRecordAccept prices the suppression path, leaving the benchmark's own inline comment asserting the exact opposite. After the diff the repo states the fact and its negation.",
+      "evidence": "emit/emitter_test.go:695 read '// Rotate stage/result/entity so every call takes the accept path.', contradicted by docs/performance.md:139-146 added in this diff: 'only the first 49152 iterations of a run take the accept path'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "97",
+      "bead": "workspace-doz",
+      "reason": "CONFIRMED. The cross-examiner verified the contradiction from source rather than from the doc: the dedup key is vc.Flow + EntityID + stage + result with Flow constant, so the pool is 4096 x 3 x 4 = 49152 distinct keys, while newTwoGenSet(1 << 16) gives capacity 65536 per generation \u2014 cur never rotates, every key stays resident, and all iterations after 49152 are suppressed. Measurement agrees: RecordAccept reports 378 B/op over ~1.61M iterations where the true accept path costs 3644 B and the suppressed path 288 B, and the mix model predicts 390 B. It also disposed of the two available defences: the deferral rationale is sound for the benchmark but does not extend to the comment, because a comment compiles to the same binary and moves no gate baseline; and although emitter_test.go is outside the diff's file set, the diff is what creates the contradictory state. Fixed by rewriting the comment to state what the loop actually exercises, show the arithmetic, and point at both docs/performance.md and workspace-z7g, which still owns correcting the benchmark itself.",
+      "id": "9eb218353f33d7d6"
+    }
+  ]
+}
