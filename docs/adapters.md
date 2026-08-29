@@ -110,6 +110,17 @@ defer em.Close(ctx)
 - `adapters/incident/slack` — posts and refreshes the impact ledger in the
   incident channel: `slack.New(token).Post(ctx, channel, report)`, or
   `Refresh` to keep one message live while the incident evolves.
+- `adapters/incident/{incidentio,rootly,firehydrant,pagerduty}` — thin
+  impact-field writers (consumers of the number, not producers): each
+  `WriteImpact(ctx, incidentID, report)` PATCHes the vendor's impact/custom
+  field with the one-line `report.Summary` (realized, deferred, unrealized
+  range, suggested severity — evidence-tagged, never merged). Targets:
+  incident.io a text custom field, PagerDuty a custom field by name,
+  FireHydrant its native `customer_impact_summary` (or a custom field),
+  Rootly the incident `summary` attribute. FireHydrant and PagerDuty also
+  `AttachCustomersCSV` — the vendor-neutral `report.CustomersCSV` top-accounts
+  export — as an incident note. All are SDK-free `*http.Client` writers with
+  overridable base URLs, httptest-verified.
 
 ## Writing your own adapter
 
