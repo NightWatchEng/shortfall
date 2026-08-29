@@ -1,0 +1,227 @@
+# Maintainer note: the "repository is private" paragraph below is true only
+# until the public flip. Delete that markdown block in the same PR as the
+# flip — a stale claim is a docs defect under ADR-0008.
+name: Bug report
+description: A number looks wrong, a leg is missing, or something errors.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This repository is private today.** While it stays private only
+        collaborators can reach this form, so nobody outside can file
+        anything yet. These templates are ready ahead of the public flip
+        rather than waiting on it.
+
+        ---
+
+        shortfall's answers depend on **which backend grounds which leg**.
+        Metrics ground the deferred and unrealized legs; events ground
+        realized de-dup and customer impact; coverage needs a ledger on top.
+        A leg the wired backend cannot ground is reported as *unavailable
+        with a reason* — that is designed behaviour
+        ([ADR-0017](https://github.com/NightWatchEng/shortfall/blob/main/docs/adr/0017-unavailable-leg-marker.md)),
+        and it is the
+        single most common thing mistaken for a bug.
+
+        So before filing, please skim
+        [the capability matrix](https://github.com/NightWatchEng/shortfall/blob/main/docs/adapters.md#which-leg-needs-which-signal)
+        and check the unavailable question below. It is the field most likely
+        to answer your report without a round trip.
+
+        Two more things worth knowing, because both look like bugs:
+
+        - **Ad-hoc PromQL and Logs Insights sums are not the report.** They are
+          not de-duplicated by entity and they do not exclude entities that
+          later succeeded. `shortfall impact` applies both corrections on the
+          events path, so it will legitimately disagree with a dashboard. A
+          metrics-only backend cannot de-dup a time series: its realized leg is
+          an upper bound and carries a caveat saying so.
+        - **Realized and estimated values are never merged** into one figure by
+          any renderer, by design.
+
+        Not a security report? If it is, close this and use the private
+        advisory route in
+        [SECURITY.md](https://github.com/NightWatchEng/shortfall/blob/main/SECURITY.md)
+        instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: >-
+        `shortfall version` prints `shortfall <version> (<commit>)`. If you are
+        using the library rather than the CLI, give the module version you
+        `go get`-ed, or the commit you built from.
+      placeholder: "shortfall v0.2.0 (1a2b3c4) — or: github.com/NightWatchEng/shortfall@v0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: export-adapters
+    attributes:
+      label: Export adapters wired (the write boundary)
+      description: How the `biz_*` signals leave your services. Pick every one that applies.
+      multiple: true
+      options:
+        - "adapters/export/prometheus — metrics"
+        - "adapters/export/cloudwatch — metrics + events (EMF)"
+        - "adapters/export/gcp — Cloud Monitoring metrics + Cloud Logging events"
+        - "An exporter I wrote myself"
+        - "None / not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: query-adapters
+    attributes:
+      label: Query adapters wired (the read boundary)
+      description: >-
+        How the report reads the signals back. This decides which legs could be
+        grounded at all: an events-only backend grounds realized loss and
+        customer impact, a metrics-only backend grounds the deferred and
+        unrealized legs plus a realized upper bound, and a backend serving both
+        grounds everything. Pick every one that applies.
+      multiple: true
+      options:
+        - "adapters/query/promql — metrics"
+        - "adapters/query/sql — events"
+        - "adapters/query/cwinsights — events"
+        - "query/memq — the in-memory reference"
+        - "A querier I wrote myself"
+        - "None / not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: leg-unavailable
+    attributes:
+      label: Did any leg report as unavailable?
+      description: >-
+        An ungrounded leg carries an unavailable marker and a caveat or note
+        naming why, instead of a confident zero (ADR-0017). The one-line
+        summary renders it as `n/a`; the text and markdown renders carry the
+        reason prose; `--format json` carries the `Unavailable` keys. Please
+        check before answering — an unavailable leg is designed behaviour, and
+        telling us which one degraded usually explains the whole report.
+      options:
+        - "No — every leg carried a number"
+        - "Yes — at least one leg was unavailable (details below)"
+        - "I have not checked"
+    validations:
+      required: true
+
+  - type: textarea
+    id: leg-unavailable-detail
+    attributes:
+      label: Which legs were unavailable, and what reason did they give?
+      description: Paste the caveat or note text verbatim. Leave blank if none were.
+      placeholder: |
+        customers: backend serves no events; per-customer impact (distinct, by segment, top-N) is unavailable — pair with an event exporter
+    validations:
+      required: false
+
+  - type: input
+    id: window
+    attributes:
+      label: Incident window
+      description: >-
+        The `--from` and `--to` you asked for, RFC3339 UTC. The window is
+        half-open — `[from, to)` — so an event exactly at `to` is outside it.
+      placeholder: "--from 2026-08-27T14:00:00Z --to 2026-08-27T15:00:00Z"
+    validations:
+      required: true
+
+  - type: textarea
+    id: invocation
+    attributes:
+      label: What you ran
+      description: >-
+        The full `shortfall` command, or the `engine.Compute` call and the
+        querier you handed it. Redact hosts and credentials; the flags matter,
+        your URLs do not.
+      placeholder: |
+        ./shortfall impact \
+          --registry registry.yaml \
+          --from 2026-08-27T14:00:00Z --to 2026-08-27T15:00:00Z \
+          --flow invoice.pay \
+          --sql "file:outcomes.db" --sql-driver sqlite \
+          --format text
+    validations:
+      required: true
+
+  - type: textarea
+    id: registry
+    attributes:
+      label: Flow registry excerpt
+      description: >-
+        The `flows:` entry for the affected flow, plus `severity:` if you have
+        a ladder. The registry decides what counts as money, when deferred
+        value becomes lost, and what the baseline looks back over — so most
+        "wrong number" reports are answered here. Redact anything sensitive;
+        the field names matter far more than your values.
+      placeholder: |
+        severity:
+          - { sev: SEV1, min_per_minute: 100000 }
+        flows:
+          invoice.pay:
+            money: { kind: fee }
+            currencies: [USD]
+            stages:
+              - { name: auth,    signals: ["http:POST /pay"] }
+              - { name: capture, signals: ["queue:capture.q"] }
+              - { name: settle,  signals: ["queue:settle.q"] }
+            sla:
+              capture: { deadline: PT30M, on_breach: lost }
+            baseline:  { seasonality: hour_of_week, lookback_weeks: 8 }
+            recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: Expected vs actual, per leg
+      description: >-
+        Which leg is wrong, and what you believe it should have said. "The
+        total looks wrong" is hard to act on; "realized loss says $1,200 and
+        our provider shows 3 failed captures totalling $4,700" is a
+        reproduction.
+      placeholder: |
+        | Leg                     | Expected | Actual |
+        |-------------------------|----------|--------|
+        | Realized loss           |          |        |
+        | Deferred value          |          |        |
+        | Unrealized loss (range) |          |        |
+        | Customer impact         |          |        |
+        | Coverage ratio          |          |        |
+        | Suggested severity      |          |        |
+
+        Where your expectation comes from (a provider dashboard, the ledger,
+        a manual count):
+    validations:
+      required: true
+
+  - type: textarea
+    id: report-json
+    attributes:
+      label: The report itself
+      description: >-
+        Optional, and the fastest route to a diagnosis: rerun with
+        `--format json`. That render carries the unavailable markers and the
+        caveat prose verbatim. Amounts are minor units — redact what you must,
+        but please keep the structure.
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: >-
+        Retries, multi-provider overlap, a sampling change, a partial exporter
+        outage during the window — anything that might have shaped the numbers.
+    validations:
+      required: false
