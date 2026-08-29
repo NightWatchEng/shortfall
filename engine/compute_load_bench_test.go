@@ -34,8 +34,8 @@ import (
 	"github.com/NightWatchEng/shortfall/registry"
 )
 
-// computeScaleSizes spans two full orders of magnitude either side of the
-// gate's 200k point. 2M is included rather than extrapolated: the whole
+// computeScaleSizes spans about 2.3 orders of magnitude, straddling the
+// gate's 50k and 200k points. 2M is included rather than extrapolated: the whole
 // reason to publish a shape is that a reader should not have to guess
 // whether the top of the range is linear, and a guess published as a
 // measurement would be the dishonesty ADR-0008 forbids.

@@ -17,21 +17,25 @@ import (
 
 // Concurrency and back-pressure coverage for the two hot paths an adopting
 // service puts in its request and queue-consumer loops: emit.Record and
-// emit.InFlightTracker. The single-goroutine benchmarks next door
-// (BenchmarkRecordAccept, BenchmarkTrackerPublish10k) say what one caller
-// pays; these say what happens when a payments service runs eighteen of
-// them at once, and what a slow backend does to the caller.
+// emit.InFlightTracker.
 //
-// The goroutine curve comes from -cpu, not from hand-rolled goroutine
-// plumbing: `go test -bench 'Parallel' -cpu 1,2,4,8,18` varies GOMAXPROCS
-// and RunParallel's goroutine count together, benchstat folds the -N
-// suffixes into one comparison, and no assertion anywhere depends on one
-// goroutine outracing another. Reproduce commands live in
-// docs/performance.md.
+// This file holds the shared harness, the one gate-resident addition
+// (BenchmarkTrackerPublishScale), and the deterministic back-pressure test.
+// Everything that uses b.RunParallel lives in concurrency_load_bench_test.go
+// behind the `benchload` build tag.
 //
-// Heavier and inherently noisier load benchmarks (slow backend, erroring
-// backend, tracker starvation) sit in concurrency_load_bench_test.go behind
-// the `benchload` build tag so scripts/ci-bench.sh never discovers them.
+// That split is measured, not assumed. scripts/ci-bench.sh runs the gate at
+// BENCH_TIME=1x, so b.N is 1 — and RunParallel then spawns GOMAXPROCS
+// goroutines to perform a single iteration, which measures scheduler
+// wake-up rather than Record. Two runs of this package at the CI settings
+// over an IDENTICAL tree put the parallel benchmarks at ±350% and ±454%
+// B/op with allocs/op swinging 68-85 against the 17 the accept path
+// actually costs, and benchstat called one of them a 32% regression at
+// p=0.041 on a diff that did not exist. TrackerPublishScale over the same
+// pair was bit-identical on every sample. A benchmark that manufactures
+// regressions is worse than no benchmark, so the noisy ones are tagged out
+// and read from an explicit -cpu sweep instead; docs/performance.md carries
+// the commands and says which set is which.
 
 // quietLogger silences the emitter's warning stream. Benchmarks that
 // deliberately overflow a buffer would otherwise spend their time in slog,
@@ -110,9 +114,13 @@ func (l *loadExporter) ExportEvents(_ context.Context, batch []biz.Outcome) erro
 }
 
 func (l *loadExporter) ExportMetrics(_ context.Context, batch []MetricPoint) error {
-	if l.delay > 0 {
-		time.Sleep(l.delay)
-	}
+	// No delay here, deliberately. Flush exports events and then metrics on
+	// one goroutine, and the metric batch is non-empty on essentially every
+	// flush (the drop counters always append a point), so sleeping in both
+	// would make a "25 ms backend" cost 50 ms per flush cycle — twice what
+	// the delay field, the benchmark's name, and the published table all
+	// say. Caught in review; the doubled stall was silently inflating the
+	// published drop percentage.
 	if l.fail.Load() {
 		// Returning before counting is deliberate: Flush re-credits the
 		// biz_dropped_events_total points of a failed metric batch back
@@ -132,16 +140,6 @@ func (l *loadExporter) ExportMetrics(_ context.Context, batch []MetricPoint) err
 
 func (l *loadExporter) Capabilities() Caps             { return Caps{Metrics: true, Events: true} }
 func (l *loadExporter) Shutdown(context.Context) error { return nil }
-
-func (l *loadExporter) dropTotal() int64 {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	var n int64
-	for _, v := range l.drops {
-		n += v
-	}
-	return n
-}
 
 func (l *loadExporter) dropsByReason(reason string) int64 {
 	l.mu.Lock()
@@ -271,184 +269,10 @@ func recordAt(em *Std, ctxs []context.Context, n int64) {
 	)
 }
 
-// BenchmarkRecordParallel is the scaling question: does Record get faster
-// with cores, or does every caller queue behind the emitter's single mutex?
-// Sweep it with -cpu 1,2,4,8,18 to read the curve.
-//
-// A background flusher drains to a discard sink on a 500us cadence, which
-// is how the library is actually wired — a Record benchmark with no flusher
-// would measure an emitter no production service runs.
-func BenchmarkRecordParallel(b *testing.B) {
-	exp := newLoadExporter()
-	em := newLoadEmitter(b, exp,
-		WithBufferSize(1<<20),
-		WithFlushInterval(500*time.Microsecond),
-	)
-	ctxs := benchContextsFor(b, b.N)
-	var seq atomic.Int64
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			recordAt(em, ctxs, seq.Add(1)-1)
-		}
-	})
-	b.StopTimer()
-
-	if err := em.Close(context.Background()); err != nil {
-		b.Fatalf("close: %v", err)
-	}
-	// Conservation: every call took the accept path and every accepted
-	// outcome reached the sink. A shortfall here means the run silently
-	// measured suppression or overflow instead of acceptance, which would
-	// make the reported ns/op describe a path nobody asked about.
-	calls := seq.Load()
-	if calls != int64(b.N) {
-		b.Fatalf("issued %d Record calls, b.N = %d", calls, b.N)
-	}
-	if got := exp.events.Load(); got != calls {
-		b.Fatalf("exported %d events for %d accepted Record calls (drops=%d pending=%d): "+
-			"the benchmark stopped measuring the accept path",
-			got, calls, exp.dropTotal(), pendingDrops(em))
-	}
-}
-
-// BenchmarkParallelSeqFloor is the harness floor for
-// BenchmarkRecordParallel: the same RunParallel loop with the same shared
-// sequence counter and nothing else in it.
-//
-// BenchmarkRecordParallel needs one contended atomic increment per call to
-// mint a distinct de-dup key, and a contended cache line is not free — at
-// high -cpu values that increment is a measurable share of a
-// sub-microsecond operation. Subtract this row from that table to read
-// Record's own cost. It is a committed benchmark rather than a note in the
-// docs because a correction nobody can reproduce is not a correction.
-//
-// The other parallel benchmarks here count iterations in a goroutine-local
-// variable and publish the total once, so this floor does not apply to
-// them.
-func BenchmarkParallelSeqFloor(b *testing.B) {
-	var seq atomic.Int64
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			_ = seq.Add(1)
-		}
-	})
-	b.StopTimer()
-	if seq.Load() != int64(b.N) {
-		b.Fatalf("counted %d increments, b.N = %d", seq.Load(), b.N)
-	}
-}
-
-// BenchmarkRecordParallelSuppressed is the same contention with none of the
-// work: every goroutine re-records one already-seen key, so each call takes
-// the emitter lock, hits the de-dup set, and returns. The gap between this
-// and BenchmarkRecordParallel is the cost of the accepted path; the shape
-// of this curve alone is the cost of the lock.
-func BenchmarkRecordParallelSuppressed(b *testing.B) {
-	exp := newLoadExporter()
-	em := newLoadEmitter(b, exp, WithFlushInterval(0))
-	ctxs := benchContexts(b, 1)
-	var calls atomic.Int64
-
-	em.Record(ctxs[0], "capture", biz.ResultFailed) // prime the de-dup set
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		// Counted locally and published once. A shared atomic incremented
-		// inside the loop is itself a contended cache line, and on a
-		// sub-microsecond operation it would be a meaningful share of what
-		// this benchmark reports as the emitter's lock cost.
-		var local int64
-		for pb.Next() {
-			em.Record(ctxs[0], "capture", biz.ResultFailed)
-			local++
-		}
-		calls.Add(local)
-	})
-	b.StopTimer()
-
-	if err := em.Close(context.Background()); err != nil {
-		b.Fatalf("close: %v", err)
-	}
-	if calls.Load() != int64(b.N) {
-		b.Fatalf("issued %d Record calls, b.N = %d", calls.Load(), b.N)
-	}
-	// Exactly the priming outcome reaches the sink: anything more means a
-	// call was accepted and this stopped being the suppression path.
-	if got := exp.events.Load(); got != 1 {
-		b.Fatalf("exported %d events, want exactly the primed 1 — calls were not suppressed", got)
-	}
-}
-
-// trackerIDs builds one private id block per goroutine slot so paired
-// Track/Done calls never collide across goroutines: a collision would let
-// one goroutine's Done remove another's entry and the drained-to-empty
-// check at the end would stop meaning anything.
-func trackerIDs(slots, perSlot int) [][]string {
-	ids := make([][]string, slots)
-	for s := range ids {
-		block := make([]string, perSlot)
-		for i := range block {
-			block[i] = fmt.Sprintf("m%03d_%04d", s, i)
-		}
-		ids[s] = block
-	}
-	return ids
-}
-
 func trackerItemCount(tr *InFlightTracker) int {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 	return len(tr.items)
-}
-
-const trackerSlots, trackerPerSlot = 256, 64
-
-// BenchmarkTrackerTrackDoneParallel is the queue-consumer hot path under
-// contention: Track on receive, Done on completion, from every consumer
-// goroutine at once against one shared tracker. InFlightTracker is a map
-// behind a single mutex, so this is where that mutex shows up. Sweep with
-// -cpu 1,2,4,8,18.
-func BenchmarkTrackerTrackDoneParallel(b *testing.B) {
-	ce := &countingEmitter{}
-	tr := NewInFlightTracker(ce, WithTrackerLogger(quietLogger()))
-	ids := trackerIDs(trackerSlots, trackerPerSlot)
-	now := time.Now()
-	var slot, calls atomic.Int64
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		// One atomic to claim an id block, one to publish the count, and
-		// none in between: a shared counter incremented every iteration
-		// would contend on its own cache line and this benchmark would end
-		// up reporting that contention as the tracker's.
-		block := ids[int(slot.Add(1)-1)%len(ids)]
-		var local int64
-		for pb.Next() {
-			id := block[local%int64(len(block))]
-			tr.Track("invoice.pay", "capture", id, usd(1499), now)
-			tr.Done("invoice.pay", "capture", id)
-			local++
-		}
-		calls.Add(local)
-	})
-	b.StopTimer()
-
-	if calls.Load() != int64(b.N) {
-		b.Fatalf("issued %d Track/Done pairs, b.N = %d", calls.Load(), b.N)
-	}
-	if n := trackerItemCount(tr); n != 0 {
-		b.Fatalf("%d items left in flight after %d paired Track/Done calls", n, calls.Load())
-	}
-	if tr.Overflowed() != 0 || tr.Rejected() != 0 {
-		b.Fatalf("tracker overflowed=%d rejected=%d: the measured path was not the accept path",
-			tr.Overflowed(), tr.Rejected())
-	}
 }
 
 // BenchmarkTrackerPublishScale is how long the tracker holds its mutex on a

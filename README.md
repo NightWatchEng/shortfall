@@ -300,10 +300,10 @@ M5 Pro / Go 1.27, medians of six samples:
 
 | | |
 |---|---|
-| `emit.Record`, accepted outcome | 2.2 µs on one core, 1.2 µs on eighteen |
-| `emit.Record` throughput ceiling | ~1M outcomes/s, reached at 8 cores — it does **not** scale past that |
-| `emit.InFlightTracker`, `Track`+`Done` | 57 ns uncontended; throughput *falls* to 0.19× as consumers are added |
-| Slow backend (25 ms/batch) | never reaches the caller — costs 81% of outcomes to counted drops instead |
+| `emit.Record`, accepted outcome | 2.3 µs on one core, 1.0 µs on eight |
+| `emit.Record` throughput ceiling | ~950k outcomes/s, reached at 8 cores — it does **not** scale past that |
+| `emit.InFlightTracker`, `Track`+`Done` | 56 ns uncontended; throughput *falls* to 0.19× as consumers are added |
+| Slow backend (25 ms/batch) | never reaches the caller as latency — it costs outcomes instead, dropped and counted |
 | `engine.Compute`, 2M events | 4.3 s, 4.35 GB allocated |
 
 **[docs/performance.md](docs/performance.md)** carries the methodology,
