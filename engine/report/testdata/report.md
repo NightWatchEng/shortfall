@@ -11,6 +11,7 @@ _Amounts are minor currency units (ADR-0001). Realized value and estimated value
 | Deferred → projected lost | deterministic | USD 500 |
 | Unrealized (counterfactual) | estimate | USD 2000 … USD 8000 (mid USD 5000) |
 
+> Unrealized note: assumes 60% recovery within 2h
 > Unrealized is an estimate range and must not be added to realized.
 
 ## Customers
