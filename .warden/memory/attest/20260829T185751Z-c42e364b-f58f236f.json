@@ -1,0 +1,285 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "c42e364bf5b7153dee15c093158b803339034253",
+  "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T18:57:51+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; rule bodies verbatim, review charter, reviewer-side memory recall: 7 docs-accuracy patterns)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; findings + package only, never the reviewer's reasoning; examiner-side recall: 1 precedent). Single arbiter; 3 findings reproduced empirically."
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "unmapped:duplicate-timeseries-per-request",
+      "tags": [
+        "duplicate-timeseries-per-request"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/monitoring.go",
+      "line": 162,
+      "severity": "HIGH",
+      "finding": "One TimeSeries emitted per input MetricPoint, so a request carried the same series (identical metric type, labels, resource) many times. CreateTimeSeries rejects such a request whole, so the metric path would have failed under any real traffic.",
+      "evidence": "emit does no per-series coalescing: Record appends a point per call, Flush hands the slice over unchanged, and the dedup set keys on entity, so many distinct entities share one label set. Reproduced: three identical-label biz_txn_total points produced 3 series in 1 request with byte-identical type, labels, resource, startTime and endTime.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "Batches are aggregated per series before sending (aggregate): counter deltas sum, gauges keep the newest level. Round-2 re-review verdicted addressed and proved the key<->(type,labels) mapping is a bijection and that the gauge stale-guard skip cannot desynchronise series from pending. Mutation-proven: forcing a unique key per point fails TestNoRequestEverCarriesDuplicateSeries with 1000 series for 2 label sets. The original tests could not have caught this \u2014 TestBatchesChunkToServiceLimit minted a distinct label per point and conformance's sampleMetrics gives every point a distinct currency, so both fixtures guaranteed unique series.",
+      "id": "d8572db2560e43d3"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "unmapped:cumulative-total-not-writer-scoped",
+      "tags": [
+        "cumulative-total-not-writer-scoped"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/monitoring.go",
+      "line": 175,
+      "severity": "HIGH",
+      "finding": "Cumulative totals were written against a `global` monitored resource carrying only project_id. A series is keyed by metric labels plus resource, and the ADR-0004 label sets carry no writer identity, so N replicas wrote ONE series from N independent running totals with N start times \u2014 garbage for biz_value_total, which is realized money \u2014 with no option to fix it externally.",
+      "evidence": "monitoring.go:175 hardcoded {Type: \"global\", Labels: {project_id}} with a per-process running total and per-process start time. gcp.go's option set had no resource knob. The package doc names Cloud Run and GKE, which autoscale by default.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "The default resource is now a generic_task with a per-process task_id (hostname-pid, falling back to unknown-pid if Hostname fails), so each replica owns its series and a query sums across task_id. WithResource overrides it for deployments that describe themselves more precisely, and its doc states the writer-identity requirement. Round-2 re-review verdicted addressed and confirmed the full required generic_task label set is present; mutation-proven by flipping the default back to global. docs/adapters.md carries the sum-across-task_id instruction.",
+      "id": "8e5dbb8626531e06"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "unmapped:double-count-on-retry",
+      "tags": [
+        "double-count-on-retry"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/monitoring.go",
+      "line": 196,
+      "severity": "MEDIUM",
+      "finding": "Counter deltas were banked into the running total before the POST. emit re-credits failed biz_dropped_events_total deltas on the explicit assumption that a failed export never left the process, so each failed flush banked the same delta again and the published cumulative total became a multiple of the true count.",
+      "evidence": "m.totals[key] += p.Value ran for the whole batch before post. emit/emitter.go Flush: 'Preserve the drop counters: they are the record of damage and never left the process, so re-crediting cannot double-count.' Reproduced: a 503 then a retry of a 5-drop delta published int64Value \"10\" for a true count of 5.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "export now builds against committed state, posts, and commits only what landed. Round 2 found the first fix incomplete across chunk boundaries (a landed chunk banked a drop delta emit then handed back), so the two state families now commit at different points: ordinary counter deltas per landed chunk (a cumulative series may not later republish a lower total), re-credited deltas only after every chunk lands. Round-3 re-review verdicted addressed, confirmed biz_dropped_events_total is the only re-credited family, and confirmed the opposite bug is absent \u2014 on failure the next flush republishes an equal, never lower, total.",
+      "id": "5d79b1f534624eac"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "unmapped:gauge-guard-advanced-before-send",
+      "tags": [
+        "gauge-guard-advanced-before-send"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/monitoring.go",
+      "line": 184,
+      "severity": "LOW",
+      "finding": "The gauge stale-guard advanced in seriesFor while the level was published only in post, so an undelivered level suppressed the next older sample although nothing for that series was ever published.",
+      "evidence": "Reproduced: a newer inflight sample POSTed against a 500 advanced the guard, and the following older sample was suppressed \u2014 the second export issued no request at all.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "m.gaugeAt is now written only in commit, after a successful post. Round-2 re-review confirmed equal-timestamp and per-family-key semantics still match adapters/export/prometheus exactly. Mutation-proven by TestFailedSendDoesNotAdvanceTheGaugeGuard.",
+      "id": "27cd3ea2774d63cf"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/logging.go",
+      "line": 15,
+      "severity": "LOW",
+      "finding": "Present-tense claim that a query adapter parses this record shape, when no GCP query adapter exists.",
+      "evidence": "'...and the query adapter parses one shape.' adapters/query holds only cwinsights (CloudWatch, SigV4), promql, and sql \u2014 none reads a Cloud Logging entry.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "Reworded to state the EMF mirroring as the fact it is. Round-2 re-review verified the payload field set is identical to adapters/export/cloudwatch/emf.go field for field, and that nothing unlanded is now claimed.",
+      "id": "489e81ef3d70b140"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/conformance_test.go",
+      "line": 18,
+      "severity": "LOW",
+      "finding": "Misleading comment crediting the conformance suite with concurrency; the suite is strictly sequential.",
+      "evidence": "testkit/conformance contains no `go` statement and RunExporter's subtests never call t.Parallel.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "Now cites emit's overlapping-flush contract, as the cloudwatch sibling does. The lock is retained and correctly justified.",
+      "id": "b9ce73140b1ab63e"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "tests-required",
+      "tags": [
+        "tests-required"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/gcp.go",
+      "line": 83,
+      "severity": "LOW",
+      "finding": "New exported option WithMetricPrefix had no test; neither the override path nor the empty-string fallback was exercised.",
+      "evidence": "A repo-wide grep returned only the declaration and its doc comment.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "TestMetricPrefixIsConfigurable covers the default, an explicit default, and two discriminating custom prefixes; the new WithResource is covered by TestWithResourceOverrides and TestWithResourceCopiesItsLabels. Round-3 re-review confirmed all three are non-vacuous under mutation.",
+      "id": "faea6e2301593e6d"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "unmapped:partial-chunk-recredit-double-count",
+      "tags": [
+        "double-count-on-retry"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/monitoring.go",
+      "line": 203,
+      "severity": "LOW",
+      "finding": "Raised by the round-2 re-review against round 1's own fix: committing per landed chunk still double-counts across a chunk boundary, because emit re-credits biz_dropped_events_total on any error from the call. Reachable in practice \u2014 Flush appends the drop points last, so they straddle the 200-series boundary.",
+      "evidence": "With >200 aggregated series, a drop delta committed in a landed chunk one of a batch whose chunk two failed was banked AND handed back by emit.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "The two state families now commit at different points (commit / commitRecredited, partitioned by isRecredited). Round-3 re-review verdicted addressed, confirmed the partition is exhaustive and single-entry, confirmed emit re-credits no other family, and confirmed no lost-delta inverse bug. Mutation-proven: including re-credited deltas in the per-chunk commit fails the new test with \"10\" for a true count of 5.",
+      "id": "e0ad695497fca187"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/aggregation_test.go",
+      "line": 272,
+      "severity": "MEDIUM",
+      "finding": "Raised by the round-2 re-review against round 1's own test: TestPartialChunkFailureCommitsOnlyWhatLanded passed against the exact behaviour it was named to catch \u2014 a test named for a bug it could not detect.",
+      "evidence": "It accepted either \"1\" or \"2\" from every series and pinned only d.series[0], which reads \"1\" in both the fixed and pre-fix worlds; the single differing value was the last element. Confirmed green under the commit-before-post mutation that fails the other two tests.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "Replaced with TestPartialChunkFailureDoesNotDoubleCountRecreditedDeltas, which asserts the drop total specifically and also asserts that a landed ordinary counter does advance. Round-3 re-review ran the mutations and confirmed it fails with \"10\" vs 5 under the recredit-per-chunk mutation, and that the round-1 tests remain non-vacuous after the refactor.",
+      "id": "2e0a79e93ef84e00"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/aggregation_test.go",
+      "line": 266,
+      "severity": "MEDIUM",
+      "finding": "Raised by the round-2 re-review: that test's comment stated the inverse of the behaviour, claiming a landed chunk republishes at the same total rather than double. It does advance, correctly, because the delta really was re-sent.",
+      "evidence": "Instrumented run against unmodified HEAD: reason=r0 published at \"1\" then \"2\" on retry; only the failed chunk's series stayed at \"1\".",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "The replacement test's comment states both halves correctly and the test asserts both: the drop total stays 5, the ordinary txn total goes to 2. Round-3 re-review verified every claim in the new comment against the code.",
+      "id": "828be1f5f844a76a"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/gcp/aggregation_test.go",
+      "line": 204,
+      "severity": "LOW",
+      "finding": "Raised by the round-3 re-review as LOW and explicitly parkable: a table-test comment attributed re-crediting to emit for a family emit does not re-credit.",
+      "evidence": "The comment sat over a two-family table; emit re-credits only biz_dropped_events_total, while a failed biz_txn_total batch is logged and dropped, so that case's second export is purely a caller-driven re-send. The assertion was already correct; only the narration over-generalised.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "Fixed rather than parked: a one-line comment reword with no behavioural effect, re-verified by a full verify --scope core on the resulting commit.",
+      "id": "515aa0a7231f8184"
+    },
+    {
+      "ts": "2026-08-29T18:57:51+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "c42e364bf5b7153dee15c093158b803339034253",
+      "base_sha": "0cbd45e689dceb8a7b5c1840e5516af0b211d3eb",
+      "rule_id": "unmapped:recredit-coupling-untested",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter.go",
+      "line": 299,
+      "severity": "LOW",
+      "finding": "Raised by the round-3 re-review as LOW and explicitly non-blocking: this adapter's asymmetric commit policy depends on emit's re-credit branch, and that branch has no test on either side.",
+      "evidence": "emit's only failure-injection test (TestExportFailureCountsDrops) runs a failing batch that carries no biz_dropped_events_total point \u2014 dropCounts is drained before the exports \u2014 so the re-credit loop adds nothing. If emit silently stopped re-crediting, the adapter would keep deferring and drop deltas from a partially-failed batch would be lost, with no test failing.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-vhc.1",
+      "reason": "PARKED as workspace-ozy, not dismissed on the merits. The defect is in emit/, which this branch does not touch (branch diff: README.md, adapters/export/gcp/**, docs/adapters.md, go.work, test/docsnippets). The code in this branch is correct as written; the bead carries the missing coverage and names the coupling so the adapter's commit policy cannot be silently invalidated.",
+      "id": "7f9294e018a0a6cf"
+    }
+  ]
+}

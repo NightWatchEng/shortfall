@@ -19,15 +19,17 @@ var checkedDocs = map[string]string{
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/NightWatchEng/shortfall/engine"
 	"github.com/NightWatchEng/shortfall/registry"
 )
 
 var (
-	ctx = context.Background()
-	reg registry.Registry
-	req engine.Request
+	ctx          = context.Background()
+	reg          registry.Registry
+	req          engine.Request
+	authedClient *http.Client
 )
 `,
 	"docs/integration-webhook-lambdas.md": `package docsnippet

@@ -83,6 +83,38 @@ CREATE TABLE biz_outcomes (
 |---|---|---|---|
 | `adapters/export/prometheus` | ✅ | — | Prometheus (scrape) |
 | `adapters/export/cloudwatch` | ✅ | ✅ | CloudWatch (EMF / PutMetricData) |
+| `adapters/export/gcp` | ✅¹ | ✅ | Google Cloud (Cloud Monitoring / Cloud Logging) |
+
+¹ The GCP adapter reports `Metrics: false` until a monitoring client is
+configured. Cloud Logging does not extract metrics from log entries the way
+CloudWatch EMF does, so the two paths are independent: outcome events need no
+credentials at all (structured JSON on stdout, which the logging agent
+collects), while the metric families are written to Cloud Monitoring's
+`timeSeries.create` API. Every point is `INT64` — amounts cross the wire as
+proto3 quoted integers, never as a double.
+
+Two consequences of Cloud Monitoring's data model are worth knowing before
+you read a dashboard built on it:
+
+- **Counters are cumulative, per writer.** A custom counter is `CUMULATIVE`, a
+  running total over an interval, so the adapter accumulates the deltas `emit`
+  produces. A series is keyed by its metric labels *and* its monitored
+  resource, and the ADR-0004 label sets carry no writer identity — so the
+  default resource is a `generic_task` with a per-process `task_id`, giving
+  every replica its own series. **Sum across `task_id`** to get the fleet
+  total. `WithResource` overrides the resource for a deployment that wants to
+  describe itself more precisely (`k8s_container`, `gce_instance`); whatever
+  you pass must still distinguish one writer from another, or replicas will
+  overwrite each other's running totals.
+- **One point per series per request.** `CreateTimeSeries` rejects a whole
+  request that carries the same series twice, and `emit` hands the exporter
+  many points on one series per flush. The adapter therefore aggregates a
+  batch per series before sending: counter deltas sum, gauges keep the newest
+  level. Accumulator state is committed only for what landed — an ordinary
+  counter per delivered chunk (its points are published, and a cumulative
+  series may not later republish a lower total), and the `biz_dropped_events_total`
+  deltas only once the whole batch has landed, because `emit` hands those
+  back on any export error and a chunk-scoped commit would count them twice.
 
 Pair a metrics exporter with an events exporter (or use one that does both) to
 ground every leg. The exporter you write ships the same fixed `biz_*` families
@@ -101,6 +133,16 @@ em.Record(ctx, "auth", biz.ResultSuccess)
 
 ```go
 exp := cloudwatch.New()    // EMF metrics + events to CloudWatch Logs
+em, _ := emit.New(&reg, exp)
+defer em.Close(ctx)
+```
+
+```go
+// GCP: outcome events to Cloud Logging via stdout (no credentials), and the
+// metric families to Cloud Monitoring through an authenticated client the
+// caller supplies — google.DefaultClient in production, so this module never
+// pulls a cloud SDK.
+exp := gcp.New(gcp.WithMonitoring("my-project", authedClient))
 em, _ := emit.New(&reg, exp)
 defer em.Close(ctx)
 ```
