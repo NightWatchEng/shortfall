@@ -77,7 +77,7 @@ jobs:
         env:
           SHORTFALL_GOLDEN: "1"
         run: go test -timeout 300s ./...
-      - name: go test (live Loki + LocalStack golden harness)
+      - name: go test (live LocalStack golden harness)
         working-directory: test/loggolden
         env:
           SHORTFALL_GOLDEN: "1"

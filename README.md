@@ -20,9 +20,8 @@ because a number Finance cannot audit is a number Finance will not use.
 ## Why it's easy to adopt
 
 - **Your backend, not a new one.** Signals ship through export adapters
-  (OTLP, Prometheus, CloudWatch EMF, Datadog, StatsD, Splunk HEC, Loki)
-  and reports read back through query adapters — no new datastore, no
-  agent, no service to run.
+  (Prometheus, CloudWatch EMF) and reports read back through query
+  adapters — no new datastore, no agent, no service to run.
 - **No dependency bloat.** The core module has no heavy deps; every
   adapter is its own nested Go module, so a Prometheus user never pulls
   a payments SDK.
@@ -102,10 +101,9 @@ Where step 1 exported decides how you read back:
 - **CloudWatch** — the EMF records from step 1 are already in CloudWatch
   Logs; a small reporting job reads them back with the `cwinsights`
   querier, hands it to `engine.Compute`, and renders the same report.
-  Loki (`logql`) and Splunk (`spl`) work the same way. These
-  are event stores, so they ground realized loss and customer impact;
-  pair them with a promql-readable metrics store to ground the deferred
-  and unrealized legs too.
+  CloudWatch Logs is an event store, so it grounds realized loss and
+  customer impact; pair it with a promql-readable metrics store to
+  ground the deferred and unrealized legs too.
 
 Out come the four legs, each labelled by its evidence: **realized loss**
 (failed transactions summed, de-duplicated by entity), **deferred
@@ -127,8 +125,8 @@ backend-to-leg matrix.
 | Instrument | `ValueContext`, int64 minor-unit `Money`, the PII guard | `biz` |
 | Record | `Record` per stage, `InFlightTracker`/`SetInFlight` backlog gauges, `Flush` | `emit` |
 | Propagate | HTTP Baggage middleware + egress-fenced Transport; Kafka, SQS, AMQP carriers | `propagate/*` |
-| Export | OTLP, Prometheus, CloudWatch EMF, Datadog, StatsD, Splunk HEC, Loki | `adapters/export/*` |
-| Query back | `promql` (metrics); `sql`, `logql`, `cwinsights`, `spl` (events) | `adapters/query/*` |
+| Export | Prometheus (metrics), CloudWatch EMF (metrics + events) | `adapters/export/*` |
+| Query back | `promql` (metrics); `cwinsights`, `sql` (events) | `adapters/query/*` |
 | Compute & render | four legs + coverage + suggested severity, as text/JSON/markdown | `engine`, `cmd/shortfall` |
 | Reconcile | Stripe ledger reconciler feeding the coverage ratio | `adapters/payment/stripe` |
 | Notify | impact writers for PagerDuty, incident.io, FireHydrant, Rootly, Slack | `adapters/incident/*` |

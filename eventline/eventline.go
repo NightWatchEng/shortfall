@@ -1,8 +1,8 @@
 // Package eventline decodes the exporters' shared biz.* outcome line — the
-// JSON shape the Loki, CloudWatch EMF, and Splunk HEC exporters all write
-// (docs/semconv.md) — back into a biz.Outcome. It is the read half of that
-// convention: the log-store queriers (logql, cwinsights, spl) fetch raw
-// lines, parse them here, and delegate aggregation to the memq reference.
+// JSON shape the CloudWatch EMF exporter writes (docs/semconv.md) — back
+// into a biz.Outcome. It is the read half of that convention: the
+// log-store querier (cwinsights) fetches raw lines, parses them here, and
+// delegates aggregation to the memq reference.
 package eventline
 
 import (

@@ -1,10 +1,10 @@
-// Package loggolden proves the log-store queriers return the same
+// Package loggolden proves the log-store querier returns the same
 // EventGroups as the in-memory reference for a golden scenario's real
-// export wire formats: the loki exporter's push into a live Loki for
-// logql, and the cloudwatch exporter's EMF records put into a live
-// LocalStack log group (metric records included, so the outcome-marker
-// discrimination is exercised) for cwinsights. It lives in its own module
-// so Docker-orchestration test deps never touch the adapters' go.mod.
+// export wire format: the cloudwatch exporter's EMF records put into a
+// live LocalStack log group (metric records included, so the
+// outcome-marker discrimination is exercised) for cwinsights. It lives
+// in its own module so Docker-orchestration test deps never touch the
+// adapters' go.mod.
 package loggolden
 
 import (
@@ -13,10 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"math"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"sort"
@@ -25,11 +22,7 @@ import (
 	"time"
 
 	cwexport "github.com/NightWatchEng/shortfall/adapters/export/cloudwatch"
-	lokiexp "github.com/NightWatchEng/shortfall/adapters/export/loki"
-	"github.com/NightWatchEng/shortfall/adapters/export/splunkhec"
 	"github.com/NightWatchEng/shortfall/adapters/query/cwinsights"
-	"github.com/NightWatchEng/shortfall/adapters/query/logql"
-	"github.com/NightWatchEng/shortfall/adapters/query/spl"
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/examples/checkout"
 	"github.com/NightWatchEng/shortfall/query"
@@ -37,10 +30,7 @@ import (
 	"github.com/NightWatchEng/shortfall/testkit"
 )
 
-const (
-	lokiImage       = "grafana/loki:3.1.1"
-	localstackImage = "localstack/localstack:3.8"
-)
+const localstackImage = "localstack/localstack:3.8"
 
 // scenarioEvents runs the api-5xx golden locus over a recent window (both
 // stores age-bound ingest) and returns the telemetry-visible events plus
@@ -163,23 +153,6 @@ func waitHTTP(t *testing.T, url, needle string) {
 	t.Fatalf("%s never became ready", url)
 }
 
-// TestLogQLParityAgainstRealLoki exports the scenario through the real loki
-// exporter into a live Loki and asserts the logql querier matches memq.
-func TestLogQLParityAgainstRealLoki(t *testing.T) {
-	requireDocker(t, lokiImage)
-	base := startContainer(t, lokiImage, "3100", nil)
-	waitHTTP(t, base+"/ready", "ready")
-
-	events, window := scenarioEvents()
-	exp := lokiexp.New(base + "/loki/api/v1/push")
-	if err := exp.ExportEvents(context.Background(), events); err != nil {
-		t.Fatalf("loki export: %v", err)
-	}
-	time.Sleep(2 * time.Second) // ingest settles
-
-	assertParity(t, "logql", logql.New(base), events, window)
-}
-
 // TestCWInsightsParityAgainstLocalStack renders the scenario through the
 // real cloudwatch exporter (EMF: metric AND event records, so the
 // outcome-marker discrimination is live) and puts the records into a
@@ -262,66 +235,4 @@ func (r *rawLogs) call(t *testing.T, action string, body map[string]any) {
 		n, _ := resp.Body.Read(out)
 		t.Fatalf("%s: status %d: %s", action, resp.StatusCode, out[:n])
 	}
-}
-
-// TestSPLParityOverHECGolden closes the SPL loop without a Splunk
-// container: the scenario ships through the real splunkhec exporter into a
-// capture server, the captured HEC records are replayed as the export
-// endpoint's NDJSON (the shape Splunk serves back), and the spl querier
-// must match memq. No SHORTFALL_GOLDEN gate — this runs everywhere.
-func TestSPLParityOverHECGolden(t *testing.T) {
-	events, window := scenarioEvents()
-
-	// Capture what the real exporter ships.
-	var hecLines []string
-	capture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		body, _ := io.ReadAll(req.Body)
-		for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
-			if line != "" {
-				hecLines = append(hecLines, line)
-			}
-		}
-		_, _ = fmt.Fprint(w, `{"text":"Success","code":0}`)
-	}))
-	defer capture.Close()
-	exp := splunkhec.New(capture.URL, "hec-token")
-	if err := exp.ExportEvents(context.Background(), events); err != nil {
-		t.Fatalf("splunkhec export: %v", err)
-	}
-	if len(hecLines) != len(events) {
-		t.Fatalf("captured %d HEC records for %d events", len(hecLines), len(events))
-	}
-
-	// Replay them the way Splunk's export endpoint serves results: _raw is
-	// the HEC event object, _time the HEC time.
-	var ndjson strings.Builder
-	for _, line := range hecLines {
-		var rec struct {
-			Time  json.Number     `json:"time"`
-			Event json.RawMessage `json:"event"`
-		}
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
-			t.Fatalf("HEC record: %v", err)
-		}
-		secs, err := rec.Time.Float64()
-		if err != nil {
-			t.Fatalf("HEC time: %v", err)
-		}
-		at := time.UnixMilli(int64(math.Round(secs * 1000))).UTC()
-		row, _ := json.Marshal(map[string]any{
-			"preview": false,
-			"result": map[string]string{
-				"_raw":  string(rec.Event),
-				"_time": at.Format("2006-01-02T15:04:05.000-07:00"),
-			},
-		})
-		ndjson.Write(row)
-		ndjson.WriteString("\n")
-	}
-	splunk := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, ndjson.String())
-	}))
-	defer splunk.Close()
-
-	assertParity(t, "spl", spl.New(splunk.URL, "token"), events, window)
 }
