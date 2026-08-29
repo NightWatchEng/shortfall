@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -111,6 +112,41 @@ type (
 	}
 )
 
+// defaultResource identifies this process as the writer of its cumulative
+// series. Cloud Monitoring keys a series by metric type, metric labels, and
+// resource — and the ADR-0004 label sets carry no writer identity — so two
+// replicas sharing one resource would write one series from two independent
+// running totals, each with its own start time. generic_task with a
+// per-process task_id gives every replica its own series; a query sums across
+// task_id to get the fleet total.
+func defaultResource(projectID string) monitoredRes {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = "unknown"
+	}
+	return monitoredRes{
+		Type: "generic_task",
+		Labels: map[string]string{
+			"project_id": projectID,
+			"location":   "global",
+			"namespace":  "shortfall",
+			"job":        "shortfall",
+			"task_id":    fmt.Sprintf("%s-%d", host, os.Getpid()),
+		},
+	}
+}
+
+// aggPoint is one series' contribution from a single batch: counter deltas
+// summed, gauge levels reduced to the newest sample.
+type aggPoint struct {
+	name   string
+	key    string
+	labels map[string]string
+	gauge  bool
+	value  int64 // counters: the summed delta; gauges: the newest level
+	at     time.Time
+}
+
 // monitoringClient writes custom time series to Cloud Monitoring.
 //
 // Counter families arrive as deltas but Cloud Monitoring's custom metrics
@@ -121,19 +157,27 @@ type monitoringClient struct {
 	projectID string
 	endpoint  string
 	prefix    string
+	resource  monitoredRes
 	doer      Doer
 	start     time.Time
 
+	// mu is held for a whole export: totals are read, sent, and only then
+	// committed, so two concurrent exports computing from one committed base
+	// would publish a delta twice.
 	mu      sync.Mutex
-	totals  map[string]int64     // series key -> cumulative total
-	gaugeAt map[string]time.Time // series key -> newest level applied
+	totals  map[string]int64     // series key -> committed cumulative total
+	gaugeAt map[string]time.Time // series key -> newest level delivered
 }
 
-func newMonitoringClient(projectID, endpoint, prefix string, doer Doer) *monitoringClient {
+func newMonitoringClient(projectID, endpoint, prefix string, res monitoredRes, doer Doer) *monitoringClient {
+	if res.Type == "" {
+		res = defaultResource(projectID)
+	}
 	return &monitoringClient{
 		projectID: projectID,
 		endpoint:  strings.TrimRight(endpoint, "/"),
 		prefix:    prefix,
+		resource:  res,
 		doer:      doer,
 		start:     time.Now().UTC(),
 		totals:    map[string]int64{},
@@ -141,67 +185,122 @@ func newMonitoringClient(projectID, endpoint, prefix string, doer Doer) *monitor
 	}
 }
 
-// export converts the batch to time series and writes them in chunks the
-// service will accept.
+// export aggregates the batch, sends it in chunks the service accepts, and
+// commits accumulator state only for chunks that actually landed. Committing
+// before the send would inflate the next published total after a failure —
+// emit re-credits failed biz_dropped_events_total deltas on the stated
+// assumption that a failed export never left the process.
 func (m *monitoringClient) export(ctx context.Context, batch []emit.MetricPoint) error {
-	series, err := m.seriesFor(batch)
+	agg, err := aggregate(batch)
 	if err != nil {
 		return err
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	series, pending := m.build(agg)
 	for start := 0; start < len(series); start += maxSeriesPerRequest {
 		end := min(start+maxSeriesPerRequest, len(series))
 		if err := m.post(ctx, series[start:end]); err != nil {
 			return err
 		}
+		m.commit(pending[start:end])
 	}
 	return nil
 }
 
-// seriesFor converts points to time series under the accumulator lock, so a
-// concurrent flush cannot interleave two reads of one running total.
-func (m *monitoringClient) seriesFor(batch []emit.MetricPoint) ([]timeSeries, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	out := make([]timeSeries, 0, len(batch))
+// aggregate reduces a batch to one entry per series, which is what the API
+// requires: a request carrying two time series with the same metric labels
+// and resource is rejected whole, and emit hands the exporter many points on
+// one series per flush. Counter deltas sum; gauges keep the newest level,
+// with a tie going to the later point in the batch.
+func aggregate(batch []emit.MetricPoint) ([]aggPoint, error) {
+	out := make([]aggPoint, 0, len(batch))
+	index := make(map[string]int, len(batch))
 	for _, p := range batch {
 		labels := labelsFor(p.Name)
 		if labels == nil {
 			return nil, &unknownFamilyError{name: p.Name}
 		}
-		key := seriesKey(p.Name, p.Labels, labels)
-		ts := timeSeries{
-			Metric:    metricDescriptor{Type: m.metricType(p.Name), Labels: labelValues(p.Labels, labels)},
-			Resource:  monitoredRes{Type: "global", Labels: map[string]string{"project_id": m.projectID}},
-			ValueType: "INT64",
-		}
-		if isGauge(p.Name) {
-			// A stale sample from an overlapping flush must not overwrite a
-			// fresher level (emit's order-by-At contract).
-			if last, ok := m.gaugeAt[key]; ok && p.At.Before(last) {
-				continue
-			}
-			m.gaugeAt[key] = p.At
-			ts.MetricKind = "GAUGE"
-			ts.Points = []point{{
-				Interval: interval{EndTime: rfc3339(p.At)},
-				Value:    pointValue{Int64Value: strconv.FormatInt(p.Value, 10)},
-			}}
-			out = append(out, ts)
-			continue
-		}
-		if p.Value < 0 {
+		gauge := isGauge(p.Name)
+		if !gauge && p.Value < 0 {
 			return nil, fmt.Errorf("gcp: negative delta %d for counter family %q — counters only increase", p.Value, p.Name)
 		}
-		m.totals[key] += p.Value
-		ts.MetricKind = "CUMULATIVE"
-		ts.Points = []point{{
-			Interval: interval{StartTime: rfc3339(m.start), EndTime: rfc3339(m.endAfterStart(p.At))},
-			Value:    pointValue{Int64Value: strconv.FormatInt(m.totals[key], 10)},
-		}}
-		out = append(out, ts)
+		key := seriesKey(p.Name, p.Labels, labels)
+		i, seen := index[key]
+		if !seen {
+			index[key] = len(out)
+			out = append(out, aggPoint{
+				name:   p.Name,
+				key:    key,
+				labels: labelValues(p.Labels, labels),
+				gauge:  gauge,
+				value:  p.Value,
+				at:     p.At,
+			})
+			continue
+		}
+		if gauge {
+			if !p.At.Before(out[i].at) {
+				out[i].value = p.Value
+				out[i].at = p.At
+			}
+			continue
+		}
+		out[i].value += p.Value
+		if p.At.After(out[i].at) {
+			out[i].at = p.At
+		}
 	}
 	return out, nil
+}
+
+// build renders the aggregated points against committed state without
+// mutating it, returning the series to send and the state to commit once
+// they land. Callers hold m.mu.
+func (m *monitoringClient) build(agg []aggPoint) ([]timeSeries, []aggPoint) {
+	series := make([]timeSeries, 0, len(agg))
+	pending := make([]aggPoint, 0, len(agg))
+	for _, a := range agg {
+		ts := timeSeries{
+			Metric:    metricDescriptor{Type: m.metricType(a.name), Labels: a.labels},
+			Resource:  m.resource,
+			ValueType: "INT64",
+		}
+		if a.gauge {
+			// A stale sample from an overlapping flush must not overwrite a
+			// fresher level (emit's order-by-At contract).
+			if last, ok := m.gaugeAt[a.key]; ok && a.at.Before(last) {
+				continue
+			}
+			ts.MetricKind = "GAUGE"
+			ts.Points = []point{{
+				Interval: interval{EndTime: rfc3339(a.at)},
+				Value:    pointValue{Int64Value: strconv.FormatInt(a.value, 10)},
+			}}
+		} else {
+			ts.MetricKind = "CUMULATIVE"
+			ts.Points = []point{{
+				Interval: interval{StartTime: rfc3339(m.start), EndTime: rfc3339(m.endAfterStart(a.at))},
+				Value:    pointValue{Int64Value: strconv.FormatInt(m.totals[a.key]+a.value, 10)},
+			}}
+		}
+		series = append(series, ts)
+		pending = append(pending, a)
+	}
+	return series, pending
+}
+
+// commit records delivered state. Callers hold m.mu.
+func (m *monitoringClient) commit(delivered []aggPoint) {
+	for _, a := range delivered {
+		if a.gauge {
+			m.gaugeAt[a.key] = a.at
+			continue
+		}
+		m.totals[a.key] += a.value
+	}
 }
 
 // endAfterStart keeps a cumulative interval non-empty: the service rejects a

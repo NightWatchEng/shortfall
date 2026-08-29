@@ -90,10 +90,28 @@ configured. Cloud Logging does not extract metrics from log entries the way
 CloudWatch EMF does, so the two paths are independent: outcome events need no
 credentials at all (structured JSON on stdout, which the logging agent
 collects), while the metric families are written to Cloud Monitoring's
-`timeSeries.create` API. Counter families are accumulated in-process and sent
-as `CUMULATIVE`; the two in-flight families are sent as `GAUGE`. Every point
-is `INT64` — amounts cross the wire as proto3 quoted integers, never as a
-double.
+`timeSeries.create` API. Every point is `INT64` — amounts cross the wire as
+proto3 quoted integers, never as a double.
+
+Two consequences of Cloud Monitoring's data model are worth knowing before
+you read a dashboard built on it:
+
+- **Counters are cumulative, per writer.** A custom counter is `CUMULATIVE`, a
+  running total over an interval, so the adapter accumulates the deltas `emit`
+  produces. A series is keyed by its metric labels *and* its monitored
+  resource, and the ADR-0004 label sets carry no writer identity — so the
+  default resource is a `generic_task` with a per-process `task_id`, giving
+  every replica its own series. **Sum across `task_id`** to get the fleet
+  total. `WithResource` overrides the resource for a deployment that wants to
+  describe itself more precisely (`k8s_container`, `gce_instance`); whatever
+  you pass must still distinguish one writer from another, or replicas will
+  overwrite each other's running totals.
+- **One point per series per request.** `CreateTimeSeries` rejects a whole
+  request that carries the same series twice, and `emit` hands the exporter
+  many points on one series per flush. The adapter therefore aggregates a
+  batch per series before sending: counter deltas sum, gauges keep the newest
+  level. Accumulator state is committed only after the request it belongs to
+  has landed, so a failed export never inflates the next published total.
 
 Pair a metrics exporter with an events exporter (or use one that does both) to
 ground every leg. The exporter you write ships the same fixed `biz_*` families

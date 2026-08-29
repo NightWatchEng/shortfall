@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -282,3 +284,146 @@ func TestShutdownSurfacesFlushErrors(t *testing.T) {
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+// TestMetricPrefixIsConfigurable covers the override and its empty-string
+// fallback, and pins that the family's biz_ prefix is what gets replaced.
+func TestMetricPrefixIsConfigurable(t *testing.T) {
+	cases := []struct {
+		name   string
+		prefix string
+		want   string
+	}{
+		{"default prefix", "", "custom.googleapis.com/biz/txn_total"},
+		{"explicit default", "custom.googleapis.com/biz/", "custom.googleapis.com/biz/txn_total"},
+		{"custom domain prefix", "custom.googleapis.com/acme/money/", "custom.googleapis.com/acme/money/txn_total"},
+		{"external metric prefix", "external.googleapis.com/prometheus/", "external.googleapis.com/prometheus/txn_total"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := &recordingDoer{}
+			opts := []func(*Options){
+				WithWriter(io.Discard),
+				WithMonitoring("proj-1", d),
+				WithMonitoringEndpoint("https://monitoring.example"),
+			}
+			if c.prefix != "" {
+				opts = append(opts, WithMetricPrefix(c.prefix))
+			}
+			pt := emit.MetricPoint{
+				Name:   "biz_txn_total",
+				Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
+				Value:  1, At: testTime,
+			}
+			if err := New(opts...).ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
+				t.Fatalf("export: %v", err)
+			}
+			if got := d.allSeries()[0].Metric.Type; got != c.want {
+				t.Errorf("metric type = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestCumulativeSeriesAreWriterScoped pins that the monitored resource
+// distinguishes one writer from another. Cloud Monitoring keys a series by
+// metric type, metric labels, and resource — and the ADR-0004 label sets carry
+// no writer identity — so a resource shared across replicas would put N
+// independent running totals, each with its own start time, on one series.
+func TestCumulativeSeriesAreWriterScoped(t *testing.T) {
+	d := &recordingDoer{}
+	e, _ := newTestExporter(t, d)
+	pt := emit.MetricPoint{
+		Name:   "biz_txn_total",
+		Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
+		Value:  1, At: testTime,
+	}
+	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	res := d.allSeries()[0].Resource
+	if res.Type == "global" {
+		t.Error("resource type is global — it carries no writer identity, so replicas share one cumulative series")
+	}
+	taskID := res.Labels["task_id"]
+	if taskID == "" {
+		t.Fatal("resource carries no task_id — replicas would overwrite each other's running totals")
+	}
+	if !strings.Contains(taskID, strconv.Itoa(os.Getpid())) {
+		t.Errorf("task_id = %q, want it to distinguish this process (pid %d)", taskID, os.Getpid())
+	}
+	if res.Labels["project_id"] != "proj-1" {
+		t.Errorf("resource project_id = %q, want proj-1", res.Labels["project_id"])
+	}
+}
+
+func TestWithResourceOverrides(t *testing.T) {
+	cases := []struct {
+		name    string
+		resType string
+		labels  map[string]string
+	}{
+		{
+			name:    "k8s container",
+			resType: "k8s_container",
+			labels:  map[string]string{"project_id": "proj-1", "pod_name": "payments-7d9", "container_name": "app"},
+		},
+		{
+			name:    "gce instance",
+			resType: "gce_instance",
+			labels:  map[string]string{"project_id": "proj-1", "instance_id": "1234567890"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := &recordingDoer{}
+			e := New(
+				WithWriter(io.Discard),
+				WithMonitoring("proj-1", d),
+				WithMonitoringEndpoint("https://monitoring.example"),
+				WithResource(c.resType, c.labels),
+			)
+			pt := emit.MetricPoint{
+				Name:   "biz_dropped_events_total",
+				Labels: map[string]string{"reason": "export"},
+				Value:  1, At: testTime,
+			}
+			if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
+				t.Fatalf("export: %v", err)
+			}
+			res := d.allSeries()[0].Resource
+			if res.Type != c.resType {
+				t.Errorf("resource type = %q, want %q", res.Type, c.resType)
+			}
+			for k, want := range c.labels {
+				if res.Labels[k] != want {
+					t.Errorf("resource label %s = %q, want %q", k, res.Labels[k], want)
+				}
+			}
+		})
+	}
+}
+
+// TestWithResourceCopiesItsLabels pins that a caller mutating its map after
+// construction cannot change what the exporter writes.
+func TestWithResourceCopiesItsLabels(t *testing.T) {
+	labels := map[string]string{"project_id": "proj-1", "instance_id": "one"}
+	d := &recordingDoer{}
+	e := New(
+		WithWriter(io.Discard),
+		WithMonitoring("proj-1", d),
+		WithMonitoringEndpoint("https://monitoring.example"),
+		WithResource("gce_instance", labels),
+	)
+	labels["instance_id"] = "mutated"
+	pt := emit.MetricPoint{
+		Name:   "biz_dropped_events_total",
+		Labels: map[string]string{"reason": "export"},
+		Value:  1, At: testTime,
+	}
+	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if got := d.allSeries()[0].Resource.Labels["instance_id"]; got != "one" {
+		t.Errorf("instance_id = %q, want one — the option must copy its labels", got)
+	}
+}

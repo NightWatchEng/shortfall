@@ -11,8 +11,8 @@ import (
 // Cloud Logging turns a JSON line on stdout into a structured entry: `time`
 // and `severity` are lifted into the entry's own fields and everything else
 // becomes jsonPayload. The payload field names mirror the CloudWatch EMF
-// record deliberately, so a reader who knows one backend can read the other
-// and the query adapter parses one shape.
+// record (adapters/export/cloudwatch) field for field, so a reader who knows
+// one backend can read the other and one query shape serves both.
 //
 // Severity is always INFO. A failed payment is a business outcome, not a
 // logging error, and encoding the result as a severity would let a routine

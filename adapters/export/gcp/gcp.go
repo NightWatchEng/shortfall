@@ -55,6 +55,7 @@ type Options struct {
 	doer      Doer
 	endpoint  string
 	prefix    string
+	resource  monitoredRes
 }
 
 // WithWriter directs Cloud Logging entries to w (default os.Stdout).
@@ -84,6 +85,22 @@ func WithMetricPrefix(prefix string) func(*Options) {
 	return func(o *Options) { o.prefix = prefix }
 }
 
+// WithResource overrides the monitored resource the metric families are
+// written against. The default is a generic_task carrying a per-process
+// task_id, which is what keeps each replica's cumulative totals on its own
+// series; override it to describe the runtime more precisely (gce_instance,
+// k8s_container, cloud_run_revision), but keep a label that distinguishes one
+// writer from another or replicas will overwrite each other's running totals.
+func WithResource(resourceType string, labels map[string]string) func(*Options) {
+	return func(o *Options) {
+		copied := make(map[string]string, len(labels))
+		for k, v := range labels {
+			copied[k] = v
+		}
+		o.resource = monitoredRes{Type: resourceType, Labels: copied}
+	}
+}
+
 // New builds the exporter. With no options it writes Cloud Logging entries
 // to os.Stdout and ships no metrics.
 func New(opts ...func(*Options)) *Exporter {
@@ -102,7 +119,7 @@ func New(opts ...func(*Options)) *Exporter {
 	}
 	e := &Exporter{w: bufio.NewWriter(o.w), projectID: o.projectID}
 	if o.doer != nil && o.projectID != "" {
-		e.mon = newMonitoringClient(o.projectID, o.endpoint, o.prefix, o.doer)
+		e.mon = newMonitoringClient(o.projectID, o.endpoint, o.prefix, o.resource, o.doer)
 	}
 	return e
 }

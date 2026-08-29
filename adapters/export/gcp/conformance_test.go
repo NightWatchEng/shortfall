@@ -14,9 +14,9 @@ import (
 	"github.com/NightWatchEng/shortfall/testkit/conformance"
 )
 
-// countingDoer tallies the time series Cloud Monitoring received. The
-// conformance suite may export from more than one goroutine, so the tally is
-// guarded.
+// countingDoer tallies the time series Cloud Monitoring received. Overlapping
+// flushes (emit's contract) can call ExportMetrics on separate goroutines, so
+// the tally is guarded.
 type countingDoer struct {
 	mu     sync.Mutex
 	series int
