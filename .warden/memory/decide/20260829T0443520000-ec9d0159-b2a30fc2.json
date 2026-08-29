@@ -1,0 +1,16 @@
+{
+  "bead": "workspace-72o",
+  "head_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+  "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+  "rules_version": "b51f166ce220",
+  "decided_at": "2026-08-29T04:43:52+00:00",
+  "decided": "Both human renderers (text and markdown) surface every ungrounded-leg label the engine computes: text gains the missing Deferred.Caveats loop; markdown gains caveat/note lines for Realized.Caveats, Deferred.Caveats, and Unrealized.Notes, rendered as blockquote lines under the legs table in the existing '> ...' style. No renderer drops a label the Report struct carries.",
+  "why": "engine.Compute deliberately degrades per-leg (Caveats / Notes / NotAvailableReason) instead of erroring, but a label the renderer drops is a label that never existed for the reader: an events-only backend currently renders the deferred leg as '[deterministic] none in-flight' \u2014 a plausible-looking zero with no stated reason, exactly the dishonesty ADR-0008 and the review charter forbid in the numbers Finance reads. The JSON renderer already carries everything; the human renderers must match.",
+  "cost_if_wrong": "Rendering noise at worst: extra caveat lines in incident channels and postmortems. The inverse error \u2014 the status quo \u2014 misprices incidents: a deferred leg silently rendered as zero during a backlog outage understates impact in the exact artifact used for severity calls.",
+  "alternatives": [
+    "Caveats column in the markdown legs table \u2014 rejected: empty for healthy reports, widens the table for every reader to serve the degraded case",
+    "Footnote references from table rows \u2014 rejected: indirection in an artifact meant to be skimmed in an incident channel",
+    "Scope docs to never promise degradation labels (status quo after workspace-qe1's wording fix) \u2014 rejected: fixes the sentence, not the dishonest zero"
+  ],
+  "scope": "engine/report/render.go RenderText and RenderMarkdown only; regression test drives a fully-ungrounded report through both; golden files regenerated in the same PR. No change to engine.Compute, leg structs, or the JSON renderer."
+}
