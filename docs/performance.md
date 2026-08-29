@@ -16,7 +16,8 @@ traffic:
 - What happens to the caller when the telemetry backend goes slow or
   starts refusing writes?
 
-Every number below is reproducible with the command printed beside it.
+Every number below is reproducible with one of the commands in the block
+under [How these numbers were produced](#how-these-numbers-were-produced).
 Where a number does not apply, [Limits](#limits) says so — read that
 section before sizing anything.
 
@@ -70,11 +71,11 @@ goroutine outrunning another.
 
 ## `emit.Record` — does it scale with cores?
 
-**No.** Throughput plateaus at roughly 950k accepted outcomes per second
-around four cores and gets *worse* past eight. Every `Record` call takes
-the emitter's single mutex — once for admission and de-dup, again to append
-metric points — so past a handful of concurrent callers the goroutines are
-queueing, not working.
+**Barely.** Throughput tops out near 1M accepted outcomes per second at
+eight cores — 2.2× what one core does — and falls back past that. Every
+`Record` call takes the emitter's single mutex twice, once for admission
+and de-dup and again to append the metric points, so past a handful of
+concurrent callers the goroutines are queueing rather than working.
 
 ### Accepted outcomes (`BenchmarkRecordParallel`)
 
@@ -118,28 +119,34 @@ none of the work.
 
 | `-cpu` | ns/op | spread | throughput | speedup vs 1 core | B/op | allocs/op |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 748 | ±3% | 1.34M/s | 1.00× | 288 | 3 |
-| 2 | 449 | ±6% | 2.23M/s | 1.67× | 288 | 3 |
-| 4 | 273 | ±11% | 3.66M/s | 2.74× | 289 | 3 |
-| 8 | 207 | ±25% | 4.82M/s | 3.60× | 292 | 3 |
-| 18 | 273 | ±13% | 3.67M/s | 2.74× | 302 | 3 |
+| 1 | 725 | ±3% | 1.38M/s | 1.00× | 288 | 3 |
+| 2 | 420 | ±3% | 2.38M/s | 1.73× | 288 | 3 |
+| 4 | 231 | ±4% | 4.33M/s | 3.14× | 289 | 3 |
+| 8 | 184 | ±19% | 5.44M/s | 3.94× | 292 | 3 |
+| 18 | 234 | ±13% | 4.27M/s | 3.10× | 305 | 3 |
 
-The suppressed path scales better than the accept path (3.6× vs 2.1×)
-because it holds the lock for less time and allocates far less. It still
-turns over past eight cores, and it is not free: a de-duplicated retry
-still costs ~750 ns and three allocations, because the `ValueContext` is
-decoded and the de-dup key is built before the emitter knows the call is a
-duplicate.
+The suppressed path scales better than the accept path (3.9× against 2.2×)
+because it holds the lock for less time and allocates far less — but it
+turns over at the same place, past eight cores, which is where the lock
+rather than the work becomes the limit.
+
+It is also not free. A de-duplicated retry still costs ~725 ns and three
+allocations: the `ValueContext` is decoded out of the request context and
+the de-dup key string is built before the emitter has any way to know the
+call is a duplicate. Retry storms are not cheap on this path.
 
 ### A note on `BenchmarkRecordAccept`
 
 The older single-goroutine `BenchmarkRecordAccept` reports 3 allocs/op. The
 accept path allocates **17**. That benchmark rotates over a fixed pool of
 4096 contexts × 3 stages × 4 results = 49152 de-dup keys, and the emitter's
-two-generation set retains up to 131072 recent keys — so after the first
-pass every call is suppressed, and at a one-second `-benchtime` more than
-95% of its iterations measure the suppression path rather than the accept
-path.
+two-generation set retains up to 131072 recent keys. The pool is smaller
+than the retention window, so once it has been walked once, every
+subsequent call finds its key already remembered: only the first 49152
+iterations of a run take the accept path. At `-benchtime 1s` that run is
+about 1.4M iterations, so under 4% of it measures acceptance. The
+reported `3 allocs/op` is the integer mean of ~96% suppressed calls at 3
+allocations and ~4% accepted calls at 17.
 
 It is still a stable, useful baseline for the regression gate — it just
 measures something narrower than its name says. The honest accept figures
@@ -279,6 +286,15 @@ overflow count is exactly right. Nothing in it sleeps and nothing compares
 durations: if `Record` ever did inherit the backend's latency, the test
 deadlocks rather than flaking.
 
+Both halves of it were checked against the defect they exist to catch, in
+plain and `-race` builds alike. Making the buffer large enough not to
+overflow drops the assertion to `overflow = 0, want 64` in both modes;
+holding the emitter's mutex across the export — the shape "back-pressure
+reaches `Record`" actually takes — hangs the test until the timeout. A
+concurrency assertion whose discrimination has not been demonstrated under
+both build modes is not evidence, because the race detector changes which
+goroutine wins.
+
 The benchmarks put numbers on the trade. All three rows are `-cpu 18`, all
 three are `Record` on the accept path, and the only difference is what the
 exporter does with the batch.
@@ -313,8 +329,12 @@ compares the two with `benchstat`, and writes the delta into the job
 summary. `ci-bench.sh` discovers benchmarks with `go test -list` across
 every module, and runs them at `BENCH_TIME=1x`, `BENCH_COUNT=6`.
 
+`ci-bench.sh count` reports 17 benchmarks on this branch, up from 12: the
+five gate-resident benchmarks added for this page cost the job about 0.5 s
+of its ~18 s, measured at the CI settings.
+
 Every benchmark quoted on this page is in that comparison **except** these
-five, which are behind the `benchload` build tag and are therefore invisible
+four, which are behind the `benchload` build tag and are therefore invisible
 to `go test -list`:
 
 | Benchmark | Why it is out of the gate |
@@ -343,8 +363,8 @@ contention the tables above document.
 
 **No tail latency.** Go benchmarks report a **mean** (`ns/op` is total time
 divided by iterations). Every figure here is a mean. A mutex under
-contention has a long tail, and the ±25% run-to-run spread at `-cpu 8` is a
-hint of it. If your SLO is a p99, nothing on this page bounds it.
+contention has a long tail, and the ±15–19% run-to-run spread at `-cpu 8`
+is a hint of it. If your SLO is a p99, nothing on this page bounds it.
 
 **Discard exporters.** Every emitter benchmark writes to an in-process sink
 that counts and forgets. There is no serialization, no TLS, no network, and
@@ -374,6 +394,11 @@ grouping work, and none of them are swept.
 carriers), the exporters and queriers under `adapters/`, and the
 `shortfall` CLI have no concurrency numbers. The `biz` codec figures below
 are single-goroutine only.
+
+**The gate runs tests without `-race`.** `scripts/ci-go.sh test` is a plain
+`go test ./...`, so the concurrency test described above is exercised
+without the detector in CI. It was run under `-race` by hand, including its
+discrimination check, but nothing enforces that on every PR.
 
 **The tagged benchmarks are not compiled by CI.** Nothing in the core
 verify scope or the benchmark job builds a `benchload`-tagged file, so a
