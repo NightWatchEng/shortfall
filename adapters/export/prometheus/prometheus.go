@@ -7,9 +7,10 @@
 //
 // Metrics-only: Capabilities reports Events=false. Amounts and ids ride on
 // outcome events, which Prometheus has no place for, so the customers leg is
-// answered from an event sink (OTLP, Loki, ...), never from here — the
-// engine reports it NotAvailable rather than silently empty. Pairing this
-// exporter with an event exporter gives both.
+// answered from an event sink (the cloudwatch exporter's EMF records, or a
+// sql outcomes table), never from here — the engine reports it NotAvailable
+// rather than silently empty. Pairing this exporter with an event path
+// gives both.
 //
 // Two consequences of Prometheus's pull model are load-bearing:
 //   - Counter families are cumulative. The emit layer produces delta
@@ -18,9 +19,10 @@
 //     level observed at the point's time.
 //   - Sample timestamps are not preserved. Prometheus text exposition
 //     carries no per-sample time; the server stamps at scrape. Unlike the
-//     OTLP exporter, a batch delayed by an incident is seen at scrape time,
-//     not at the outcome's time. Deployments that need money pinned to
-//     observation time must also run an event exporter.
+//     cloudwatch exporter's timestamped EMF records, a batch delayed by an
+//     incident is seen at scrape time, not at the outcome's time.
+//     Deployments that need money pinned to observation time must also run
+//     an event exporter.
 package prometheus
 
 import (

@@ -2,21 +2,9 @@ go 1.25.0
 
 use .
 
-use ./adapters/export/otlp
-
 use ./adapters/export/prometheus
 
 use ./adapters/export/cloudwatch
-
-use ./adapters/export/statsd
-
-use ./adapters/httpbatch
-
-use ./adapters/export/splunkhec
-
-use ./adapters/export/loki
-
-use ./adapters/export/datadog
 
 use ./adapters/query/promql
 
@@ -38,10 +26,6 @@ use ./adapters/incident/rootly
 use ./adapters/incident/firehydrant
 
 use ./adapters/incident/pagerduty
-
-use ./adapters/query/logql
-
-use ./adapters/query/spl
 
 use ./adapters/query/cwinsights
 

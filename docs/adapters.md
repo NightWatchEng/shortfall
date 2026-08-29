@@ -39,9 +39,7 @@ backend grounds deferred + unrealized + a metrics realized upper bound; a
 | `query/memq` | ✅ | ✅ | in-memory reference; the conformance oracle every other adapter is checked against |
 | `adapters/query/promql` | ✅ | — | Prometheus; gauges via `last_over_time`, counters via a non-extrapolating `@`-diff |
 | `adapters/query/sql` | — | ✅ | any `database/sql` outcomes table; the events source (and the ledger source for coverage) |
-| `adapters/query/logql` | — | ✅ | Grafana Loki; reads the loki exporter's outcome lines, aggregation delegated to the memq reference |
 | `adapters/query/cwinsights` | — | ✅ | CloudWatch Logs Insights over the cloudwatch exporter's EMF records (stdlib SigV4); metric legs come from CloudWatch's metric store |
-| `adapters/query/spl` | — | ✅ | Splunk export search over the splunkhec exporter's outcome events |
 
 Wiring a read boundary — each adapter is one constructor away from
 `engine.Compute` (either querier alone grounds its legs; the CLI shows how
@@ -76,12 +74,7 @@ CREATE TABLE biz_outcomes (
 | Adapter | Metrics | Events | Backend |
 |---|---|---|---|
 | `adapters/export/prometheus` | ✅ | — | Prometheus (scrape) |
-| `adapters/export/statsd` | ✅ | — | StatsD / DogStatsD |
-| `adapters/export/otlp` | ✅ | ✅ | OpenTelemetry collector |
-| `adapters/export/datadog` | ✅ | ✅ | Datadog HTTP intakes |
-| `adapters/export/splunkhec` | ✅ | ✅ | Splunk HEC |
 | `adapters/export/cloudwatch` | ✅ | ✅ | CloudWatch (EMF / PutMetricData) |
-| `adapters/export/loki` | — | ✅ | Grafana Loki (events as logs) |
 
 Pair a metrics exporter with an events exporter (or use one that does both) to
 ground every leg. The exporter you write ships the same fixed `biz_*` families
@@ -99,7 +92,7 @@ em.Record(ctx, "auth", biz.ResultSuccess)
 ```
 
 ```go
-exp, _ := otlp.New(ctx)    // OTLP metrics + events to your collector
+exp := cloudwatch.New()    // EMF metrics + events to CloudWatch Logs
 em, _ := emit.New(&reg, exp)
 defer em.Close(ctx)
 ```

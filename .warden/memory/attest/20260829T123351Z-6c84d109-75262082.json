@@ -1,0 +1,231 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+  "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T12:33:51+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, round 1 + round-2 combined scoped re-review"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter, round 1"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters",
+      "file": "adapters/README.md",
+      "line": 7,
+      "severity": "MEDIUM",
+      "finding": "Family lists still named all five deleted exporters and both deleted queriers",
+      "evidence": "Lines 7-8 vs the reduced root-README table and the decision shard",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Family lists reduced to the surviving set; rest of file verified accurate",
+      "id": "8b54f0f767c51673"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "eventline",
+      "file": "eventline/eventline.go",
+      "line": 17,
+      "severity": "MEDIUM",
+      "finding": "Line-struct comment claimed deleted Loki/Splunk exporters write the two source spellings",
+      "evidence": "Nothing writes source_system anymore; package doc above was rewritten by this diff",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Comment now states EMF writes source and source_system is kept for records ingested by since-removed exporters \u2014 verified true by the parser code",
+      "id": "519e5ec906e275cb"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/httpbatch",
+      "file": "adapters/httpbatch/batch.go",
+      "line": 2,
+      "severity": "MEDIUM",
+      "finding": "Package doc named three deleted consumers; module had zero remaining importers",
+      "evidence": "Repo-wide grep: only go.work, its own module, and an inert loggolden replace referenced it",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Module deleted as orphaned (amended decision shard supersedes the keep default); go.work entry and inert replace removed",
+      "id": "50c08ef31cab98b9"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/prometheus/prometheus.go",
+      "line": 10,
+      "severity": "MEDIUM",
+      "finding": "Doc routed customers leg to deleted event sinks and contrasted the deleted OTLP exporter",
+      "evidence": "Lines 10 and 21 named otlp/loki",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded to cloudwatch EMF / sql; both claims verified true (EMF records carry the outcome's own timestamp)",
+      "id": "76f5014e7bf5cc9e"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/example_test.go",
+      "line": 13,
+      "severity": "LOW",
+      "finding": "Example comment referenced deleted adapter paths",
+      "evidence": "adapters/export/otlp and statsd no longer exist",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Now names prometheus or cloudwatch",
+      "id": "bed6873d3147f34f"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit/conformance",
+      "file": "testkit/conformance/conformance.go",
+      "line": 31,
+      "severity": "LOW",
+      "finding": "Interface doc illustrated with deleted OTLP/StatsD harness wire forms",
+      "evidence": "Lines 31 and 62",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded to the Prometheus registry / CloudWatch EMF forms at both sites",
+      "id": "9ed5346ae82d5365"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/render_test.go",
+      "line": 148,
+      "severity": "LOW",
+      "finding": "Test comment named the deleted logql and spl queriers",
+      "evidence": "Line 148 verbatim",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Now names the sql and cwinsights queriers",
+      "id": "90204d45b9139b7a"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "unmapped:stale-go-mod-replace",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/loggolden",
+      "file": "test/loggolden/go.mod",
+      "line": 26,
+      "severity": "LOW",
+      "finding": "Inert replace directive for httpbatch survived the prune; go mod tidy never removes replaces",
+      "evidence": "GOWORK=off go mod why -m: main module does not need httpbatch",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Removed together with the httpbatch module",
+      "id": "5b131b7a5b57e13d"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 60,
+      "severity": "LOW",
+      "finding": "Golden job name labels only the promql half of what the job runs",
+      "evidence": "Job name byte-identical on main; introduced by #73",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner as out-of-diff scope: no behavior change in this diff left the name describing old behavior, and renaming a required-check job breaks the branch-protection check set \u2014 a rename is its own policy item if wanted",
+      "id": "0e66802225e559ba"
+    },
+    {
+      "ts": "2026-08-29T12:33:51+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "6c84d109bc05cba0266200b1ee8780d7476c7b87",
+      "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "eventline",
+      "file": "eventline/eventline_test.go",
+      "line": 11,
+      "severity": "LOW",
+      "finding": "Round 2: TestParse doc comment still framed Loki and Splunk HEC as live peer exporters",
+      "evidence": "Same straggler class as the package comment fixed in round 1, missed in the test file",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded to the since-removed-exporters framing; test-case names kept as wire-shape provenance labels",
+      "id": "9f01916ffa9f9b20"
+    }
+  ]
+}

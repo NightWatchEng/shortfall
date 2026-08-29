@@ -1,0 +1,16 @@
+{
+  "bead": "workspace-cb1",
+  "head_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+  "base_sha": "fb68ebfd61effb78cef05f5714287d1b1e7bc2cc",
+  "rules_version": "b51f166ce220",
+  "decided_at": "2026-08-29T12:19:17+00:00",
+  "decided": "The supported collection surface narrows to two backends: CloudWatch (cloudwatch exporter + cwinsights querier) and Prometheus (prometheus exporter + promql querier), with the backend-neutral sql events querier retained. The otlp, datadog, statsd, splunkhec, and loki exporters and the logql and spl queriers are deleted outright \u2014 modules, go.work entries, and the loggolden harness's Loki half \u2014 and CI's golden job drops the Loki matrix step. Git history is the attic; no deprecation directory.",
+  "why": "Explicit founder direction (2026-08-29): 'Forget everything else and just keep cloudwatch and prometheus... go deep and clean the house to provide such simplicity as a most common usecase.' Seven vendor surfaces cost review, CI wall-clock, and doc honesty for backends no pilot uses; the most common use case deserves the whole polish budget. sql stays because the prometheus exporter is metrics-only \u2014 without a neutral events sink a Prometheus shop loses the realized/customers legs and the zero-dependency quickstart dies.",
+  "cost_if_wrong": "Re-adding a deleted adapter is a git revert plus a go.work line \u2014 cheap and reviewable. The expensive error would be the opposite: carrying seven unowned surfaces into the public flip.",
+  "alternatives": [
+    "Attic/deprecated directory \u2014 rejected: pre-release repo, no external consumers, git history preserves everything",
+    "Keep modules but drop from CI/docs \u2014 rejected: unowned code that still compiles is a standing docs-accuracy lie",
+    "Also delete the sql querier \u2014 rejected as the named default (founder may override): it is the Prometheus shop's events path and the quickstart's zero-dep demo, not a vendor collector"
+  ],
+  "scope": "Deletes adapters/export/{otlp,datadog,statsd,splunkhec,loki} and adapters/query/{logql,spl}; go.work; test/loggolden trimmed to the CloudWatch/LocalStack parity; .github/workflows/ci.yml golden job loses the Loki step (this tracked item is explicitly about CI wiring per the forbidden-paths policy); docs sweep in the same PR (README, adapters.md, quickstart, integration doc). Keeps incident writers, payment/stripe, httpbatch, sql. No repo.yaml change needed \u2014 its adapter description stays true."
+}

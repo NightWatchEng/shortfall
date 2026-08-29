@@ -29,16 +29,16 @@ See [registry.md](registry.md) for every field.
 
 ## 3. Seed a tiny outcomes table (3 min)
 
-**Why SQLite here?** In production, shortfall reads whatever telemetry
+**Why SQLite here?** In production, shortfall reads the telemetry
 backend you already run — your services emit `biz_*` signals through an
-export adapter (CloudWatch EMF, Prometheus, OTLP, Datadog, …) and the
-engine reads them back through a query adapter. You never install a new
-datastore. This walkthrough uses a local SQLite file **only** so the demo
-needs zero external services: it stands in for your real event store.
-Today's query adapters are `promql` (metrics), and `sql`, `logql`,
-`cwinsights`, and `spl` for events — so a CloudWatch shop exports via
-`adapters/export/cloudwatch` and reads back through `cwinsights` (see
-[adapters.md](adapters.md) for exactly which backend grounds which leg).
+export adapter (CloudWatch EMF or Prometheus) and the engine reads them
+back through a query adapter. You never install a new datastore. This
+walkthrough uses a local SQLite file **only** so the demo needs zero
+external services: it stands in for your real event store. The query
+adapters are `promql` (metrics), and `cwinsights` and `sql` for
+events — so a CloudWatch shop exports via `adapters/export/cloudwatch`
+and reads back through `cwinsights` (see [adapters.md](adapters.md) for
+exactly which backend grounds which leg).
 
 Put a few rows in a SQLite table matching the sql adapter's schema:
 

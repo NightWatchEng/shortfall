@@ -12,7 +12,7 @@ flowchart TB
         SERVICES["Instrumented services<br/>api · workers —<br/>emit biz.* signals via shortfall"]
         SHORTFALL["shortfall<br/>capture SDK · flow registry ·<br/>impact engine · CLI"]
         LEDGER[("Ledger / payments DB<br/>the ground truth Finance believes")]
-        BACKENDS[("Telemetry backends<br/>Prometheus · Loki · CloudWatch ·<br/>Splunk · Datadog · warehouse")]
+        BACKENDS[("Telemetry backends<br/>Prometheus · CloudWatch")]
     end
 
     STRIPE["Payment providers<br/>Stripe et al — sync APIs + webhooks"]
