@@ -1,0 +1,217 @@
+# Maintainer note: the "repository is private" paragraph below is true only
+# until the public flip. Delete that markdown block in the same PR as the
+# flip — a stale claim is a docs defect under ADR-0008.
+name: Adapter request / backend support
+description: Ask for a backend shortfall does not speak yet — or tell us you are writing the adapter.
+title: "[adapter] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This repository is private today.** While it stays private only
+        collaborators can reach this form, so nobody outside can file
+        anything yet. These templates are ready ahead of the public flip
+        rather than waiting on it.
+
+        ---
+
+        Adapters are the only vendor-aware code here, and each one is its own
+        nested Go module so that a Prometheus shop never pulls the AWS SDK.
+        There are two boundaries an adapter can implement:
+
+        - the **read** boundary, `query.Querier`, which the engine asks for a
+          report; and
+        - the **write** boundary, `emit.Exporter`, which ships the fixed
+          `biz_*` metric families and the outcome events.
+
+        Whether an adapter is feasible is decided almost entirely by what the
+        backend can answer, not by how much we like the backend — so the
+        questions below are the capability matrix in question form. Answering
+        them here saves the round trip.
+
+        Existing adapters are listed in
+        [docs/adapters.md](https://github.com/NightWatchEng/shortfall/blob/main/docs/adapters.md);
+        `query/memq` is the in-memory reference every other querier is checked
+        against.
+
+  - type: input
+    id: backend
+    attributes:
+      label: Which backend?
+      placeholder: "e.g. Datadog, Honeycomb, ClickHouse, Splunk, Elasticsearch, Azure Monitor"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: Which boundary?
+      options:
+        - "Read — query.Querier: compute reports from signals already in this backend"
+        - "Write — emit.Exporter: ship the biz_* metrics and outcome events to it"
+        - "Both"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: signal-kinds
+    attributes:
+      label: Which signal kinds does it serve?
+      description: >-
+        This is `query.Caps{Metrics, Events}`, the same honest declaration
+        every adapter makes. **Metrics** are bounded-cardinality counters and
+        gauges — cheap, always on, aggregate. **Events** are one record per
+        terminal outcome carrying the exact amount and the entity and customer
+        ids, which is what de-dup and per-customer breakdowns need. A backend
+        may serve one, the other, or both.
+      multiple: true
+      options:
+        - "Metrics"
+        - "Events"
+        - "Neither / not sure"
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### The four query verbs
+
+        `query.Querier` is three methods, but the frozen query AST asks four
+        distinct questions. An adapter has to translate all four it claims to
+        serve; nothing vendor-specific crosses the boundary.
+
+        1. **`QueryMetric`** — a `sum` or `count` of one `biz_*` family over a
+           time range, filtered and grouped by the fixed label vocabulary, and
+           optionally stepped. Temporal semantics are identical across
+           adapters, because divergence here is drift in the numbers Finance
+           reads: a **counter** family returns the *increase within* each step
+           interval, never a cumulative sample; a **gauge** family returns the
+           last observed level at each step boundary.
+           *Grounds:* deferred value, unrealized loss, the metrics-only
+           realized upper bound, and coverage's metrics path.
+        2. **`QueryEvents`, default (`groups`)** — group outcome events by key
+           and return, per group, the count and the exact `int64` minor-unit
+           sum.
+           *Grounds:* customer impact, the recovered-entity set realized loss
+           subtracts, and coverage's events path.
+        3. **`QueryEvents`, `distinct_count`** — the number of distinct
+           group-key combinations, as a single number, without fetching every
+           group.
+        4. **`QueryEvents`, `max_per_group`** — the largest single event amount
+           per group: one representative amount per entity, never an average.
+           *Grounds:* realized loss's exact per-entity de-dup
+           ([ADR-0009](https://github.com/NightWatchEng/shortfall/blob/main/docs/adr/0009-event-representative-per-group.md)) — the
+           thing that stops four retried failures counting as four losses.
+
+        A modifier on the event verbs: **ordering** (`sum_desc` / `count_desc`)
+        with a **limit**, which is what makes a top-accounts list well defined
+        instead of an arbitrary N per backend.
+
+        One invariant across all of them: wherever money is read per group,
+        `currency` must be in the group-by or pinned by a filter, and an
+        adapter must reject a result that would compare across currencies
+        ([ADR-0001](https://github.com/NightWatchEng/shortfall/blob/main/docs/adr/0001-money-representation.md)).
+
+  - type: dropdown
+    id: verbs
+    attributes:
+      label: Which of the four can this backend answer?
+      description: Pick every one it can. If you are unsure about one, leave it out and say so at the end.
+      multiple: true
+      options:
+        - "1. QueryMetric — sum/count over a range, grouped, stepped"
+        - "2. QueryEvents / groups — group events, exact integer sums"
+        - "3. QueryEvents / distinct_count — count distinct keys without fetching them"
+        - "4. QueryEvents / max_per_group — largest single amount per group"
+        - "Ordering (sum_desc / count_desc) with a limit"
+        - "Not applicable — this is an exporter-only request"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: input
+    id: retention
+    attributes:
+      label: How far back can it be queried?
+      description: >-
+        `query.Caps` carries metric and event retention separately, because the
+        legs need different depths: the unrealized leg fits a seasonal baseline
+        over metric history and needs at least the flow's own lookback (the
+        reference registry looks back 8 weeks), while the customers leg reads
+        event history over the incident window.
+      placeholder: "e.g. metrics 15 months at 1m resolution, events 30 days"
+    validations:
+      required: true
+
+  - type: textarea
+    id: api
+    attributes:
+      label: Query language / API, and one example query
+      description: >-
+        The shape a `QueryMetric` or `QueryEvents` call would have to be
+        translated into. A real example is worth more than a link.
+      placeholder: |
+        HTTP POST /api/v2/query, JSON body, bearer token.
+        Grouped sum over a window looks like:
+
+          from(bucket: "prod") |> range(start: -1h)
+            |> filter(fn: (r) => r._measurement == "biz_value_total")
+            |> group(columns: ["flow", "currency"]) |> sum()
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dependencies
+    attributes:
+      label: Can it be reached with the standard library?
+      description: >-
+        Adapters are kept SDK-free where it is reasonable, so that
+        instrumenting a service does not drag a cloud SDK into everyone's build:
+        the CloudWatch Logs Insights querier signs its own SigV4 requests with
+        the standard library, and the GCP exporter takes an authenticated
+        client from the caller rather than importing the Google SDK. A vendor
+        SDK is not disqualifying — it is a cost we would want to name up front.
+      options:
+        - "Yes — plain HTTP plus a caller-supplied *http.Client"
+        - "It needs a vendor SDK"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: integer-money
+    attributes:
+      label: Can it return an exact integer sum of a minor-unit amount?
+      description: >-
+        Money in this library is `int64` minor units end to end. A backend that
+        stores or returns `float64` is not disqualified — a TSDB has to, and
+        the conversion is confined to the adapter — but knowing which side of
+        that line it falls on changes how the adapter is written and how large
+        an amount it can carry without silently rounding.
+      options:
+        - "Yes — exact integers all the way out"
+        - "No — it stores or returns float64"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: offering
+    attributes:
+      label: Are you offering to write it?
+      options:
+        - label: "I plan to write this adapter"
+        - label: "I can test it against a real deployment"
+        - label: "I am requesting it, not writing it"
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: >-
+        Scale, why this backend rather than an existing one, anything you are
+        unsure about above.
+    validations:
+      required: false

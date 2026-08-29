@@ -1,0 +1,39 @@
+# Issue chooser configuration.
+#
+# The blank issue box is off deliberately. A bare box is how "the number
+# looks wrong" arrives with no registry, no adapters and no window, which
+# costs a round trip before triage can start — the forms exist to stop
+# that. The question / documentation gap form is the catch-all for
+# anything the other two do not fit.
+#
+# Security is deliberately not a template: a public issue is the wrong
+# channel for a vulnerability, so the chooser links SECURITY.md's private
+# advisory route instead of inviting one.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/NightWatchEng/shortfall/security/advisories/new
+    about: >-
+      Please do not open a public issue for a vulnerability. Use GitHub's
+      private security advisory form, as SECURITY.md asks.
+
+  - name: Security policy
+    url: https://github.com/NightWatchEng/shortfall/security/policy
+    about: >-
+      What is in scope (webhook signature verification, PII containment,
+      the value-context egress allowlist, adapter credentials), what to
+      expect, and which versions receive fixes.
+
+  - name: Contributing guide
+    url: https://github.com/NightWatchEng/shortfall/blob/main/CONTRIBUTING.md
+    about: >-
+      Commands, commit convention, tests, benchmarks, and the checks a
+      pull request has to pass.
+
+  - name: Which backend grounds which leg
+    url: https://github.com/NightWatchEng/shortfall/blob/main/docs/adapters.md
+    about: >-
+      The capability matrix. Worth reading before filing a bug — a leg
+      your backend cannot ground reports as unavailable by design, which
+      reads like a bug and is not one.
