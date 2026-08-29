@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,18 +21,35 @@ type fakeRow struct {
 }
 
 // fakeBigQuery stands in for the BigQuery jobs.query REST surface over a
-// Log Analytics linked dataset. It does NOT evaluate SQL: like LocalStack
-// ignoring an Insights filter clause, it serves every fixture row and
-// leaves the window and filter arithmetic to the adapter's reference
-// aggregation — which is exactly where this adapter puts the correctness
-// boundary. What it does model faithfully is the wire envelope: the
-// jobComplete=false poll, paging by pageToken, the string-encoded INT64
-// column, and the error object.
+// Log Analytics linked dataset.
+//
+// It models two things, and the difference between them is the point.
+//
+// The wire envelope is faithful: the jobComplete=false poll, paging by
+// pageToken, the string-encoded INT64 column, the error object.
+//
+// The SQL is EVALUATED, not ignored — by a deliberately small interpreter
+// (planStatement below) that understands exactly the statement shape this
+// adapter emits and nothing else. That matters because the pushed-down
+// predicates are otherwise the one part of the adapter no parity fence can
+// reach: a fake that served every row regardless would leave all eight
+// payloadPaths JSONPaths inert, and a drifted path would return zero rows
+// against real BigQuery while every test stayed green — a silent zero on
+// the realized leg, which the engine reports as a deterministic
+// measurement. A clause the interpreter does not recognise is a loud test
+// failure, never a silently skipped predicate.
+//
+// `evaluate: false` models the opposite backend: one that ignores the
+// pushed-down predicates entirely (LocalStack does exactly this to a Logs
+// Insights filter clause). The adapter must still answer correctly there,
+// because memq re-applies the window and the filters and the decoder skips
+// unmarked entries. Both modes are run.
 type fakeBigQuery struct {
 	t    *testing.T
 	srv  *httptest.Server
 	rows []fakeRow
 
+	evaluate   bool // apply the statement's predicates (default true)
 	pageSize   int
 	stallOnce  bool // answer the first insert with jobComplete:false
 	stalled    bool
@@ -42,11 +61,12 @@ type fakeBigQuery struct {
 	lastParams map[string]string
 	lastAuth   string
 	lastBody   map[string]any
+	served     []fakeRow // the rows the current query resolved to
 }
 
 func newFakeBigQuery(t *testing.T, rows []fakeRow) *fakeBigQuery {
 	t.Helper()
-	f := &fakeBigQuery{t: t, rows: rows, pageSize: 1000}
+	f := &fakeBigQuery{t: t, rows: rows, pageSize: 1000, evaluate: true}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -110,6 +130,8 @@ func (f *fakeBigQuery) handleInsert(w http.ResponseWriter, r *http.Request) {
 			f.lastParams["@"+name] = s
 		}
 	}
+	f.served = f.resolve()
+
 	if f.stallOnce && !f.stalled {
 		f.stalled = true
 		f.writeJSON(w, map[string]any{
@@ -133,13 +155,168 @@ func (f *fakeBigQuery) handleGetResults(w http.ResponseWriter, r *http.Request) 
 	f.writePage(w, from)
 }
 
+// --- the statement interpreter ----------------------------------------
+
+// stmtPlan is what the interpreter recovers from one statement.
+type stmtPlan struct {
+	table   string
+	from    time.Time // @window_from, inclusive
+	to      time.Time // @window_to, exclusive
+	marker  string    // required value of the payload's "event" key
+	filters map[string]string
+	limit   int
+}
+
+var (
+	stmtRE = regexp.MustCompile(
+		"^SELECT UNIX_MICROS\\(timestamp\\) AS event_micros, TO_JSON_STRING\\(json_payload\\) AS payload" +
+			" FROM `([^`]+)` WHERE (.+) ORDER BY timestamp LIMIT ([0-9]+)$")
+	markerRE = regexp.MustCompile(`^JSON_VALUE\(json_payload, '\$\.event'\) = (@\w+)$`)
+	filterRE = regexp.MustCompile(`^IFNULL\(JSON_VALUE\(json_payload, '\$\."([^"]+)"'\), ''\) = (@\w+)$`)
+	fromRE   = regexp.MustCompile(`^timestamp >= (@\w+)$`)
+	toRE     = regexp.MustCompile(`^timestamp < (@\w+)$`)
+)
+
+// planStatement parses the statement into a plan, failing the test loudly
+// on anything it does not recognise — an unrecognised clause silently
+// dropped would be a predicate this harness pretends to check.
+func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
+	f.t.Helper()
+	m := stmtRE.FindStringSubmatch(f.lastQuery)
+	if m == nil {
+		f.t.Errorf("fake cannot parse the statement — extend the interpreter or the adapter drifted:\n%s", f.lastQuery)
+		return stmtPlan{}, false
+	}
+	plan := stmtPlan{table: m[1], filters: map[string]string{}}
+	limit, err := strconv.Atoi(m[3])
+	if err != nil {
+		f.t.Errorf("bad LIMIT %q", m[3])
+		return stmtPlan{}, false
+	}
+	plan.limit = limit
+
+	ok := true
+	param := func(name string) string {
+		v, present := f.lastParams[name]
+		if !present {
+			f.t.Errorf("statement references %s but no such parameter was bound", name)
+			ok = false
+		}
+		return v
+	}
+	ts := func(name string) time.Time {
+		t, err := time.Parse(bqTimestampLayout, param(name))
+		if err != nil {
+			f.t.Errorf("parameter %s = %q is not a BigQuery TIMESTAMP literal: %v", name, f.lastParams[name], err)
+			ok = false
+		}
+		return t
+	}
+	for _, clause := range strings.Split(m[2], " AND ") {
+		clause = strings.TrimSpace(clause)
+		switch {
+		case fromRE.MatchString(clause):
+			plan.from = ts(fromRE.FindStringSubmatch(clause)[1])
+		case toRE.MatchString(clause):
+			plan.to = ts(toRE.FindStringSubmatch(clause)[1])
+		case markerRE.MatchString(clause):
+			plan.marker = param(markerRE.FindStringSubmatch(clause)[1])
+		case filterRE.MatchString(clause):
+			g := filterRE.FindStringSubmatch(clause)
+			plan.filters[g[1]] = param(g[2])
+		default:
+			f.t.Errorf("fake cannot evaluate WHERE clause %q — it would be silently ignored", clause)
+			ok = false
+		}
+	}
+	if plan.from.IsZero() || plan.to.IsZero() {
+		f.t.Errorf("statement bound no window: %s", f.lastQuery)
+		ok = false
+	}
+	return plan, ok
+}
+
+// resolve applies the parsed statement to the fixture rows.
+func (f *fakeBigQuery) resolve() []fakeRow {
+	f.t.Helper()
+	plan, ok := f.planStatement()
+	if !ok {
+		return nil
+	}
+	// The view varies (WithView), the project and dataset do not.
+	if !strings.HasPrefix(plan.table, "my-project.logs_analytics.") {
+		f.t.Errorf("statement table = %q, want the my-project.logs_analytics dataset", plan.table)
+	}
+
+	out := make([]fakeRow, 0, len(f.rows))
+	for _, row := range f.rows {
+		if f.evaluate && !matchesPlan(row, plan) {
+			continue
+		}
+		out = append(out, row)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].micros < out[j].micros })
+	if plan.limit > 0 && len(out) > plan.limit {
+		out = out[:plan.limit]
+	}
+	return out
+}
+
+// matchesPlan is the row-level evaluation: the half-open window on the
+// entry timestamp, the outcome marker, and each pushed-down payload
+// equality (a missing key reads as "", matching the adapter's IFNULL).
+func matchesPlan(row fakeRow, plan stmtPlan) bool {
+	at := time.UnixMicro(row.micros).UTC()
+	if at.Before(plan.from) || !at.Before(plan.to) {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(row.payload), &payload); err != nil {
+		// A non-JSON line has no json_payload at all: every JSON_VALUE
+		// predicate over it is NULL, so it matches nothing.
+		return false
+	}
+	if plan.marker != "" && jsonValue(payload, "event") != plan.marker {
+		return false
+	}
+	for key, want := range plan.filters {
+		if jsonValue(payload, key) != want {
+			return false
+		}
+	}
+	return true
+}
+
+// jsonValue is BigQuery's JSON_VALUE over a top-level key, rendered the way
+// JSON_VALUE renders a scalar (a missing key is the empty string, matching
+// the adapter's IFNULL(..., ”)).
+func jsonValue(payload map[string]any, key string) string {
+	v, ok := payload[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		b, _ := json.Marshal(t)
+		return string(b)
+	}
+}
+
+// --- response rendering ------------------------------------------------
+
 func (f *fakeBigQuery) writePage(w http.ResponseWriter, from int) {
 	end := from + f.pageSize
-	if end > len(f.rows) {
-		end = len(f.rows)
+	if end > len(f.served) {
+		end = len(f.served)
 	}
 	rows := make([]any, 0, end-from)
-	for _, row := range f.rows[from:end] {
+	for _, row := range f.served[from:end] {
 		rows = append(rows, map[string]any{"f": []any{
 			map[string]any{"v": strconv.FormatInt(row.micros, 10)},
 			map[string]any{"v": row.payload},
@@ -148,7 +325,7 @@ func (f *fakeBigQuery) writePage(w http.ResponseWriter, from int) {
 	resp := map[string]any{
 		"kind":         "bigquery#queryResponse",
 		"jobComplete":  true,
-		"totalRows":    strconv.Itoa(len(f.rows)),
+		"totalRows":    strconv.Itoa(len(f.served)),
 		"jobReference": map[string]any{"jobId": "job-1", "location": "us"},
 		"schema": map[string]any{"fields": []any{
 			map[string]any{"name": "event_micros", "type": "INTEGER"},
@@ -156,19 +333,19 @@ func (f *fakeBigQuery) writePage(w http.ResponseWriter, from int) {
 		}},
 		"rows": rows,
 	}
-	if end < len(f.rows) {
+	if end < len(f.served) {
 		resp["pageToken"] = strconv.Itoa(end)
 	}
 	f.writeJSON(w, resp)
 }
 
 func (f *fakeBigQuery) writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
 	b, err := json.Marshal(v)
 	if err != nil {
 		f.t.Errorf("marshal: %v", err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(b); err != nil {
 		f.t.Errorf("write: %v", err)
 	}

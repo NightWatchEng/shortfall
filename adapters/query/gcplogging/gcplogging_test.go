@@ -17,27 +17,38 @@ var (
 	to   = time.Date(2026, 8, 25, 10, 0, 0, 0, time.UTC)
 )
 
-// TestCapabilitiesAreEventsOnly pins the honest capability declaration:
-// Cloud Logging is an event store, and the GCP metric legs come from
-// Managed Service for Prometheus through the promql adapter.
-func TestCapabilitiesAreEventsOnly(t *testing.T) {
-	q, err := New("my-project", "logs_analytics")
-	if err != nil {
-		t.Fatal(err)
+// window is the standard half-open read window for the unit tests.
+func window() query.TimeRange { return query.TimeRange{From: from, To: to} }
+
+// TestCapabilities pins the honest capability declaration: Cloud Logging is
+// an event store, and the GCP metric legs come from Managed Service for
+// Prometheus through the promql adapter.
+func TestCapabilities(t *testing.T) {
+	cases := []struct {
+		name string
+		opts []Option
+		want query.Caps
+	}{
+		{
+			name: "default: events only, retention unknown",
+			want: query.Caps{Metrics: false, Events: true, EventHistoryWeeks: 0},
+		},
+		{
+			name: "retention declared by the operator",
+			opts: []Option{WithEventHistoryWeeks(26)},
+			want: query.Caps{Metrics: false, Events: true, EventHistoryWeeks: 26},
+		},
 	}
-	caps := q.Capabilities()
-	if !caps.Events || caps.Metrics {
-		t.Fatalf("caps = %+v, want events-only", caps)
-	}
-	if caps.EventHistoryWeeks != 0 {
-		t.Fatalf("EventHistoryWeeks = %d, want 0 (unknown until declared)", caps.EventHistoryWeeks)
-	}
-	withRetention, err := New("my-project", "logs_analytics", WithEventHistoryWeeks(26))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := withRetention.Capabilities().EventHistoryWeeks; got != 26 {
-		t.Fatalf("declared EventHistoryWeeks = %d, want 26", got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			q, err := New("my-project", "logs_analytics", c.opts...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := q.Capabilities(); got != c.want {
+				t.Fatalf("caps = %+v, want %+v", got, c.want)
+			}
+		})
 	}
 }
 
@@ -65,47 +76,173 @@ func TestGeneratedSQL(t *testing.T) {
 	srv := newFakeBigQuery(t, nil)
 	q := srv.querier(t, WithMaxRows(10))
 	_, err := q.QueryEvents(context.Background(), query.EventQuery{
-		Range:   query.TimeRange{From: from, To: to},
+		Range:   window(),
 		Filters: map[string]string{"outcome": "failed", "currency": "USD"},
 		GroupBy: []string{"customer"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sql := srv.lastQuery
-	mustContain(t, sql, "FROM `my-project.logs_analytics._AllLogs`")
-	mustContain(t, sql, "timestamp >= @window_from AND timestamp < @window_to")
-	mustContain(t, sql, `JSON_VALUE(json_payload, '$.event') = @event_marker`)
-	mustContain(t, sql, `IFNULL(JSON_VALUE(json_payload, '$."biz.currency"'), '') = @f_currency`)
-	mustContain(t, sql, `IFNULL(JSON_VALUE(json_payload, '$."biz.outcome"'), '') = @f_outcome`)
-	mustContain(t, sql, "ORDER BY timestamp")
-	mustContain(t, sql, "LIMIT 11") // maxRows + 1, so a full page is detectable
-	if strings.Contains(sql, "failed") || strings.Contains(sql, "USD") {
-		t.Fatalf("filter values were interpolated into the SQL text:\n%s", sql)
+
+	fragments := []struct {
+		name string
+		want string
+	}{
+		{"fully-qualified backticked view", "FROM `my-project.logs_analytics._AllLogs`"},
+		{"half-open window on the entry timestamp", "timestamp >= @window_from AND timestamp < @window_to"},
+		{"outcome marker predicate", `JSON_VALUE(json_payload, '$.event') = @event_marker`},
+		{"currency filter, IFNULL-guarded and bound", `IFNULL(JSON_VALUE(json_payload, '$."biz.currency"'), '') = @f_currency`},
+		{"outcome filter, IFNULL-guarded and bound", `IFNULL(JSON_VALUE(json_payload, '$."biz.outcome"'), '') = @f_outcome`},
+		{"deterministic order", "ORDER BY timestamp"},
+		{"row cap one above maxRows so a full page is detectable", "LIMIT 11"},
 	}
-	if srv.lastParams["@event_marker"] != "biz.outcome" {
-		t.Fatalf("@event_marker = %q", srv.lastParams["@event_marker"])
+	for _, f := range fragments {
+		t.Run(f.name, func(t *testing.T) { mustContain(t, srv.lastQuery, f.want) })
 	}
-	if srv.lastParams["@f_outcome"] != "failed" || srv.lastParams["@f_currency"] != "USD" {
-		t.Fatalf("filter params = %v", srv.lastParams)
+
+	params := []struct {
+		name  string
+		param string
+		want  string
+	}{
+		{"marker bound, not inlined", "@event_marker", "biz.outcome"},
+		{"outcome value bound", "@f_outcome", "failed"},
+		{"currency value bound", "@f_currency", "USD"},
+		{"window start as a BigQuery TIMESTAMP literal", "@window_from", "2026-08-25 09:00:00.000000+00:00"},
+		{"window end as a BigQuery TIMESTAMP literal", "@window_to", "2026-08-25 10:00:00.000000+00:00"},
 	}
-	if got, want := srv.lastParams["@window_from"], "2026-08-25 09:00:00.000000+00:00"; got != want {
-		t.Fatalf("@window_from = %q, want %q", got, want)
+	for _, p := range params {
+		t.Run(p.name, func(t *testing.T) {
+			if got := srv.lastParams[p.param]; got != p.want {
+				t.Fatalf("%s = %q, want %q", p.param, got, p.want)
+			}
+		})
 	}
-	if got, want := srv.lastParams["@window_to"], "2026-08-25 10:00:00.000000+00:00"; got != want {
-		t.Fatalf("@window_to = %q, want %q", got, want)
+
+	t.Run("no filter value reaches the SQL text", func(t *testing.T) {
+		if strings.Contains(srv.lastQuery, "failed") || strings.Contains(srv.lastQuery, "USD") {
+			t.Fatalf("filter values were interpolated into the SQL text:\n%s", srv.lastQuery)
+		}
+	})
+	t.Run("request envelope", func(t *testing.T) {
+		if mode, _ := srv.lastBody["parameterMode"].(string); mode != "NAMED" {
+			t.Fatalf("parameterMode = %q, want NAMED", mode)
+		}
+		if legacy, _ := srv.lastBody["useLegacySql"].(bool); legacy {
+			t.Fatal("useLegacySql must be false — the statement is GoogleSQL")
+		}
+		if loc, _ := srv.lastBody["location"].(string); loc != "us" {
+			t.Fatalf("location = %q, want us", loc)
+		}
+		if srv.lastAuth != "Bearer ya29.test" {
+			t.Fatalf("Authorization = %q", srv.lastAuth)
+		}
+	})
+}
+
+// TestWindowBoundsStayASuperset pins the direction each bound rounds. The
+// pushdown is only safe because memq re-applies the exact half-open
+// [From, To) afterwards, and that argument holds only while the fetch is a
+// superset: BigQuery TIMESTAMP is microsecond-resolution, so From must
+// round DOWN and To must round UP. A To that truncated downward would drop
+// an entry at exactly the truncated microsecond that the reference admits,
+// and no client-side re-filter can recover a row that was never fetched.
+func TestWindowBoundsStayASuperset(t *testing.T) {
+	base := time.Date(2026, 8, 25, 9, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name           string
+		from, to       time.Time
+		wantFrom, want string
+	}{
+		{
+			name:     "microsecond-aligned bounds are unchanged",
+			from:     base,
+			to:       base.Add(time.Hour),
+			wantFrom: "2026-08-25 09:00:00.000000+00:00",
+			want:     "2026-08-25 10:00:00.000000+00:00",
+		},
+		{
+			name:     "sub-microsecond start rounds down, widening",
+			from:     base.Add(500 * time.Nanosecond),
+			to:       base.Add(time.Hour),
+			wantFrom: "2026-08-25 09:00:00.000000+00:00",
+			want:     "2026-08-25 10:00:00.000000+00:00",
+		},
+		{
+			name:     "sub-microsecond end rounds up, widening",
+			from:     base,
+			to:       base.Add(time.Hour).Add(500 * time.Nanosecond),
+			wantFrom: "2026-08-25 09:00:00.000000+00:00",
+			want:     "2026-08-25 10:00:00.000001+00:00",
+		},
+		{
+			name:     "end one nanosecond past a microsecond still rounds up",
+			from:     base,
+			to:       base.Add(time.Hour).Add(time.Nanosecond),
+			wantFrom: "2026-08-25 09:00:00.000000+00:00",
+			want:     "2026-08-25 10:00:00.000001+00:00",
+		},
 	}
-	if mode, _ := srv.lastBody["parameterMode"].(string); mode != "NAMED" {
-		t.Fatalf("parameterMode = %q, want NAMED", mode)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := newFakeBigQuery(t, nil)
+			q := srv.querier(t)
+			if _, err := q.QueryEvents(context.Background(), query.EventQuery{
+				Range: query.TimeRange{From: c.from, To: c.to}, Filters: map[string]string{"currency": "USD"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if got := srv.lastParams["@window_from"]; got != c.wantFrom {
+				t.Fatalf("@window_from = %q, want %q", got, c.wantFrom)
+			}
+			if got := srv.lastParams["@window_to"]; got != c.want {
+				t.Fatalf("@window_to = %q, want %q", got, c.want)
+			}
+		})
 	}
-	if legacy, _ := srv.lastBody["useLegacySql"].(bool); legacy {
-		t.Fatal("useLegacySql must be false — the statement is GoogleSQL")
+}
+
+// TestSubMicrosecondWindowKeepsTheBoundaryEvent is the behavioural half of
+// the bound-rounding contract: an entry stored at exactly the microsecond
+// the window end truncates to is inside memq's [From, To), so the adapter
+// must return it too.
+func TestSubMicrosecondWindowKeepsTheBoundaryEvent(t *testing.T) {
+	edge := from.Add(time.Minute)          // microsecond-aligned
+	end := edge.Add(500 * time.Nanosecond) // To truncates down to edge
+	ev := outcome("invoice.pay", "capture", "failed", "inv_edge", "h:c1", "smb", "USD", 14900, edge)
+	srv := newFakeBigQuery(t, entriesFor([]biz.Outcome{ev}))
+	groups, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
+		Range: query.TimeRange{From: from, To: end}, Filters: map[string]string{"currency": "USD"},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if loc, _ := srv.lastBody["location"].(string); loc != "us" {
-		t.Fatalf("location = %q, want us", loc)
+	if len(groups) != 1 || groups[0].Count != 1 || groups[0].SumMinor != 14900 {
+		t.Fatalf("groups = %+v, want the boundary event (the reference admits it: %v < %v)",
+			groups, edge, end)
 	}
-	if srv.lastAuth != "Bearer ya29.test" {
-		t.Fatalf("Authorization = %q", srv.lastAuth)
+}
+
+// TestServerWaitFitsInsideTheClientDeadline pins the ordering of the two
+// deadlines. If the server-side wait matched the default client timeout,
+// the jobComplete:false answer would arrive no earlier than the client
+// gives up, making the polling loop unreachable with the adapter's own
+// default doer.
+func TestServerWaitFitsInsideTheClientDeadline(t *testing.T) {
+	if serverWait >= defaultHTTPTimeout {
+		t.Fatalf("serverWait %v must be below the client deadline %v", serverWait, defaultHTTPTimeout)
+	}
+	if margin := defaultHTTPTimeout - serverWait; margin < 10*time.Second {
+		t.Fatalf("margin %v is too tight: connect, TLS and body read all share the client deadline", margin)
+	}
+	srv := newFakeBigQuery(t, nil)
+	if _, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
+		Range: window(), Filters: map[string]string{"currency": "USD"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := srv.lastBody["timeoutMs"].(float64); int64(got) != serverWait.Milliseconds() {
+		t.Fatalf("request timeoutMs = %v, want serverWait %v", got, serverWait.Milliseconds())
 	}
 }
 
@@ -114,7 +251,7 @@ func TestWithViewNamesTheView(t *testing.T) {
 	srv := newFakeBigQuery(t, nil)
 	q := srv.querier(t, WithView("outcomes_view"))
 	if _, err := q.QueryEvents(context.Background(), query.EventQuery{
-		Range: query.TimeRange{From: from, To: to}, Filters: map[string]string{"currency": "USD"},
+		Range: window(), Filters: map[string]string{"currency": "USD"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -122,67 +259,89 @@ func TestWithViewNamesTheView(t *testing.T) {
 }
 
 // TestIdentifierValidation: a project, dataset or view name that could
-// carry SQL is refused at construction, not quoted-and-hoped.
+// carry SQL is refused at construction, not quoted-and-hoped. The rejection
+// rows assert WHICH identifier was refused (ADR-0007) — an accepted view
+// name reported as an invalid dataset would be a silently wrong diagnosis.
 func TestIdentifierValidation(t *testing.T) {
 	cases := []struct {
 		name             string
 		project, dataset string
 		opts             []Option
+		wantErr          string
 	}{
-		{"backtick in project", "my`project", "d", nil},
-		{"space in project", "my project", "d", nil},
-		{"empty project", "", "d", nil},
-		{"backtick in dataset", "p", "d`x", nil},
-		{"dot in dataset", "p", "d.x", nil},
-		{"empty dataset", "p", "", nil},
-		{"semicolon in view", "p", "d", []Option{WithView("v; DROP TABLE x")}},
-		{"backtick in view", "p", "d", []Option{WithView("v`x")}},
-		{"empty view", "p", "d", []Option{WithView("")}},
+		{name: "backtick in project", project: "my`project", dataset: "d", wantErr: `invalid project id "my`},
+		{name: "space in project", project: "my project", dataset: "d", wantErr: `invalid project id "my project"`},
+		{name: "quote in project", project: `my'project`, dataset: "d", wantErr: "invalid project id"},
+		{name: "empty project", project: "", dataset: "d", wantErr: `invalid project id ""`},
+		{name: "backtick in dataset", project: "p", dataset: "d`x", wantErr: "invalid dataset id"},
+		{name: "dot in dataset", project: "p", dataset: "d.x", wantErr: `invalid dataset id "d.x"`},
+		{name: "empty dataset", project: "p", dataset: "", wantErr: `invalid dataset id ""`},
+		{name: "semicolon in view", project: "p", dataset: "d", opts: []Option{WithView("v; DROP TABLE x")}, wantErr: "invalid view id"},
+		{name: "backtick in view", project: "p", dataset: "d", opts: []Option{WithView("v`x")}, wantErr: "invalid view id"},
+		{name: "empty view", project: "p", dataset: "d", opts: []Option{WithView("")}, wantErr: `invalid view id ""`},
+		{name: "non-positive max rows", project: "p", dataset: "d", opts: []Option{WithMaxRows(0)}, wantErr: "max rows must be positive"},
+		{name: "legitimate names accepted", project: "my-project", dataset: "logs_analytics", opts: []Option{WithView("_AllLogs")}},
+		{name: "domain-scoped project id accepted", project: "acme.com:legacy-project", dataset: "logs_analytics"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if _, err := New(c.project, c.dataset, c.opts...); err == nil {
-				t.Fatal("want an error, got nil")
+			_, err := New(c.project, c.dataset, c.opts...)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 			}
 		})
-	}
-	if _, err := New("my-project", "logs_analytics", WithView("_AllLogs")); err != nil {
-		t.Fatalf("legitimate names must be accepted: %v", err)
-	}
-	if _, err := New("acme.com:legacy-project", "logs_analytics"); err != nil {
-		t.Fatalf("domain-scoped project ids must be accepted: %v", err)
 	}
 }
 
 // TestUnknownLabelIsRefused: an unrecognised filter or group label would
-// silently match the empty string and answer the wrong question. Each case
-// is a query that is otherwise entirely valid — currency is pinned or
-// grouped — so only the unknown label can be what refuses it, and the
-// error must name the label rather than being any error at all.
+// silently match the empty string and answer the wrong question. Each
+// rejection case is a query that is otherwise entirely valid — currency is
+// pinned — so only the unknown label can be what refuses it, and the error
+// must name the label rather than being any error at all.
 func TestUnknownLabelIsRefused(t *testing.T) {
+	cases := []struct {
+		name    string
+		q       query.EventQuery
+		wantErr string
+	}{
+		{
+			name:    "unknown filter label",
+			q:       query.EventQuery{Range: window(), Filters: map[string]string{"currency": "USD", "provider": "acme"}},
+			wantErr: `unknown filter label "provider"`,
+		},
+		{
+			name:    "unknown group label",
+			q:       query.EventQuery{Range: window(), Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"provider"}},
+			wantErr: `unknown group label "provider"`,
+		},
+		{
+			// Control: without it the two rows above could be passing for
+			// an unrelated reason.
+			name: "known labels only",
+			q:    query.EventQuery{Range: window(), Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"}},
+		},
+	}
 	srv := newFakeBigQuery(t, nil)
 	q := srv.querier(t)
-	ctx := context.Background()
-	w := query.TimeRange{From: from, To: to}
-
-	_, err := q.QueryEvents(ctx, query.EventQuery{
-		Range: w, Filters: map[string]string{"currency": "USD", "provider": "acme"},
-	})
-	if err == nil || !strings.Contains(err.Error(), `unknown filter label "provider"`) {
-		t.Fatalf("err = %v, want an unknown-filter-label refusal naming provider", err)
-	}
-	_, err = q.QueryEvents(ctx, query.EventQuery{
-		Range: w, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"provider"},
-	})
-	if err == nil || !strings.Contains(err.Error(), `unknown group label "provider"`) {
-		t.Fatalf("err = %v, want an unknown-group-label refusal naming provider", err)
-	}
-	// Control: the same query with only known labels succeeds, so the two
-	// assertions above cannot be passing for an unrelated reason.
-	if _, err := q.QueryEvents(ctx, query.EventQuery{
-		Range: w, Filters: map[string]string{"currency": "USD"}, GroupBy: []string{"customer"},
-	}); err != nil {
-		t.Fatalf("control query must succeed: %v", err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := q.QueryEvents(context.Background(), c.q)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
+			}
+		})
 	}
 }
 
@@ -196,42 +355,55 @@ func TestCurrencyInvariant(t *testing.T) {
 	srv := newFakeBigQuery(t, entriesFor(events))
 	q := srv.querier(t)
 	ctx := context.Background()
-	w := query.TimeRange{From: from, To: to}
 
-	for _, qy := range []query.EventQuery{
-		{Range: w, GroupBy: []string{"customer"}},
-		{Range: w, GroupBy: []string{"customer"}, Agg: query.EventAggMaxPerGroup},
-	} {
-		if _, err := q.QueryEvents(ctx, qy); err == nil {
-			t.Fatalf("cross-currency money read must be refused: %+v", qy)
+	refused := []struct {
+		name string
+		q    query.EventQuery
+	}{
+		{"grouped sum without currency", query.EventQuery{Range: window(), GroupBy: []string{"customer"}}},
+		{"max-per-group without currency", query.EventQuery{Range: window(), GroupBy: []string{"customer"}, Agg: query.EventAggMaxPerGroup}},
+		{"ungrouped sum without currency", query.EventQuery{Range: window()}},
+	}
+	for _, c := range refused {
+		t.Run("refused: "+c.name, func(t *testing.T) {
+			if _, err := q.QueryEvents(ctx, c.q); err == nil {
+				t.Fatal("a cross-currency money read must be refused")
+			}
+		})
+	}
+
+	t.Run("grouping by currency keeps the two currencies apart", func(t *testing.T) {
+		groups, err := q.QueryEvents(ctx, query.EventQuery{Range: window(), GroupBy: []string{"currency"}})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-	// Grouped by currency, or pinned by a filter: allowed, and the two
-	// currencies stay separate.
-	groups, err := q.QueryEvents(ctx, query.EventQuery{Range: w, GroupBy: []string{"currency"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(groups) != 2 {
-		t.Fatalf("groups = %+v, want one per currency", groups)
-	}
-	byCur := map[string]int64{}
-	for _, g := range groups {
-		byCur[g.Key["currency"]] = g.SumMinor
-	}
-	if byCur["USD"] != 14900 || byCur["EUR"] != 5000 {
-		t.Fatalf("per-currency sums = %v", byCur)
-	}
-	// A distinct count reads no money, so it needs no currency pin.
-	if _, err := q.QueryEvents(ctx, query.EventQuery{
-		Range: w, GroupBy: []string{"customer"}, Agg: query.EventAggDistinctCount,
-	}); err != nil {
-		t.Fatalf("distinct count reads no money and must not need a currency pin: %v", err)
-	}
+		if len(groups) != 2 {
+			t.Fatalf("groups = %+v, want one per currency", groups)
+		}
+		byCur := map[string]int64{}
+		for _, g := range groups {
+			byCur[g.Key["currency"]] = g.SumMinor
+		}
+		if byCur["USD"] != 14900 || byCur["EUR"] != 5000 {
+			t.Fatalf("per-currency sums = %v, want USD 14900 and EUR 5000", byCur)
+		}
+	})
+
+	t.Run("distinct count reads no money and needs no currency pin", func(t *testing.T) {
+		groups, err := q.QueryEvents(ctx, query.EventQuery{
+			Range: window(), GroupBy: []string{"customer"}, Agg: query.EventAggDistinctCount,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(groups) != 1 || groups[0].Count != 2 {
+			t.Fatalf("groups = %+v, want one group counting 2 distinct customers", groups)
+		}
+	})
 }
 
 // TestPagingAndPollingCollectEveryRow: a stalled job then three pages must
-// yield every event, in order — a paging bug silently understates money.
+// yield every event — a paging bug silently understates money.
 func TestPagingAndPollingCollectEveryRow(t *testing.T) {
 	var events []biz.Outcome
 	for i := 0; i < 7; i++ {
@@ -244,7 +416,7 @@ func TestPagingAndPollingCollectEveryRow(t *testing.T) {
 	q := srv.querier(t)
 
 	groups, err := q.QueryEvents(context.Background(), query.EventQuery{
-		Range: query.TimeRange{From: from, To: to}, Filters: map[string]string{"currency": "USD"},
+		Range: window(), Filters: map[string]string{"currency": "USD"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -252,8 +424,7 @@ func TestPagingAndPollingCollectEveryRow(t *testing.T) {
 	if len(groups) != 1 {
 		t.Fatalf("groups = %+v, want 1", groups)
 	}
-	// 100+200+...+700
-	if groups[0].Count != 7 || groups[0].SumMinor != 2800 {
+	if groups[0].Count != 7 || groups[0].SumMinor != 2800 { // 100+200+...+700
 		t.Fatalf("group = %+v, want count 7 sum 2800", groups[0])
 	}
 }
@@ -267,132 +438,169 @@ func TestTruncationIsLoud(t *testing.T) {
 		events = append(events, outcome("invoice.pay", "capture", "failed",
 			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", 100, from.Add(time.Duration(i)*time.Minute)))
 	}
-	srv := newFakeBigQuery(t, entriesFor(events)) // 5 outcomes + 2 foreign rows
-	q := srv.querier(t, WithMaxRows(3))
-	_, err := q.QueryEvents(context.Background(), query.EventQuery{
-		Range: query.TimeRange{From: from, To: to}, Filters: map[string]string{"currency": "USD"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "truncated") {
-		t.Fatalf("err = %v, want a loud truncation error", err)
+	srv := newFakeBigQuery(t, entriesFor(events))
+	cases := []struct {
+		name    string
+		maxRows int
+		wantErr string
+	}{
+		{name: "cap below the window's row count", maxRows: 3, wantErr: "truncated"},
+		{name: "cap exactly at the row count still fits", maxRows: 5},
+		{name: "cap above the row count fits", maxRows: 50},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := srv.querier(t, WithMaxRows(c.maxRows)).QueryEvents(context.Background(), query.EventQuery{
+				Range: window(), Filters: map[string]string{"currency": "USD"},
+			})
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("err = %v, want a loud truncation error", err)
+			}
+		})
 	}
 }
 
-// TestFailurePaths pins fail-loud behavior on the wire and on the record:
-// an HTTP error, a BigQuery error envelope, a malformed row, and a marked
-// outcome record that cannot parse.
+// TestFailurePaths pins fail-loud behavior on the wire and on the record.
+// Every case reduces to one shape — build a querier over a backend that
+// misbehaves in one specific way, run one query, and require an error
+// naming the cause — so it is a table with one assertion body (ADR-0007).
+// Nothing here may answer "no rows": an unreadable backend that looked like
+// an empty window would be reported as a measured zero.
 func TestFailurePaths(t *testing.T) {
-	w := query.TimeRange{From: from, To: to}
-	qy := query.EventQuery{Range: w, Filters: map[string]string{"currency": "USD"}}
+	usd := query.EventQuery{Range: window(), Filters: map[string]string{"currency": "USD"}}
 
-	t.Run("api error envelope carries the message", func(t *testing.T) {
-		srv := newFakeBigQuery(t, nil)
-		srv.failStatus = 403
-		srv.failBody = errorBody(403, "Access Denied: Table my-project:logs_analytics._AllLogs")
-		if _, err := srv.querier(t).QueryEvents(context.Background(), qy); err == nil ||
-			!strings.Contains(err.Error(), "Access Denied") {
-			t.Fatalf("err = %v, want the API message", err)
+	fakeWith := func(configure func(*fakeBigQuery)) func(*testing.T) *Querier {
+		return func(t *testing.T) *Querier {
+			srv := newFakeBigQuery(t, nil)
+			configure(srv)
+			return srv.querier(t)
 		}
-	})
+	}
+	raw := func(body string) func(*testing.T) *Querier {
+		return func(t *testing.T) *Querier { return rawQuerier(t, body) }
+	}
 
-	// A non-200 whose body is NOT a Google error envelope — a proxy or load
-	// balancer page — is the case only the status check can catch. Without
-	// it the decode yields a zero-valued response and the window silently
-	// reads as empty, which is the fail-open shape the charter forbids.
-	t.Run("non-200 without an error envelope is still an error", func(t *testing.T) {
-		srv := newFakeBigQuery(t, nil)
-		srv.failStatus = 502
-		srv.failBody = "<html><head><title>502 Bad Gateway</title></head></html>"
-		_, err := srv.querier(t).QueryEvents(context.Background(), qy)
-		if err == nil {
-			t.Fatal("a 502 must be an error, never an empty window")
-		}
-		if !strings.Contains(err.Error(), "502") {
-			t.Fatalf("err = %v, want the HTTP status named", err)
-		}
-	})
-
-	t.Run("marked record that cannot parse fails loudly", func(t *testing.T) {
-		srv := newFakeBigQuery(t, []fakeRow{{
-			micros:  from.Add(time.Minute).UnixMicro(),
-			payload: `{"event":"biz.outcome","biz.flow":"invoice.pay","biz.outcome":"failed","biz.amount_minor":1.5}`,
-		}})
-		if _, err := srv.querier(t).QueryEvents(context.Background(), qy); err == nil ||
-			!strings.Contains(err.Error(), "amount_minor") {
-			t.Fatalf("err = %v, want an amount_minor parse failure", err)
-		}
-	})
-
-	// Both failure envelopes arrive on a 200 too: BigQuery reports
-	// job-level failures in `errors` with an OK status, and a gateway can
-	// hand back an `error` object with one. Either way the answer is an
-	// error, never the empty window a zero-valued decode would look like.
-	t.Run("error envelope on a 200 is not an empty window", func(t *testing.T) {
-		for _, body := range []string{
-			`{"jobComplete":true,"error":{"code":400,"message":"Unrecognized name: json_payload"}}`,
-			`{"jobComplete":true,"errors":[{"message":"Query exceeded resource limits"}],"rows":[]}`,
-		} {
-			_, err := rawQuerier(t, body).QueryEvents(context.Background(), qy)
-			if err == nil {
-				t.Fatalf("body %s must be an error, not an empty answer", body)
+	cases := []struct {
+		name    string
+		build   func(*testing.T) *Querier
+		q       query.EventQuery
+		wantErr string
+	}{
+		{
+			name: "api error envelope on a non-200 carries the message",
+			build: fakeWith(func(f *fakeBigQuery) {
+				f.failStatus = 403
+				f.failBody = errorBody(403, "Access Denied: Table my-project:logs_analytics._AllLogs")
+			}),
+			q:       usd,
+			wantErr: "Access Denied",
+		},
+		{
+			// Only the status check catches a non-200 whose body is not a
+			// Google error envelope — a proxy or load-balancer page. Without
+			// it the decode yields a zero-valued response that reads as an
+			// empty window.
+			name: "non-200 without an error envelope names the status",
+			build: fakeWith(func(f *fakeBigQuery) {
+				f.failStatus = 502
+				f.failBody = "<html><head><title>502 Bad Gateway</title></head></html>"
+			}),
+			q:       usd,
+			wantErr: "502",
+		},
+		{
+			// BigQuery reports job-level failures in `errors` with an OK
+			// status, so a 200 is not evidence of an answer.
+			name:    "job errors on a 200 are not an empty window",
+			build:   raw(`{"jobComplete":true,"errors":[{"message":"Query exceeded resource limits"}],"rows":[]}`),
+			q:       usd,
+			wantErr: "resource limits",
+		},
+		{
+			name:    "error object on a 200 is not an empty window",
+			build:   raw(`{"jobComplete":true,"error":{"code":400,"message":"Unrecognized name: json_payload"}}`),
+			q:       usd,
+			wantErr: "Unrecognized name",
+		},
+		{
+			name:    "row with the wrong column count",
+			build:   raw(`{"jobComplete":true,"rows":[{"f":[{"v":"1787648400000000"}]}]}`),
+			q:       usd,
+			wantErr: "columns",
+		},
+		{
+			name:    "unparsable event_micros",
+			build:   raw(`{"jobComplete":true,"rows":[{"f":[{"v":"not-a-number"},{"v":"{\"event\":\"biz.outcome\"}"}]}]}`),
+			q:       usd,
+			wantErr: "event_micros",
+		},
+		{
+			name:    "job that never completes and names no job id",
+			build:   raw(`{"jobComplete":false}`),
+			q:       usd,
+			wantErr: "job id",
+		},
+		{
+			// A marked record that cannot be decoded is a truncated or
+			// corrupted outcome; counting it as nothing would understate
+			// money, so it is loud rather than skipped.
+			name: "marked record that cannot parse",
+			build: fakeWith(func(f *fakeBigQuery) {
+				f.rows = []fakeRow{{
+					micros: from.Add(time.Minute).UnixMicro(),
+					payload: `{"event":"biz.outcome","biz.flow":"invoice.pay","biz.outcome":"failed",` +
+						`"biz.currency":"USD","biz.amount_minor":1.5}`,
+				}}
+			}),
+			q:       usd,
+			wantErr: "amount_minor",
+		},
+		{
+			name:    "limit without an order",
+			build:   fakeWith(func(*fakeBigQuery) {}),
+			q:       query.EventQuery{Range: window(), Filters: map[string]string{"currency": "USD"}, Limit: 3},
+			wantErr: "OrderBy",
+		},
+		{
+			name: "token source failure",
+			build: func(t *testing.T) *Querier {
+				srv := newFakeBigQuery(t, nil)
+				q, err := New("my-project", "logs_analytics",
+					WithEndpoint(srv.srv.URL), WithHTTPClient(srv.srv.Client()),
+					WithBearerToken(func() (string, error) { return "", errors.New("metadata server unreachable") }))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return q
+			},
+			q:       usd,
+			wantErr: "metadata server unreachable",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			groups, err := c.build(t).QueryEvents(context.Background(), c.q)
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 			}
-			if !strings.Contains(err.Error(), "Unrecognized name") && !strings.Contains(err.Error(), "resource limits") {
-				t.Fatalf("err = %v, want the API message", err)
+			if groups != nil {
+				t.Fatalf("groups = %+v, want nil alongside the error", groups)
 			}
-		}
-	})
-
-	t.Run("row with the wrong column count fails loudly", func(t *testing.T) {
-		q := rawQuerier(t, `{"jobComplete":true,"rows":[{"f":[{"v":"1787648400000000"}]}]}`)
-		if _, err := q.QueryEvents(context.Background(), qy); err == nil ||
-			!strings.Contains(err.Error(), "columns") {
-			t.Fatalf("err = %v, want a column-count failure", err)
-		}
-	})
-
-	t.Run("unparsable timestamp fails loudly", func(t *testing.T) {
-		q := rawQuerier(t, `{"jobComplete":true,"rows":[{"f":[{"v":"not-a-number"},{"v":"{\"event\":\"biz.outcome\"}"}]}]}`)
-		if _, err := q.QueryEvents(context.Background(), qy); err == nil ||
-			!strings.Contains(err.Error(), "event_micros") {
-			t.Fatalf("err = %v, want an event_micros failure", err)
-		}
-	})
-
-	t.Run("a job that never completes is an error, not an empty answer", func(t *testing.T) {
-		q := rawQuerier(t, `{"jobComplete":false}`)
-		if _, err := q.QueryEvents(context.Background(), qy); err == nil ||
-			!strings.Contains(err.Error(), "job id") {
-			t.Fatalf("err = %v, want a missing-job-id failure", err)
-		}
-	})
-
-	t.Run("limit without an order is refused", func(t *testing.T) {
-		srv := newFakeBigQuery(t, nil)
-		_, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
-			Range: w, Filters: map[string]string{"currency": "USD"}, Limit: 3,
 		})
-		if err == nil || !strings.Contains(err.Error(), "OrderBy") {
-			t.Fatalf("err = %v, want a Limit-without-OrderBy refusal", err)
-		}
-	})
-
-	t.Run("token source failure surfaces", func(t *testing.T) {
-		srv := newFakeBigQuery(t, nil)
-		q, err := New("my-project", "logs_analytics",
-			WithEndpoint(srv.srv.URL), WithHTTPClient(srv.srv.Client()),
-			WithBearerToken(func() (string, error) { return "", errors.New("metadata server unreachable") }))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := q.QueryEvents(context.Background(), qy); err == nil ||
-			!strings.Contains(err.Error(), "metadata server unreachable") {
-			t.Fatalf("err = %v, want the token error", err)
-		}
-	})
+	}
 }
 
-// TestForeignEntriesAreSkipped: the _AllLogs view carries every log the
-// project writes, so an entry without the outcome marker is not ours and
-// must be skipped rather than parsed or counted.
+// TestForeignEntriesAreSkipped: the log bucket's view carries every log the
+// project writes. The SQL filters them out server-side, but a backend that
+// ignores the pushdown (evaluate=false here) hands them straight to the
+// decoder, which must skip anything without the outcome marker rather than
+// failing the read or counting it.
 func TestForeignEntriesAreSkipped(t *testing.T) {
 	ev := outcome("invoice.pay", "capture", "failed", "inv_1", "h:c1", "smb", "USD", 14900, from.Add(time.Minute))
 	srv := newFakeBigQuery(t, []fakeRow{
@@ -401,8 +609,9 @@ func TestForeignEntriesAreSkipped(t *testing.T) {
 		{micros: from.Add(2 * time.Minute).UnixMicro(), payload: `{"event":"biz.flush","flushed":3}`},
 		{micros: from.Add(3 * time.Minute).UnixMicro(), payload: `not json at all`},
 	})
+	srv.evaluate = false // the backend hands back everything it holds
 	groups, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
-		Range: query.TimeRange{From: from, To: to}, Filters: map[string]string{"currency": "USD"},
+		Range: window(), Filters: map[string]string{"currency": "USD"},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -44,8 +44,20 @@ func stringParam(name, value string) queryParam {
 // precision is BigQuery's own: a TIMESTAMP column cannot hold the
 // nanosecond tail a Cloud Logging entry may carry, so an outcome's
 // sub-microsecond component does not survive the round trip. The engine's
-// windows are minutes to hours, so this changes no reported figure; it is
-// recorded here because it is a real property of this read path.
+// windows are minutes to hours, so this changes no reported figure for a
+// stored entry; it is recorded here because it is a real property of this
+// read path.
+//
+// The window BOUNDS are a separate concern and do not get to be sloppy.
+// The pushdown is only safe because memq re-applies the exact half-open
+// [From, To) over whatever comes back, and that argument holds only while
+// the fetch is a SUPERSET of the window. time.Format truncates fractional
+// seconds and never rounds, so a bound rendered naively moves DOWN: harmless
+// on From (truncating widens the fetch), but on To it would exclude an entry
+// stored at exactly the truncated microsecond that the reference admits —
+// and memq cannot re-admit a row the query never fetched. lowerBoundParam
+// and upperBoundParam below round each bound in its widening direction so
+// the superset property is structural rather than lucky.
 const bqTimestampLayout = "2006-01-02 15:04:05.000000-07:00"
 
 func timestampParam(name string, t time.Time) queryParam {
@@ -55,6 +67,41 @@ func timestampParam(name string, t time.Time) queryParam {
 		ParameterVal:  paramValueBox{Value: t.UTC().Format(bqTimestampLayout)},
 	}
 }
+
+// lowerBoundParam binds the window's inclusive start. Rendering truncates
+// toward the past, which widens the fetch — the safe direction.
+func lowerBoundParam(name string, t time.Time) queryParam {
+	return timestampParam(name, t)
+}
+
+// upperBoundParam binds the window's exclusive end, rounded UP to the next
+// whole microsecond so the fetch stays a superset of [From, To).
+func upperBoundParam(name string, t time.Time) queryParam {
+	return timestampParam(name, ceilMicro(t))
+}
+
+// ceilMicro rounds t up to the next whole microsecond (a no-op when t is
+// already microsecond-aligned).
+func ceilMicro(t time.Time) time.Time {
+	if rem := t.Nanosecond() % 1000; rem != 0 {
+		return t.Add(time.Duration(1000-rem) * time.Nanosecond)
+	}
+	return t
+}
+
+// The two deadlines in play, kept apart on purpose.
+//
+// BigQuery holds a jobs.query (or getQueryResults) request open for up to
+// serverWait and then answers jobComplete:false so the caller can poll. If
+// the client's whole-exchange deadline were the same number, it would fire
+// at the same instant that answer could arrive: the polling loop in run()
+// would be unreachable with the constructor's own default doer, and a slow
+// query would surface as a transport timeout instead of a poll. Keep
+// serverWait comfortably below defaultHTTPTimeout; a test pins the ordering.
+const (
+	defaultHTTPTimeout = 60 * time.Second
+	serverWait         = 20 * time.Second
+)
 
 // queryRequest is the jobs.query request body.
 type queryRequest struct {
@@ -112,7 +159,7 @@ func (q *Querier) run(ctx context.Context, stmt string, params []queryParam) ([]
 		UseLegacySQL:    false,
 		ParameterMode:   "NAMED",
 		QueryParameters: params,
-		TimeoutMs:       30000,
+		TimeoutMs:       serverWait.Milliseconds(),
 		MaxResults:      int64(q.maxRows) + 1,
 		Location:        q.location,
 	}
@@ -169,7 +216,7 @@ func (q *Querier) queriesURL() string {
 
 func (q *Querier) resultsURL(ref *jobRef, pageToken string) string {
 	v := url.Values{}
-	v.Set("timeoutMs", "30000")
+	v.Set("timeoutMs", strconv.FormatInt(serverWait.Milliseconds(), 10))
 	v.Set("maxResults", strconv.Itoa(q.maxRows+1))
 	loc := q.location
 	if ref.Location != "" {

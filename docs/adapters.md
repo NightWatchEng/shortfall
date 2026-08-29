@@ -89,13 +89,14 @@ serves both signals, so the engine gets one adapter per signal kind and each
 declares the other unsupported: `adapters/query/gcplogging` grounds the
 realized and customer-impact legs from Cloud Logging entries, and
 `adapters/query/promql` grounds the deferred, unrealized and baseline legs
-against Managed Service for Prometheus, which answers PromQL over the
-`biz_*` families a collector wrote through `adapters/export/otlp`. This is
-the same split AWS has — `cwinsights` for events, a metric adapter for the
-metric store — and it is why `query.Caps` carries `Metrics` and `Events`
-independently: an events-only querier returns `query.ErrUnsupported` from
-`QueryMetric`, and the engine turns that into a leg marked unavailable with
-a reason rather than a zero that reads like a measurement.
+against Managed Service for Prometheus, whose Prometheus-compatible query
+API answers PromQL over the metrics a collector wrote through
+`adapters/export/otlp`. This is the same split AWS has — `cwinsights` for
+events, a promql-readable metrics store for the metric legs — and it is why
+`query.Caps` carries `Metrics` and `Events` independently: an events-only
+querier returns `query.ErrUnsupported` from `QueryMetric`, and the engine
+turns that into a leg marked unavailable with a reason rather than a zero
+that reads like a measurement.
 
 Both GCP query adapters are honest about one more thing: an events-only
 backend cannot de-duplicate realized loss on its own. The per-entity de-dup

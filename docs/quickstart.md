@@ -35,10 +35,12 @@ export adapter (CloudWatch EMF or Prometheus) and the engine reads them
 back through a query adapter. You never install a new datastore. This
 walkthrough uses a local SQLite file **only** so the demo needs zero
 external services: it stands in for your real event store. The query
-adapters are `promql` (metrics), and `cwinsights` and `sql` for
-events — so a CloudWatch shop exports via `adapters/export/cloudwatch`
-and reads back through `cwinsights` (see [adapters.md](adapters.md) for
-exactly which backend grounds which leg).
+adapters are `promql` (metrics), and `cwinsights`, `gcplogging` and
+`sql` for events — so a CloudWatch shop exports via
+`adapters/export/cloudwatch` and reads back through `cwinsights`, and a
+Google Cloud shop exports events via `adapters/export/gcp` and reads them
+back through `gcplogging` (see [adapters.md](adapters.md) for exactly
+which backend grounds which leg).
 
 Put a few rows in a SQLite table matching the sql adapter's schema:
 

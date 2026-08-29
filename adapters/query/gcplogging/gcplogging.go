@@ -128,7 +128,8 @@ var _ query.Querier = (*Querier)(nil)
 // Option configures the Querier.
 type Option func(*Querier)
 
-// WithHTTPClient injects the HTTP doer (default 30s *http.Client). Bring an
+// WithHTTPClient injects the HTTP doer (default *http.Client at
+// defaultHTTPTimeout). Bring an
 // oauth2 client here to authenticate without WithBearerToken.
 func WithHTTPClient(d Doer) Option { return func(q *Querier) { q.doer = d } }
 
@@ -179,7 +180,7 @@ func New(projectID, dataset string, opts ...Option) (*Querier, error) {
 		dataset:      dataset,
 		view:         defaultView,
 		endpoint:     "https://bigquery.googleapis.com",
-		doer:         &http.Client{Timeout: 30 * time.Second},
+		doer:         &http.Client{Timeout: defaultHTTPTimeout},
 		pollInterval: 250 * time.Millisecond,
 		maxRows:      defaultMaxRows,
 	}
@@ -269,8 +270,8 @@ func checkLabels(qy query.EventQuery) error {
 // int), so no caller-supplied text ever reaches the SQL text.
 func (q *Querier) statement(qy query.EventQuery) (string, []queryParam) {
 	params := []queryParam{
-		timestampParam("window_from", qy.Range.From),
-		timestampParam("window_to", qy.Range.To),
+		lowerBoundParam("window_from", qy.Range.From),
+		upperBoundParam("window_to", qy.Range.To),
 		stringParam("event_marker", eventMarker),
 	}
 	conds := []string{
