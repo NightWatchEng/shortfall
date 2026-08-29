@@ -2,12 +2,14 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/query"
 	"github.com/NightWatchEng/shortfall/query/memq"
+	"github.com/NightWatchEng/shortfall/registry"
 )
 
 type nullQuerier struct{}
@@ -84,5 +86,34 @@ func TestEvidenceLabels(t *testing.T) {
 				t.Fatalf("Evidence %q, want %q", c.e, c.want)
 			}
 		})
+	}
+}
+
+// TestComputeCoverageUnavailableStatesContract pins the impact-time coverage
+// message: coverage is a reconcile-time number (impact has no ledger), and
+// the reason must state that contract — never a stale milestone reference.
+func TestComputeCoverageUnavailableStatesContract(t *testing.T) {
+	reg, err := registry.Load("../registry/testdata/registry.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := time.Date(2026, 8, 25, 9, 0, 0, 0, time.UTC)
+	q := memq.New(memq.WithEvents(nil))
+	report, err := Compute(context.Background(), &reg, q, Request{
+		Window: query.TimeRange{From: from, To: from.Add(time.Hour)},
+		Flows:  []string{"invoice.pay"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := report.Coverage.Unavailable
+	if u == "" {
+		t.Fatal("impact-time coverage must be Unavailable (no ledger), not fabricated")
+	}
+	if strings.Contains(u, "M8") || strings.Contains(u, "lands") {
+		t.Fatalf("coverage reason carries stale milestone language: %q", u)
+	}
+	if !strings.Contains(u, "ledger") {
+		t.Fatalf("coverage reason must state the real contract (needs a ledger): %q", u)
 	}
 }

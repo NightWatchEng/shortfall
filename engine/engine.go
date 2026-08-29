@@ -181,10 +181,12 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 		report.Unrealized = leg
 	}
 
-	// Not yet landed — stated honestly rather than rendered as zero.
+	// Coverage is a reconcile-time number: it needs the provider ledger,
+	// which an impact request does not carry — stated honestly rather than
+	// rendered as a fabricated 100%.
 	report.Coverage = CoverageLeg{
 		Evidence:    EvidenceTrust,
-		Unavailable: "reconciliation lands in M8 — no coverage ratio computed yet",
+		Unavailable: "coverage needs a provider ledger — run shortfall reconcile for the trust number",
 	}
 
 	// Suggested severity from the $/min-at-risk ladder (ADR-0013); "" when the
