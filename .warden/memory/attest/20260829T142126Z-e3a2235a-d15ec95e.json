@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "e3a2235a548575fda591a27a34a3f143dbda0585",
+  "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "rules_version": "456493333d3e",
+  "reviewed_at": "2026-08-29T14:21:26+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), combined pass per trivial-diff clause"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same combined subagent, adversarial self-examination; two findings survived and were fixed"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T14:21:26+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "e3a2235a548575fda591a27a34a3f143dbda0585",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/docs-accuracy.md",
+      "line": 9,
+      "severity": "MEDIUM",
+      "finding": "Extension could not reach its class: applies_to excluded shell scripts and the frame sentence scoped judgment to doc comments, while both distinct underlying findings are inline/script comments",
+      "evidence": "applicable() glob-filters before the rule sees files; corpus records at otlp.go:113 (inline) and commit-lint-test.sh:19 (shell)",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Frame widened to 'code comments \u2014 doc and inline, Go and shell'; applies_to gains **/*.sh; backtest artifact re-pinned to the resulting rules_version 456493333d3e",
+      "id": "9ec91af4a1348336"
+    },
+    {
+      "ts": "2026-08-29T14:21:26+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "e3a2235a548575fda591a27a34a3f143dbda0585",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/docs-accuracy.md",
+      "line": 26,
+      "severity": "LOW",
+      "finding": "'3/3 upheld' double-counted one finding attested byte-identically on two consecutive rounds; distinct evidence is 2",
+      "evidence": "attest shards a2be5be8/fbfbf47a carry the identical otlp.go:113 finding, same base sha",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Body cites '2 distinct findings across 3 corpus records'; backtest artifact gains distinct_findings: 2 and a dedup_note while still quoting the stats line as the machinery reports it",
+      "id": "1f53c7231a0bbf4b"
+    }
+  ]
+}
