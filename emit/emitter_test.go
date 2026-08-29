@@ -692,7 +692,13 @@ func BenchmarkRecordAccept(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Rotate stage/result/entity so every call takes the accept path.
+		// Rotate stage/result/entity over 4096*3*4 = 49152 distinct keys.
+		// That pool is smaller than twoGenSet's 1<<16 capacity, so cur never
+		// rotates and every key stays remembered: only the first 49152
+		// iterations take the accept path and the rest are suppressed. This
+		// benchmark therefore prices the suppression path, not acceptance —
+		// see docs/performance.md. Correcting that is workspace-z7g; it moves
+		// a gate baseline, so it does not ride along with the doc.
 		em.Record(ctxs[i%len(ctxs)], stages[(i/len(ctxs))%len(stages)], results[(i/(len(ctxs)*len(stages)))%len(results)])
 		if i%len(ctxs) == len(ctxs)-1 {
 			b.StopTimer()

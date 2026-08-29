@@ -3,11 +3,11 @@
 // The engine.Compute scaling series, deliberately kept out of the PR gate.
 //
 // scripts/ci-bench.sh discovers benchmarks with `go test -list` and runs
-// every one it finds at count=6 on each pull request. The top of this
-// series holds several gigabytes of live heap per sample; on a hosted
-// runner that is an out-of-memory kill, not a slow job. The build tag is
-// how it stays out — `go test -list` never sees a file it does not build —
-// and docs/performance.md says so beside the numbers.
+// every one it finds at count=6 on each pull request. This series takes
+// about 42 s at count=6, and the gate would run it twice — once on the PR
+// head and once on main — which is why it is out: wall clock, not memory.
+// The build tag is how it stays out — `go test -list` never sees a file it
+// does not build — and docs/performance.md says so beside the numbers.
 //
 // The gate keeps BenchmarkCompute (50k and 200k events, in
 // compute_bench_test.go) as the PR-vs-main comparison. This series exists
@@ -19,7 +19,9 @@
 //	go test -tags benchload -run '^$' -bench ComputeScale -benchmem \
 //	    -benchtime 1x -count 6 ./engine
 //
-// Peak resident memory at the 2M step is roughly 8 GB. The cost of the tag
+// Peak resident memory at the 2M step is about 2.7 GB, against a live heap
+// peaking near 1.06 GB; the 4.35 GB in the B/op column is cumulative
+// allocation over the call, not residency. The cost of the tag
 // is that nothing in CI compiles this file — see the limits section of
 // docs/performance.md.
 
@@ -68,8 +70,8 @@ func BenchmarkComputeScale(b *testing.B) {
 			}
 		})
 		// Drop the dataset before building the next, larger one: holding
-		// two of these at once is what turns a 8 GB benchmark into a 20 GB
-		// one.
+		// two of these at once would roughly double the peak, and the 2M
+		// step already carries the largest dataset in the series.
 		q = nil
 		runtime.GC()
 	}

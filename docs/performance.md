@@ -59,7 +59,7 @@ go test -tags benchload -run '^$' \
     -bench 'BenchmarkRecordParallel$|BenchmarkRecordParallelSuppressed$|BenchmarkTrackerTrackDoneParallel$|BenchmarkParallelSeqFloor$' \
     -benchmem -benchtime 1s -count 6 -cpu 1,2,4,8,18 ./emit
 
-# engine.Compute scaling series (peaks around 8 GB resident at the 2M step)
+# engine.Compute scaling series (peaks around 2.7 GB resident at the 2M step)
 go test -tags benchload -run '^$' -bench BenchmarkComputeScale \
     -benchmem -benchtime 1x -count 6 -timeout 60m ./engine
 
@@ -239,10 +239,10 @@ bound on interference: a publisher goroutine spinning on `Publish` over a
 
 A consumer's `Track` goes from ~290 ns to roughly 30 µs when it has to
 queue behind a publisher that is always in its critical section. Two full
-runs of this benchmark landed at 31.1 µs (±13%) and 26.9 µs (±66%), with
-the completed-publish count varying by ±321% within the second — which is
-both why the figure is given as a range and why the benchmark is kept out
-of the regression gate. Take the order of magnitude, not the digits.
+runs of this benchmark landed at 31.1 µs (±13%) and 26.9 µs (±66%), and the
+completed-publish count spreads about ±34% across the samples within a
+single run — which is both why the figure is given as a range and why the
+benchmark is kept out of the regression gate. Take the order of magnitude, not the digits.
 
 This is not a production cadence and must not be read as one — a real
 deployment publishes on an interval measured in seconds, where the duty
@@ -280,11 +280,16 @@ that, while everything else keeps scaling. Treat the flat-to-falling
 per-event line as an artefact of this dataset rather than a property of
 `Compute`, and size on the linear reading — the safe one.
 
-**Memory is the binding constraint, not time.** 2M events allocates 4.35 GB
-in a single `Compute` call — more than the process is likely to have on a
-modest instance, and 2.2 GB/s of allocation churn for the collector to
-chase. If you are sizing a host to run `shortfall impact` over a large
-window, size it on this column.
+**Memory is the binding constraint, not time — but size on residency, not
+on this column.** The 4.35 GB at 2M is `B/op`: bytes handed to the allocator
+over the whole `Compute` call, which is about 1.0 GB/s of churn for the
+collector to chase. It is not how much the process holds at once, and the
+two are not related by any fixed ratio — lifetime and `GOGC` decide that.
+Measured on the reference host, the 2M step peaks at **2.7 GB resident**
+against a live heap that tops out near **1.06 GB** (`GODEBUG=gctrace=1`,
+heap goal ~2.1 GB). So size a host running `shortfall impact` over a large
+window on peak RSS: 4 GB clears 2M events with room to spare. Read `B/op`
+as allocator pressure, not as a memory requirement.
 
 ## Backend pathologies — does back-pressure reach the caller?
 
@@ -401,7 +406,7 @@ The full exclusion list and the reason for each:
 | `BenchmarkRecordParallelSuppressed` | Same |
 | `BenchmarkTrackerTrackDoneParallel` | Same |
 | `BenchmarkParallelSeqFloor` | Same — and it is a harness-calibration row, not a product path |
-| `BenchmarkComputeScale` | Several GB of live heap per sample at the top of the series — an out-of-memory kill on a hosted runner, not a slow job |
+| `BenchmarkComputeScale` | Wall clock: the four-size series takes ~42 s at `-count 6`, and the gate runs it twice (PR head and main) |
 | `BenchmarkRecordHealthyBackend` | `RunParallel`, plus it exists only as the control for the two rows below |
 | `BenchmarkRecordSlowExporter` | Spends its time waiting on a 25 ms-per-batch backend |
 | `BenchmarkRecordFailingExporter` | Same |
