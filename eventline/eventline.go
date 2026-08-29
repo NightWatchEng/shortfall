@@ -46,6 +46,14 @@ func Parse(raw []byte, at time.Time) (biz.Outcome, error) {
 	if l.Flow == "" || l.Outcome == "" {
 		return biz.Outcome{}, fmt.Errorf("eventline: not a biz outcome line")
 	}
+	if !biz.Result(l.Outcome).Valid() {
+		return biz.Outcome{}, fmt.Errorf("eventline: outcome %q is not a valid result", l.Outcome)
+	}
+	// The exporters always write the amount; a marked line without one is a
+	// truncated or foreign record, and counting it as $0 would skew sums.
+	if len(l.AmountMinor) == 0 {
+		return biz.Outcome{}, fmt.Errorf("eventline: outcome line carries no biz.amount_minor")
+	}
 	var amount int64
 	if len(l.AmountMinor) > 0 {
 		// Decode via json.Number so a fractional or overflowing amount fails

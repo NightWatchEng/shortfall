@@ -108,8 +108,11 @@ func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome
 	form := url.Values{}
 	form.Set("search", q.searchString())
 	form.Set("output_mode", "json")
-	form.Set("earliest_time", strconv.FormatInt(qy.Range.From.Unix(), 10))
-	form.Set("latest_time", strconv.FormatInt(qy.Range.To.Unix(), 10))
+	// Bounds widen by a second on each side: Splunk's latest is exclusive
+	// and Unix() floors, so a tight bound could exclude events inside the
+	// half-open window; the reference re-applies the exact [From, To).
+	form.Set("earliest_time", strconv.FormatInt(qy.Range.From.Unix()-1, 10))
+	form.Set("latest_time", strconv.FormatInt(qy.Range.To.Unix()+1, 10))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		q.base+"/services/search/jobs/export", strings.NewReader(form.Encode()))
 	if err != nil {

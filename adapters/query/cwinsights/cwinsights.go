@@ -146,6 +146,12 @@ func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome
 		}
 		switch res.Status {
 		case "Complete":
+			// Insights hard-caps results at the query's limit (10000): a
+			// full page means the window's events were truncated server-side
+			// and any aggregate would silently understate money.
+			if len(res.Results) >= 10000 {
+				return nil, fmt.Errorf("cwinsights: query returned the 10000-row Insights cap — the window is truncated; narrow the window")
+			}
 			return parseRows(res.Results)
 		case "Scheduled", "Running":
 			select {
@@ -188,11 +194,18 @@ func parseRows(rows [][]insightsColumn) ([]biz.Outcome, error) {
 				at = t
 			}
 		}
+		// Unmarked rows are skipped by design, a deliberate trade the
+		// sibling adapters do not make: this group legitimately carries the
+		// exporter's EMF metric records, and a shared group can carry
+		// foreign non-JSON lines that only real AWS's pushed-down filter
+		// excludes (LocalStack ignores it). The cost accepted here: a
+		// mangled outcome record whose marker was destroyed is skipped,
+		// not surfaced.
 		var marker struct {
 			Event string `json:"event"`
 		}
 		if err := json.Unmarshal([]byte(message), &marker); err != nil || marker.Event != "biz.outcome" {
-			continue // an EMF metric record or foreign line, not an outcome
+			continue
 		}
 		o, err := eventline.Parse([]byte(message), at)
 		if err != nil {

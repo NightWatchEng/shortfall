@@ -122,30 +122,29 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 	}
 }
 
-// TestPagination pins forward paging: a full first page advances start past
-// the last timestamp; the second page's remainder is appended.
+// TestPagination pins the boundary-safe pager: a full page re-requests
+// from its last timestamp with the boundary entries carried as a de-dup
+// set, so a page cut mid-nanosecond loses nothing and duplicates nothing.
 func TestPagination(t *testing.T) {
 	tsA := from.Add(1 * time.Minute)
 	tsB := from.Add(2 * time.Minute)
-	lineFor := func(entity string, at time.Time) [2]string {
-		return [2]string{
-			strconv.FormatInt(at.UnixNano(), 10),
-			lokiLine("invoice.pay", "capture", "failed", entity, "h:c1", "smb", "USD", 100),
-		}
+	// Two entries share tsA (a mid-timestamp cut), one more at tsB.
+	all := [][2]string{
+		{strconv.FormatInt(tsA.UnixNano(), 10), lokiLine("invoice.pay", "capture", "failed", "inv_1", "h:c1", "smb", "USD", 100)},
+		{strconv.FormatInt(tsA.UnixNano(), 10), lokiLine("invoice.pay", "capture", "failed", "inv_2", "h:c1", "smb", "USD", 100)},
+		{strconv.FormatInt(tsB.UnixNano(), 10), lokiLine("invoice.pay", "capture", "failed", "inv_3", "h:c1", "smb", "USD", 100)},
 	}
-	// The fake respects start the way Loki does: entries strictly before the
-	// requested start are not re-served, so the third page is empty and the
-	// pager terminates.
-	var starts []string
+	var starts, limits []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		starts = append(starts, req.URL.Query().Get("start"))
-		start, _ := strconv.ParseInt(req.URL.Query().Get("start"), 10, 64)
+		limits = append(limits, req.URL.Query().Get("limit"))
+		startNS, _ := strconv.ParseInt(req.URL.Query().Get("start"), 10, 64)
+		limit, _ := strconv.Atoi(req.URL.Query().Get("limit"))
 		var page [][2]string
-		for _, e := range [][2]any{{tsA, "inv_1"}, {tsB, "inv_2"}} {
-			at := e[0].(time.Time)
-			if at.UnixNano() >= start {
-				page = append(page, lineFor(e[1].(string), at))
-				break // limit 1 per page
+		for _, e := range all {
+			ns, _ := strconv.ParseInt(e[0], 10, 64)
+			if ns >= startNS && len(page) < limit {
+				page = append(page, e)
 			}
 		}
 		fmt.Fprint(w, streamsBody(page))
@@ -160,11 +159,22 @@ func TestPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(groups) != 2 {
-		t.Fatalf("groups = %+v, want the two paged entities", groups)
+	if len(groups) != 3 {
+		t.Fatalf("groups = %+v, want all three entities across the cut", groups)
 	}
-	if want := strconv.FormatInt(tsA.UnixNano()+1, 10); len(starts) < 2 || starts[1] != want {
+	var total int64
+	for _, g := range groups {
+		total += g.Count
+	}
+	if total != 3 {
+		t.Fatalf("total count = %d, want 3 (no duplicates)", total)
+	}
+	// Page 2 re-requests the boundary ns with the carry-grown limit.
+	if want := strconv.FormatInt(tsA.UnixNano(), 10); len(starts) < 2 || starts[1] != want {
 		t.Fatalf("second page start = %v, want %s", starts, want)
+	}
+	if len(limits) < 2 || limits[1] != "2" {
+		t.Fatalf("second page limit = %v, want carry-grown 2", limits)
 	}
 }
 

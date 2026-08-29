@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -306,7 +307,7 @@ func TestSPLParityOverHECGolden(t *testing.T) {
 		if err != nil {
 			t.Fatalf("HEC time: %v", err)
 		}
-		at := time.UnixMilli(int64(secs * 1000)).UTC()
+		at := time.UnixMilli(int64(math.Round(secs * 1000))).UTC()
 		row, _ := json.Marshal(map[string]any{
 			"preview": false,
 			"result": map[string]string{

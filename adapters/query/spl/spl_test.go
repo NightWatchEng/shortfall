@@ -117,7 +117,8 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 	if want := `search index="main" sourcetype="shortfall:outcome" | fields _time _raw`; gotSearch != want {
 		t.Fatalf("search = %q, want %q", gotSearch, want)
 	}
-	if gotEarliest != "1787648400" || gotLatest != "1787652000" {
+	// Bounds widen a second each side (Splunk latest is exclusive).
+	if gotEarliest != "1787648399" || gotLatest != "1787652001" {
 		t.Fatalf("window = %s..%s", gotEarliest, gotLatest)
 	}
 }

@@ -108,34 +108,69 @@ func selector(filters map[string]string) string {
 	return "{" + strings.Join(parts, ",") + "}"
 }
 
-// fetch pages /loki/api/v1/query_range forward over [From, To). Pagination
-// advances past the last returned timestamp; entries sharing that exact
-// nanosecond with the page boundary would be skipped — outcome events carry
-// distinct times in practice, and the golden harness would catch a loss.
+// fetch pages /loki/api/v1/query_range forward over [From, To). A page can
+// be cut mid-nanosecond (Loki's limit is global across streams), so the
+// next page re-requests from the last timestamp seen and de-duplicates the
+// entries already taken there; the per-request limit grows by the carry so
+// the boundary entries can never starve progress. A single nanosecond
+// holding more entries than the server's limit cap fails loudly rather
+// than silently dropping money.
 func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome, error) {
 	var out []biz.Outcome
 	start := qy.Range.From.UnixNano()
 	end := qy.Range.To.UnixNano()
+	seen := map[string]struct{}{} // entries already taken at the current start ns
 	for {
+		limit := q.pageLimit + len(seen)
 		v := url.Values{}
 		v.Set("query", selector(qy.Filters))
 		v.Set("start", strconv.FormatInt(start, 10))
 		v.Set("end", strconv.FormatInt(end, 10))
-		v.Set("limit", strconv.Itoa(q.pageLimit))
+		v.Set("limit", strconv.Itoa(limit))
 		v.Set("direction", "forward")
 		body, err := q.get(ctx, "/loki/api/v1/query_range", v)
 		if err != nil {
 			return nil, err
 		}
-		entries, lastTS, err := parseStreams(body)
+		entries, err := parseStreams(body)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, entries...)
-		if len(entries) < q.pageLimit || lastTS >= end-1 {
+		fresh := 0
+		var maxTS int64
+		for _, e := range entries {
+			if e.ns > maxTS {
+				maxTS = e.ns
+			}
+			if e.ns == start {
+				if _, dup := seen[e.key()]; dup {
+					continue
+				}
+			}
+			out = append(out, e.outcome)
+			fresh++
+		}
+		if len(entries) < limit {
 			return out, nil
 		}
-		start = lastTS + 1
+		switch {
+		case maxTS > start:
+			// The boundary ns may be cut mid-timestamp: carry its entries
+			// into the next page's de-dup set and re-request from it.
+			seen = map[string]struct{}{}
+			for _, e := range entries {
+				if e.ns == maxTS {
+					seen[e.key()] = struct{}{}
+				}
+			}
+			start = maxTS
+		case fresh > 0:
+			for _, e := range entries {
+				seen[e.key()] = struct{}{}
+			}
+		default:
+			return nil, fmt.Errorf("logql: more entries share timestamp %d than one page returns — raise WithPageLimit", start)
+		}
 	}
 }
 
@@ -162,12 +197,22 @@ func (q *Querier) get(ctx context.Context, path string, v url.Values) ([]byte, e
 	return body, nil
 }
 
-// parseStreams decodes a query_range streams response into outcomes stamped
-// with each entry's Loki timestamp, returning the latest timestamp seen. A
-// line that is not a biz outcome fails loudly: the selector targets the
-// exporter's streams, so a foreign line means a misconfigured target and
-// silently skipping it could undercount money.
-func parseStreams(body []byte) ([]biz.Outcome, int64, error) {
+// entry is one fetched line with its Loki timestamp.
+type entry struct {
+	ns      int64
+	line    string
+	outcome biz.Outcome
+}
+
+// key identifies an entry for boundary de-duplication.
+func (e entry) key() string { return strconv.FormatInt(e.ns, 10) + "\x00" + e.line }
+
+// parseStreams decodes a query_range streams response into entries stamped
+// with each line's Loki timestamp. A line that is not a biz outcome fails
+// loudly: the selector targets the exporter's streams, so a foreign line
+// means a misconfigured target and silently skipping it could undercount
+// money.
+func parseStreams(body []byte) ([]entry, error) {
 	var env struct {
 		Status string `json:"status"`
 		Data   struct {
@@ -178,28 +223,24 @@ func parseStreams(body []byte) ([]biz.Outcome, int64, error) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
-		return nil, 0, fmt.Errorf("logql: decode: %w", err)
+		return nil, fmt.Errorf("logql: decode: %w", err)
 	}
 	if env.Status != "success" {
-		return nil, 0, fmt.Errorf("logql: query status %q", env.Status)
+		return nil, fmt.Errorf("logql: query status %q", env.Status)
 	}
-	var out []biz.Outcome
-	var last int64
+	var out []entry
 	for _, s := range env.Data.Result {
 		for _, v := range s.Values {
 			ns, err := strconv.ParseInt(v[0], 10, 64)
 			if err != nil {
-				return nil, 0, fmt.Errorf("logql: entry timestamp %q: %w", v[0], err)
+				return nil, fmt.Errorf("logql: entry timestamp %q: %w", v[0], err)
 			}
 			o, err := eventline.Parse([]byte(v[1]), time.Unix(0, ns).UTC())
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
-			out = append(out, o)
-			if ns > last {
-				last = ns
-			}
+			out = append(out, entry{ns: ns, line: v[1], outcome: o})
 		}
 	}
-	return out, last, nil
+	return out, nil
 }

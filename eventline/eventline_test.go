@@ -104,3 +104,31 @@ func TestParse(t *testing.T) {
 		})
 	}
 }
+
+// TestParseRejectsSkewedLines pins the loud rejections added for money
+// honesty: a marked line without an amount would count $0 into sums, and
+// an invalid result string would be silently invisible to outcome filters.
+func TestParseRejectsSkewedLines(t *testing.T) {
+	at := time.Date(2026, 8, 25, 9, 5, 0, 0, time.UTC)
+	cases := []struct {
+		name, line, wantErr string
+	}{
+		{
+			name:    "marked line without amount",
+			line:    `{"biz.flow":"invoice.pay","biz.outcome":"failed","biz.currency":"USD"}`,
+			wantErr: "no biz.amount_minor",
+		},
+		{
+			name:    "invalid result string",
+			line:    `{"biz.flow":"invoice.pay","biz.outcome":"faild","biz.amount_minor":100}`,
+			wantErr: "not a valid result",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := Parse([]byte(c.line), at); err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
+			}
+		})
+	}
+}
