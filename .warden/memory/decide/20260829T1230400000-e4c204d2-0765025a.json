@@ -1,0 +1,14 @@
+{
+  "bead": "workspace-cb1",
+  "head_sha": "e4c204d2bf9ef549faad5cfb290d4aaa254a6bbf",
+  "base_sha": "e4c204d2bf9ef549faad5cfb290d4aaa254a6bbf",
+  "rules_version": "b51f166ce220",
+  "decided_at": "2026-08-29T12:30:40+00:00",
+  "decided": "Amends the two-collector decision after review round 1: adapters/httpbatch is deleted as well. The first shard's named default kept it, reasoned as 'not a collection backend' \u2014 review established its only consumers were the five deleted HTTP-push exporters and nothing in the tree imports it.",
+  "why": "An orphan module with a doc claiming it serves three deleted exporters is exactly the standing docs-accuracy lie the house-clean exists to remove; keeping plumbing for nothing contradicts the item's simplicity intent.",
+  "cost_if_wrong": "A future HTTP-push exporter re-adds it with a git revert; until then zero maintenance surface.",
+  "alternatives": [
+    "Keep with a reworded doc \u2014 rejected: rewording a doc for a module with zero importers preserves dead weight to make a sentence true"
+  ],
+  "scope": "Deletes adapters/httpbatch, its go.work entry, and test/loggolden's inert replace. Supersedes the first shard's keep-httpbatch default."
+}
