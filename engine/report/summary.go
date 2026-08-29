@@ -36,17 +36,19 @@ func Summary(r engine.Report) string {
 }
 
 // moneyRange renders an EstLeg as per-currency low–high ranges, currencies
-// sorted; "none" when the leg carries no estimate.
+// sorted; "none" when the leg carries no estimate. The engine fills the
+// three maps in lockstep, but Summary accepts any Report, so each
+// currency's bounds are the min and max over whichever bounds it carries —
+// an asymmetric map can never render an inverted range.
 func moneyRange(leg engine.EstLeg) string {
-	if len(leg.LowMinor) == 0 && len(leg.HighMinor) == 0 {
+	if len(leg.LowMinor) == 0 && len(leg.MidMinor) == 0 && len(leg.HighMinor) == 0 {
 		return "none"
 	}
 	curs := map[string]struct{}{}
-	for c := range leg.LowMinor {
-		curs[c] = struct{}{}
-	}
-	for c := range leg.HighMinor {
-		curs[c] = struct{}{}
+	for _, m := range []map[string]int64{leg.LowMinor, leg.MidMinor, leg.HighMinor} {
+		for c := range m {
+			curs[c] = struct{}{}
+		}
 	}
 	sorted := make([]string, 0, len(curs))
 	for c := range curs {
@@ -55,7 +57,21 @@ func moneyRange(leg engine.EstLeg) string {
 	sortStrings(sorted)
 	parts := make([]string, 0, len(sorted))
 	for _, c := range sorted {
-		parts = append(parts, fmt.Sprintf("%s %d–%d", c, leg.LowMinor[c], leg.HighMinor[c]))
+		lo, hi, have := int64(0), int64(0), false
+		for _, m := range []map[string]int64{leg.LowMinor, leg.MidMinor, leg.HighMinor} {
+			v, ok := m[c]
+			if !ok {
+				continue
+			}
+			if !have || v < lo {
+				lo = v
+			}
+			if !have || v > hi {
+				hi = v
+			}
+			have = true
+		}
+		parts = append(parts, fmt.Sprintf("%s %d–%d", c, lo, hi))
 	}
 	return strings.Join(parts, ", ")
 }

@@ -71,3 +71,46 @@ func TestSummaryDegradedLegs(t *testing.T) {
 		t.Fatalf("no severity suggestion should render when empty: %q", got)
 	}
 }
+
+// TestMoneyRangeAsymmetricMaps pins the defensive rendering: Summary takes
+// any Report, so bounds present in only some of the three maps must never
+// render an inverted range, and a Mid-only leg is an estimate, not "none".
+func TestMoneyRangeAsymmetricMaps(t *testing.T) {
+	cases := []struct {
+		name string
+		leg  engine.EstLeg
+		want string
+	}{
+		{
+			name: "low only never inverts",
+			leg:  engine.EstLeg{LowMinor: map[string]int64{"USD": 500}},
+			want: "USD 500–500",
+		},
+		{
+			name: "mid only is an estimate, not none",
+			leg:  engine.EstLeg{MidMinor: map[string]int64{"USD": 120}},
+			want: "USD 120–120",
+		},
+		{
+			name: "full leg spans low to high",
+			leg: engine.EstLeg{
+				LowMinor:  map[string]int64{"USD": 100},
+				MidMinor:  map[string]int64{"USD": 200},
+				HighMinor: map[string]int64{"USD": 300},
+			},
+			want: "USD 100–300",
+		},
+		{
+			name: "empty is none",
+			leg:  engine.EstLeg{},
+			want: "none",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := moneyRange(c.leg); got != c.want {
+				t.Fatalf("moneyRange = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

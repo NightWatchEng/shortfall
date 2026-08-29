@@ -112,7 +112,7 @@ defer em.Close(ctx)
   `Refresh` to keep one message live while the incident evolves.
 - `adapters/incident/{incidentio,rootly,firehydrant,pagerduty}` — thin
   impact-field writers (consumers of the number, not producers): each
-  `WriteImpact(ctx, incidentID, report)` PATCHes the vendor's impact/custom
+  `WriteImpact(ctx, incidentID, report)` writes the vendor's impact/custom
   field with the one-line `report.Summary` (realized, deferred, unrealized
   range, suggested severity — evidence-tagged, never merged). Targets:
   incident.io a text custom field, PagerDuty a custom field by name,

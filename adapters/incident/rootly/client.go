@@ -13,7 +13,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	neturl "net/url"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/engine"
@@ -62,7 +64,7 @@ func (c *Client) WriteImpact(ctx context.Context, incidentID string, r engine.Re
 	if err != nil {
 		return err
 	}
-	url := fmt.Sprintf("%s/v1/incidents/%s", c.baseURL, incidentID)
+	url := fmt.Sprintf("%s/v1/incidents/%s", c.baseURL, neturl.PathEscape(incidentID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(raw))
 	if err != nil {
 		return err
@@ -75,7 +77,9 @@ func (c *Client) WriteImpact(ctx context.Context, incidentID string, r engine.Re
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("rootly: update: status %d", resp.StatusCode)
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("rootly: update: status %d: %s", resp.StatusCode, snippet)
 	}
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }

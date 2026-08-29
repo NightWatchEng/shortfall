@@ -14,7 +14,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	neturl "net/url"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/engine"
@@ -68,7 +70,7 @@ func (c *Client) WriteImpact(ctx context.Context, incidentID string, r engine.Re
 	} else {
 		body = map[string]any{"customer_impact_summary": summary}
 	}
-	return c.call(ctx, http.MethodPatch, fmt.Sprintf("/v1/incidents/%s", incidentID), body, "update")
+	return c.call(ctx, http.MethodPatch, fmt.Sprintf("/v1/incidents/%s", neturl.PathEscape(incidentID)), body, "update")
 }
 
 // AttachCustomersCSV posts the customers leg's top accounts as an incident
@@ -82,7 +84,7 @@ func (c *Client) AttachCustomersCSV(ctx context.Context, incidentID string, r en
 	body := map[string]any{
 		"body": "shortfall customers (top accounts, minor units):\n```\n" + string(csv) + "```",
 	}
-	return c.call(ctx, http.MethodPost, fmt.Sprintf("/v1/incidents/%s/notes", incidentID), body, "note")
+	return c.call(ctx, http.MethodPost, fmt.Sprintf("/v1/incidents/%s/notes", neturl.PathEscape(incidentID)), body, "note")
 }
 
 func (c *Client) call(ctx context.Context, method, path string, body map[string]any, op string) error {
@@ -102,7 +104,9 @@ func (c *Client) call(ctx context.Context, method, path string, body map[string]
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("firehydrant: %s: status %d", op, resp.StatusCode)
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("firehydrant: %s: status %d: %s", op, resp.StatusCode, snippet)
 	}
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
