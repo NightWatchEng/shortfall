@@ -1,0 +1,15 @@
+{
+  "bead": "workspace-9d2",
+  "head_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "rules_version": "b51f166ce220",
+  "decided_at": "2026-08-29T14:10:07+00:00",
+  "decided": "The tag vocabulary gains two entries \u2014 dishonest-zero (a renderer or computation presents ungrounded data as a measured zero) and http-response-body-leak (an HTTP response body left unclosed or undrained) with alias response-body-not-drained \u2014 per the 2026-08-29 retro, founder-accepted. test-shape and render-formatting stay undeclared-watching at n=1 each.",
+  "why": "Ingest warned on four undeclared coins; a split key splits recall. dishonest-zero names this library's central failure class (2 shards plus the PR #36 escape are the same class); the response-body class exists under two names in the corpus and merging via alias is the vocabulary's own convention. Declaring n=1 singles would grow vocabulary faster than evidence.",
+  "cost_if_wrong": "Two vocabulary rows; retiring a dead tag later is one retro proposal. Shards are never rewritten either way.",
+  "alternatives": [
+    "Declare all four coins \u2014 rejected: test-shape and render-formatting have one shard each, below any honest bar",
+    "Alias http-response-body-leak into a broader resource-leak tag \u2014 rejected: no such class exists in the corpus yet; invent nothing"
+  ],
+  "scope": ".warden/memory/tags.yaml only (gate surface; this tracked item is explicitly a policy item). No rule files, so rules_version is unchanged and no backtest artifact applies."
+}
