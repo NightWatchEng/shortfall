@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+  "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T21:16:02+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; rule bodies + review charter + reviewer-side pattern memory)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; findings + package only, examiner-side precedent memory; sole arbiter per graph.yaml verification.independent_judges)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "unmapped:ci-flake-reintroduction",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 277,
+      "severity": "MEDIUM",
+      "finding": "Adding vuln and lint to repo.yaml's verify.core silently changes a SECOND required job the diff never touched. The warden gate job runs `warden verify --scope core`, and its base-ref pin list (.warden/bin .warden/rules .warden/skills-policy.md repo.yaml graph.yaml) excludes scripts/. From the first PR after this merges, that job would reach `ci-go.sh lint` on a runner with no linter installed and build golangci-lint from source over the module proxy \u2014 the network-fragile path ci.yml's own comment records as tried and abandoned, and that this branch's decision record rejects by name as alternative 3.",
+      "evidence": "ci.yml:253 restores five paths, none under scripts/; ci.yml:275-278 runs `.warden/bin/warden verify --scope core`; the gate job has no golangci-lint install; ci-go.sh's lint mode would take the `go run` branch. Cross-examiner verified every link independently and confirmed the timing: base repo.yaml at 2baa44c has a four-step verify.core, so this PR is unaffected and the effect begins on the first PR after merge.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The checksum-verified install was extracted to scripts/install-golangci-lint.sh and both the core job and the gate job now call it, so neither required job can reach the from-source path. Re-review verified the fix across every ref state (this PR, post-merge, stale branches) and confirmed each installer failure mode exits 2 loudly rather than degrading. The residual \u2014 scripts/ still absent from the gate's base-ref pin list \u2014 is pre-existing (the job already ran the PR's ci-go.sh via warden verify), deliberately out of scope, and filed as workspace-8v0.",
+      "id": "630a0477305fce08"
+    },
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 30,
+      "severity": "MEDIUM",
+      "finding": "The new parity comment claimed `warden verify --scope core` 'really is what this job will say', but the core checks job has a SEVENTH run step \u2014 installing golangci-lint \u2014 with no counterpart in verify.core, which can fail on its own. The same file contradicted itself thirty lines below, where the install comment describes exactly the local-green/CI-red case this diff created by reading the version from ci-go.sh while leaving the sha256 hardcoded. Restated unqualified in repo.yaml, .warden/skills-policy.md, CONTRIBUTING.md and .github/pull_request_template.md.",
+      "evidence": "ci.yml:28-31 asserted the job's verdict; ci.yml:56-59 said 'if they ever separate this step fails on the checksum'. repo.yaml:57 claimed 'the six commands below are exactly the six steps of the CI core job' \u2014 the job has seven.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Every one of the five sites now scopes the guarantee to the six CHECKS and states the install step's lack of a local counterpart outright. Re-review confirmed the old wording is gone from the tree and that the narrowed claim is true of the current files.",
+      "id": "e9f37d463eb687e2"
+    },
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "misleading-comment"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 53,
+      "severity": "MEDIUM",
+      "finding": "Wrong consumer set. The comment said the `go run` fallback applies 'where no binary is installed (developer machines)', but the same workflow's gate job is a cold CI runner that would take that fallback \u2014 the environment the same sentence argues the fallback is not for. The parenthetical is the premise of the comment's own argument, not an illustration, so its falsity breaks the argument.",
+      "evidence": "ci.yml:52-54 against ci.yml:275-278; the gate job's steps contain no golangci-lint install.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Root cause shared with the ci-flake finding: the gate job now installs the pinned binary, so the claim about who reaches the fallback is true again. Re-review confirmed core and gate are the only jobs that reach `ci-go.sh lint` and that both install.",
+      "id": "0562c6bd65471f4c"
+    },
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "scripts",
+      "file": "scripts/ci-go.sh",
+      "line": 26,
+      "severity": "MEDIUM",
+      "finding": "Two absolute claims contradicted by the code. 'The golangci-lint pin lives HERE and nowhere else' ignored the env override and ci.yml's hardcoded sha256. More seriously, 'the pin, never the machine, decides what `lint` means' is false: golangci-lint searches every ancestor directory AND $HOME for a .golangci.* config, so an ambient config above a clone silently changes which linters run locally while CI's bare runner has none \u2014 a fail-open parity hole in the exact mechanism this item exists to fix.",
+      "evidence": "Cross-examiner verified against the pinned binary's own source (pkg/config/base_loader.go getConfigSearchPaths walks to the filesystem root then appends homedir) and demonstrated it live: a parent-directory .golangci.yml silently yielded '0 issues' while --no-config on the identical file yielded 2 ineffassign findings and exit 1.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Mechanism fixed, not just wording: ci-go.sh now pins the CONFIG the way it pins the version \u2014 `--config <repo .golangci.*>` when the repo has one, `--no-config` otherwise \u2014 on both the installed-binary and `go run` branches. Demonstrated on a tree carrying a stray ancestor config plus two planted violations: both were caught. The overclaiming comments were rewritten to describe the search behaviour accurately.",
+      "id": "6cd7ce90d97a4072"
+    },
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 15,
+      "severity": "MEDIUM",
+      "finding": "Claimed govulncheck and golangci-lint share one resolution rule ('go run when not already on PATH at the pinned version'), but ci-go.sh never probes PATH for govulncheck \u2014 the vuln mode go-runs it unconditionally and the PATH probe is gated on mode=lint. Same wording in .warden/skills-policy.md and .github/pull_request_template.md.",
+      "evidence": "ci-go.sh's vuln case runs `go run govulncheck@${GOVULNCHECK_VERSION}` with no `command -v govulncheck` anywhere in the file.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "REFUTED by the cross-examiner, and the refutation is right. None of the three sentences contains 'only' or asserts a PATH probe for govulncheck; each is a one-directional 'runs through go run when the tool is not present', which is literally true of both tools and contradicted by nothing in the script. The promise the docs make \u2014 no setup needed \u2014 is fully delivered for both. No downstream false belief follows: a differently-versioned govulncheck is ignored as described, and one at the pin resolves through go run to the identical analyzer. Under-specification in a compressed sentence, not a contradicted claim; confirming it would seed the corpus with a nitpick. The wording was independently tightened in the repair anyway ('when the pinned binary is not already installed').",
+      "id": "b22e942480ca3463"
+    },
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "misleading-comment"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 243,
+      "severity": "MEDIUM",
+      "finding": "Introduced BY the repair. The gate job's new comment gave a false reason for the install step's placement \u2014 that the installer 'would not exist on an older base ref' \u2014 but the pin step restores five paths, none under scripts/, so ordering never decided which copy of the installer runs. Only the deploy-key reason was real. The same false half appears in the branch's amended decision record.",
+      "evidence": "ci.yml:242-247 against the pin step at ci.yml:260, which restores '.warden/bin .warden/rules .warden/skills-policy.md repo.yaml graph.yaml' and nothing under scripts/.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Comment rewritten to keep only the true reason (running before the deploy key is written) and to name this step as one of the PR-controlled executions the pin does not cover, cross-referencing workspace-8v0. The decision record shard is committed evidence and is not rewritten; the PR body flags that one sentence of it as superseded.",
+      "id": "b1df3a25e4f7c52b"
+    },
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".github",
+      "file": ".github/pull_request_template.md",
+      "line": 45,
+      "severity": "MEDIUM",
+      "finding": "Introduced BY the repair, replacing one overclaim with its mirror image: an unconditional implication that a check failing in CI fails locally too. Sharing a command list does not make outcomes agree across two machines, and the offered caveat covered only the install step.",
+      "evidence": "Concrete falsifiers in this repo: ci-go.sh's vuln mode go-runs govulncheck, which queries the live vuln.go.dev database, so an advisory published between a local run and the CI run reddens the job on an unchanged tree; and the core job pins go-version: stable while a contributor's toolchain is unpinned. The same commit chose weaker, defensible phrasings in skills-policy.md and CONTRIBUTING.md, so the three disagreed.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Narrowed to the capability claim the sibling docs already use ('no check can fail there that could not fail here'), with the live advisory database and the pinned CI toolchain named as reasons the two are not promised to agree. The four documents now state one standard in one wording.",
+      "id": "c4c8e92aaa7e0b96"
+    },
+    {
+      "ts": "2026-08-29T21:16:02+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "4efbefe345a2a256110b6b05790658fb6fdc84e0",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 246,
+      "severity": "LOW",
+      "finding": "Introduced BY the repair. 'All it does is fetch a release tarball and verify it against a checksum, refusing to install anything else' is true of the COMMITTED installer, but the gate job runs the pull request's copy, since scripts/ is HIGH-tier gate surface absent from the base-ref pin list \u2014 six lines above the comment declaring that this job must never execute PR-controlled gate code.",
+      "evidence": "ci.yml:246-247 against ci.yml:250-251 and the pin list at ci.yml:260; repo.yaml tiers scripts/** HIGH with the reason 'CI enforcement scripts \u2014 a weakened script weakens every check that calls it'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Scoped to the committed script and rewritten to say plainly that this job executes the PR's installer wherever the step sits, naming it as one of the PR-controlled executions the pin does not cover (workspace-8v0). The underlying exposure is pre-existing and unchanged: the job already ran the PR's ci-go.sh through warden verify.",
+      "id": "65cc5a054f48f4c0"
+    }
+  ]
+}
