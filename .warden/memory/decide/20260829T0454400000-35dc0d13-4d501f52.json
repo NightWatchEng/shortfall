@@ -1,0 +1,16 @@
+{
+  "bead": "workspace-72o",
+  "head_sha": "35dc0d1320f18680a42e86e3ff34d1dc3c7c2c91",
+  "base_sha": "35dc0d1320f18680a42e86e3ff34d1dc3c7c2c91",
+  "rules_version": "b51f166ce220",
+  "decided_at": "2026-08-29T04:54:40+00:00",
+  "decided": "Amends the first workspace-72o decision after review round 1: the ungrounded-leg contract extends beyond RenderText/RenderMarkdown to Summary() and gains a structural marker \u2014 Leg.Unavailable and EstLeg.Unavailable bools set by Compute's degradation branches. Summary renders 'realized n/a' / 'deferred n/a' / 'unrealized n/a' off that field, never a plausible zero; markdown caveats become '> - ' list items separated from the never-sum disclaimer.",
+  "why": "Review confirmed Summary() \u2014 the line the four incident-tool writers PATCH into vendor impact fields \u2014 still rendered 'deferred [deterministic] none in-flight' for an ungrounded leg, and the first decision's 'no renderer drops a label' claim was false for it. A bool the renderer checks beats sniffing the 'unavailable:' caveat-string prefix: the contract is a field, not a string format.",
+  "cost_if_wrong": "A public-struct field addition pre-v1 (backward compatible; JSON gains an Unavailable key). If the n/a marker is too terse for a vendor field, the fix is wording, not structure.",
+  "alternatives": [
+    "String-prefix sniffing of 'unavailable:' caveats in report package \u2014 rejected: couples renderers to Compute's message format",
+    "Park Summary as a follow-up bead \u2014 rejected: the dishonest zero lands in PagerDuty/incident.io/FireHydrant/Rootly impact fields, the highest-visibility surface this item exists to fix",
+    "Render full caveat text in Summary \u2014 rejected: it is a one-line vendor field; the why rides the JSON report"
+  ],
+  "scope": "engine/engine.go (Leg/EstLeg field + Compute branches), engine/report/summary.go, engine/report/render.go markdown formatting, tests and goldens. Supersedes the first shard's RenderText/RenderMarkdown-only scope."
+}
