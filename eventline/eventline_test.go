@@ -8,9 +8,10 @@ import (
 	"github.com/NightWatchEng/shortfall/biz"
 )
 
-// TestParse pins the read side of the exporters' shared biz.* line schema:
-// the same decoder must accept a Loki line, an EMF event record, and a
-// Splunk HEC event object, and reject lines that are not outcome events.
+// TestParse pins the read side of the biz.* line schema: the decoder must
+// accept an EMF event record plus the wire shapes since-removed exporters
+// (Loki, Splunk HEC) already ingested, and reject lines that are not
+// outcome events.
 func TestParse(t *testing.T) {
 	at := time.Date(2026, 8, 25, 9, 5, 0, 0, time.UTC)
 	full := biz.Outcome{
