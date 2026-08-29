@@ -351,6 +351,12 @@ func TestCumulativeSeriesAreWriterScoped(t *testing.T) {
 	if !strings.Contains(taskID, strconv.Itoa(os.Getpid())) {
 		t.Errorf("task_id = %q, want it to distinguish this process (pid %d)", taskID, os.Getpid())
 	}
+	// generic_task is only a valid resource with its full required label set.
+	for _, name := range []string{"project_id", "location", "namespace", "job", "task_id"} {
+		if res.Labels[name] == "" {
+			t.Errorf("resource label %s is empty — generic_task requires all five", name)
+		}
+	}
 	if res.Labels["project_id"] != "proj-1" {
 		t.Errorf("resource project_id = %q, want proj-1", res.Labels["project_id"])
 	}

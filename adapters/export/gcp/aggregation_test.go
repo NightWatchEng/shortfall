@@ -243,41 +243,65 @@ func TestFailedSendDoesNotAdvanceTheGaugeGuard(t *testing.T) {
 	}
 }
 
-// TestPartialChunkFailureCommitsOnlyWhatLanded pins that a batch whose second
-// request fails does not re-publish the first request's totals on retry.
-func TestPartialChunkFailureCommitsOnlyWhatLanded(t *testing.T) {
+// TestPartialChunkFailureDoesNotDoubleCountRecreditedDeltas pins the
+// multi-chunk case. emit hands biz_dropped_events_total deltas back on ANY
+// error from ExportMetrics, so a drop delta committed in a landed chunk of a
+// batch that later fails would be counted twice on the next flush. A landed
+// ordinary counter, by contrast, legitimately advances on the retry: its
+// delta really was re-sent, and a cumulative series may not go backwards.
+func TestPartialChunkFailureDoesNotDoubleCountRecreditedDeltas(t *testing.T) {
 	d := &failOnNthDoer{failAt: 2}
 	e := New(
 		WithWriter(discardWriter{}),
 		WithMonitoring("proj-1", d),
 		WithMonitoringEndpoint("https://monitoring.example"),
 	)
-	batch := make([]emit.MetricPoint, 0, maxSeriesPerRequest+1)
-	for i := range maxSeriesPerRequest + 1 {
+	// The drop counter lands in chunk one; chunk two fails.
+	batch := []emit.MetricPoint{{
+		Name:   "biz_dropped_events_total",
+		Labels: map[string]string{"reason": "export"},
+		Value:  5, At: testTime,
+	}}
+	for i := range maxSeriesPerRequest {
 		batch = append(batch, emit.MetricPoint{
-			Name:   "biz_dropped_events_total",
-			Labels: map[string]string{"reason": "r" + strconv.Itoa(i)},
+			Name:   "biz_txn_total",
+			Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "c" + strconv.Itoa(i), "segment": ""},
 			Value:  1, At: testTime,
 		})
 	}
 	if err := e.ExportMetrics(context.Background(), batch); err == nil {
 		t.Fatal("want an error from the failing second chunk, got nil")
 	}
-	// The first chunk landed, so its series must not be re-counted; retrying
-	// the whole batch republishes chunk one at the same total, not double.
+	if len(d.series) != maxSeriesPerRequest {
+		t.Fatalf("chunk one delivered %d series, want %d", len(d.series), maxSeriesPerRequest)
+	}
+	if got := totalFor(d.series, "custom.googleapis.com/biz/dropped_events_total"); got != "5" {
+		t.Fatalf("drop total on the first send = %q, want 5", got)
+	}
+
+	// emit re-credits the drop delta and the caller retries the whole batch.
 	d.failAt = 0
 	if err := e.ExportMetrics(context.Background(), batch); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	for _, s := range d.series {
-		if v := s.Points[0].Value.Int64Value; v != "1" && v != "2" {
-			t.Errorf("unexpected total %q — a landed chunk was banked twice or a failed one was banked at all", v)
+	retried := d.series[maxSeriesPerRequest:]
+	if got := totalFor(retried, "custom.googleapis.com/biz/dropped_events_total"); got != "5" {
+		t.Errorf("drop total after a partial failure and a re-credited retry = %q, want 5 — the landed chunk banked it and emit credited it again", got)
+	}
+	if got := totalFor(retried, "custom.googleapis.com/biz/txn_total"); got != "2" {
+		t.Errorf("txn total after the retry = %q, want 2 — a landed ordinary delta must stay committed so the cumulative series never goes backwards", got)
+	}
+}
+
+// totalFor returns the first published value for a metric type, or "" when
+// the type is absent.
+func totalFor(series []timeSeries, metricType string) string {
+	for _, s := range series {
+		if s.Metric.Type == metricType {
+			return s.Points[0].Value.Int64Value
 		}
 	}
-	first := d.series[0].Points[0].Value.Int64Value
-	if first != "1" {
-		t.Errorf("first series total after a partial failure and retry = %q, want 1", first)
-	}
+	return ""
 }
 
 type failOnNthDoer struct {

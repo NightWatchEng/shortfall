@@ -110,8 +110,11 @@ you read a dashboard built on it:
   request that carries the same series twice, and `emit` hands the exporter
   many points on one series per flush. The adapter therefore aggregates a
   batch per series before sending: counter deltas sum, gauges keep the newest
-  level. Accumulator state is committed only after the request it belongs to
-  has landed, so a failed export never inflates the next published total.
+  level. Accumulator state is committed only for what landed — an ordinary
+  counter per delivered chunk (its points are published, and a cumulative
+  series may not later republish a lower total), and the `biz_dropped_events_total`
+  deltas only once the whole batch has landed, because `emit` hands those
+  back on any export error and a chunk-scoped commit would count them twice.
 
 Pair a metrics exporter with an events exporter (or use one that does both) to
 ground every leg. The exporter you write ships the same fixed `biz_*` families

@@ -186,10 +186,16 @@ func newMonitoringClient(projectID, endpoint, prefix string, res monitoredRes, d
 }
 
 // export aggregates the batch, sends it in chunks the service accepts, and
-// commits accumulator state only for chunks that actually landed. Committing
-// before the send would inflate the next published total after a failure —
-// emit re-credits failed biz_dropped_events_total deltas on the stated
-// assumption that a failed export never left the process.
+// commits accumulator state only for what actually landed. Committing before
+// the send would inflate the next published total after a failure.
+//
+// The two families of state commit at different points, because emit treats
+// them differently on error. Ordinary counter deltas commit per landed chunk:
+// their points are already published, and a cumulative series may not later
+// republish a lower total. Re-credited deltas commit only once the whole
+// batch has landed — emit hands those back on any error from this call, so
+// committing one in a landed chunk of a batch that later fails would count it
+// twice on the next flush.
 func (m *monitoringClient) export(ctx context.Context, batch []emit.MetricPoint) error {
 	agg, err := aggregate(batch)
 	if err != nil {
@@ -207,6 +213,7 @@ func (m *monitoringClient) export(ctx context.Context, batch []emit.MetricPoint)
 		}
 		m.commit(pending[start:end])
 	}
+	m.commitRecredited(pending)
 	return nil
 }
 
@@ -292,14 +299,34 @@ func (m *monitoringClient) build(agg []aggPoint) ([]timeSeries, []aggPoint) {
 	return series, pending
 }
 
-// commit records delivered state. Callers hold m.mu.
+// isRecredited reports whether emit hands a family's deltas back to itself
+// when an export fails, rather than dropping them. Only the drop counters
+// are re-credited: they are the record of the library's own damage, so a
+// backend outage may not destroy them (emit.Std.Flush).
+func isRecredited(name string) bool { return name == "biz_dropped_events_total" }
+
+// commit records delivered state for the families emit will not hand back.
+// Callers hold m.mu.
 func (m *monitoringClient) commit(delivered []aggPoint) {
 	for _, a := range delivered {
+		if isRecredited(a.name) {
+			continue
+		}
 		if a.gauge {
 			m.gaugeAt[a.key] = a.at
 			continue
 		}
 		m.totals[a.key] += a.value
+	}
+}
+
+// commitRecredited banks the deltas emit would otherwise hand back. Reached
+// only when every chunk of the batch landed. Callers hold m.mu.
+func (m *monitoringClient) commitRecredited(delivered []aggPoint) {
+	for _, a := range delivered {
+		if isRecredited(a.name) {
+			m.totals[a.key] += a.value
+		}
 	}
 }
 
