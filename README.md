@@ -60,7 +60,7 @@ func main() {
     http.HandleFunc("POST /invoices/{invoice}/pay", func(w http.ResponseWriter, r *http.Request) {
         ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
             Flow:       "invoice.pay",
-            EntityID:   r.PathValue("invoice"),
+            EntityID:   r.PathValue("invoice"), // idempotency key — failures de-dup by entity across retries
             CustomerID: r.Header.Get("X-Account-Hash"), // pre-hashed — raw ids never enter biz.*
             Money:      biz.Money{Amount: 4999, Currency: "USD", Exponent: 2},
             Kind:       biz.KindFee,
@@ -86,16 +86,26 @@ their backlog in `emit.InFlightTracker`, which publishes the
 
 ### 2. Gather — ask for the damage
 
-For any incident window, point the CLI at the backend you already run —
-`--prometheus` for metrics, `--sql` for outcome events:
+Where step 1 exported decides how you read back:
 
-```sh
-shortfall impact --registry registry.yaml \
-  --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
-  --flow invoice.pay --format markdown \
-  --prometheus http://prometheus:9090 \
-  --sql "file:outcomes.db"
-```
+- **Prometheus (metrics) and/or a SQL outcomes table (events)** — the
+  CLI reads both directly. For any incident window:
+
+  ```sh
+  shortfall impact --registry registry.yaml \
+    --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
+    --flow invoice.pay --format markdown \
+    --prometheus http://prometheus:9090 \
+    --sql "file:outcomes.db"
+  ```
+
+- **CloudWatch** — the EMF records from step 1 are already in CloudWatch
+  Logs; a small reporting job reads them back with the `cwinsights`
+  querier, hands it to `engine.Compute`, and renders the same report.
+  Loki (`logql`) and Splunk (`spl`) work the same way. These
+  are event stores, so they ground realized loss and customer impact;
+  pair them with a promql-readable metrics store to ground the deferred
+  and unrealized legs too.
 
 Out come the four legs, each labelled by its evidence: **realized loss**
 (failed transactions summed, de-duplicated by entity), **deferred
@@ -105,11 +115,10 @@ never merged with the deterministic legs), and **customer impact**
 (distinct entities, segments, top accounts) — plus a suggested severity
 from the registry's $/min ladder. Metrics ground the deferred and
 unrealized legs; events ground realized de-dup and customers — wire
-both, as above, and every leg is grounded. `shortfall reconcile --ledger` adds
-the coverage ratio: telemetry checked against your provider's ledger.
-Backends without CLI flags (CloudWatch, Loki, Splunk) gather through the
-same query adapters as libraries via `engine.Compute` — see
-[adapters.md](docs/adapters.md) for which backend grounds which leg.
+both signal kinds and every leg is grounded. `shortfall reconcile
+--ledger` adds the coverage ratio: telemetry checked against your
+provider's ledger. See [adapters.md](docs/adapters.md) for the full
+backend-to-leg matrix.
 
 ### 3. What ships in the box
 

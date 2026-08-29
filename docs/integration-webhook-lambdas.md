@@ -84,7 +84,7 @@ func setup() error {
 func handle(ctx context.Context, wh ProviderWebhook) error {
     ctx, err := biz.WithValueContext(ctx, biz.ValueContext{
         Flow:       "payment.webhook",
-        EntityID:   wh.PaymentIntentID,      // de-dup key across retries
+        EntityID:   wh.PaymentIntentID,      // idempotency key — failures de-dup by entity across retries
         CustomerID: hash(wh.AccountID),      // pre-hashed — raw ids never enter biz.*
         Segment:    wh.Segment,
         Money:      biz.Money{Amount: wh.AmountMinor, Currency: "USD", Exponent: 2},
