@@ -22,7 +22,7 @@ flowchart TB
 
     subgraph adapters["adapters/* — each a nested Go module"]
         EXP["export/*<br/>otlp · prometheus · statsd ·<br/>cloudwatch EMF · splunkhec · datadog · loki"]
-        QAD["query/*<br/>promql · sql<br/>(logql · cwinsights · spl on the roadmap)"]
+        QAD["query/*<br/>promql · sql ·<br/>logql · cwinsights · spl"]
         PAY["payment/stripe<br/>webhook receiver ·<br/>wrapped client · reconciler"]
         INC["incident/slack<br/>post + refresh the impact ledger"]
     end

@@ -38,3 +38,11 @@ use ./adapters/incident/rootly
 use ./adapters/incident/firehydrant
 
 use ./adapters/incident/pagerduty
+
+use ./adapters/query/logql
+
+use ./adapters/query/spl
+
+use ./adapters/query/cwinsights
+
+use ./test/loggolden
