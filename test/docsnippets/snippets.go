@@ -60,6 +60,11 @@ func extractFences(path string) ([]fence, error) {
 		}
 		cur.body += strings.TrimPrefix(line, indent) + "\n"
 	}
+	if cur != nil {
+		// Fail closed: a fence that loses its closing marker must not
+		// silently exit governance.
+		return nil, fmt.Errorf("%s:%d: fence opened and never closed", cur.doc, cur.line)
+	}
 	return fences, sc.Err()
 }
 
@@ -68,7 +73,8 @@ func extractFences(path string) ([]fence, error) {
 func fileLevel(body string) bool {
 	decl := regexp.MustCompile(`^(func|var|type|const|import|package)\b`)
 	for _, l := range strings.Split(body, "\n") {
-		if strings.TrimSpace(l) == "" || strings.HasPrefix(l, "//") {
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "//") {
 			continue
 		}
 		return decl.MatchString(l)

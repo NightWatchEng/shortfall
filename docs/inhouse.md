@@ -102,7 +102,7 @@ Useful `EmitterOption`s: `emit.WithFlushInterval(d)` (background flush cadence;
 
 ```go
 Record(ctx context.Context, stage string, result biz.Result, opts ...Option)
-SetInFlight(flow, stage, ageBucket string, money biz.Money)
+SetInFlight(flow, stage, ageBucket string, money biz.Money, count int64)
 ```
 
 `Record` never blocks and returns nothing — it cannot fail your request path.

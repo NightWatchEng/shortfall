@@ -120,6 +120,77 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 	}
 }
 
+// TestExtractFences pins the parser's input/output behavior, unclosed
+// fences included — a fence the parser drops is a fence outside
+// governance.
+func TestExtractFences(t *testing.T) {
+	cases := []struct {
+		name      string
+		src       string
+		wantLangs []string
+		wantBody  string
+		wantErr   string
+	}{
+		{"plain fence", "```go\nx()\n```\n", []string{"go"}, "x()\n", ""},
+		{"info string", "```go {linenos=true}\nx()\n```\n", []string{"go"}, "x()\n", ""},
+		{"indented fence", "- item\n\n  ```go\n  x()\n  ```\n", []string{"go"}, "x()\n", ""},
+		{"two fences", "```go\na()\n```\n```yaml\nk: v\n```\n", []string{"go", "yaml"}, "a()\n", ""},
+		{"unclosed trailing fence", "```go\nx()\n", nil, "", "never closed"},
+		{"closed then unclosed", "```go\na()\n```\n```go\nb()\n", nil, "", "never closed"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "doc.md")
+			if err := os.WriteFile(p, []byte(c.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			fences, err := extractFences(p)
+			if c.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, c.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var langs []string
+			for _, f := range fences {
+				langs = append(langs, f.lang)
+			}
+			if strings.Join(langs, ",") != strings.Join(c.wantLangs, ",") {
+				t.Fatalf("langs = %v, want %v", langs, c.wantLangs)
+			}
+			if fences[0].body != c.wantBody {
+				t.Fatalf("body = %q, want %q", fences[0].body, c.wantBody)
+			}
+		})
+	}
+}
+
+// TestFileLevel pins the declaration-vs-statements classification,
+// leading-comment handling included.
+func TestFileLevel(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"func decl", "func main() {}\n", true},
+		{"statements", "x := 1\n_ = x\n", false},
+		{"comment then decl", "// doc\nfunc f() {}\n", true},
+		{"indented comment then decl", "  // doc\nvar x int\n", true},
+		{"blank then statements", "\nx()\n", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := fileLevel(c.body); got != c.want {
+				t.Fatalf("fileLevel = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 // TestCheckerCatchesBroken proves the checker is not a vacuous pass:
 // each deliberately broken fixture fence must be rejected.
 func TestCheckerCatchesBroken(t *testing.T) {
