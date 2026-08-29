@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "ef9944deeb7bc9fde641653ebb7e0dd328401934",
+  "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "rules_version": "3e622735412d",
+  "reviewed_at": "2026-08-29T14:47:21+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, round 1 + round-2 combined scoped re-review"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter, round 1"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T14:47:21+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "ef9944deeb7bc9fde641653ebb7e0dd328401934",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/docsnippets",
+      "file": "test/docsnippets/snippets.go",
+      "line": 63,
+      "severity": "MEDIUM",
+      "finding": "extractFences silently dropped an unclosed trailing fence \u2014 a snippet could exit governance with no failure",
+      "evidence": "Probe: trailing unclosed fence yields fences without it and nil error",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fail-closed error at EOF with an open fence; pinned by two table cases; EOF-with-close probes show no regression",
+      "id": "c6ff514154953955"
+    },
+    {
+      "ts": "2026-08-29T14:47:21+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "ef9944deeb7bc9fde641653ebb7e0dd328401934",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "tests-required",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/docsnippets",
+      "file": "test/docsnippets/snippets_test.go",
+      "line": 1,
+      "severity": "MEDIUM",
+      "finding": "extractFences/fileLevel had no direct unit tests; the silent-drop bug survived all three indirect tests",
+      "evidence": "Only fixture/live-doc coverage existed",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Table-driven TestExtractFences (6 cases) and TestFileLevel (5 cases) added per ADR-0007; fileLevel comment check trimmed",
+      "id": "cfc0150dcda4c13c"
+    },
+    {
+      "ts": "2026-08-29T14:47:21+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "ef9944deeb7bc9fde641653ebb7e0dd328401934",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/docs-accuracy.md",
+      "line": 34,
+      "severity": "MEDIUM",
+      "finding": "Delegation note claimed the mechanical slice unqualified while only 3 docs were governed; docs/inhouse.md carries 9 ungoverned real-API fences",
+      "evidence": "checkedDocs vs grep of inhouse.md and ADRs",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Note scoped to checkedDocs naming the ungoverned remainder; live SetInFlight signature drift in inhouse.md fixed in-diff; full inhouse governance parked as tracked item workspace-lc8",
+      "id": "bbe01e88d75b6fb1"
+    },
+    {
+      "ts": "2026-08-29T14:47:21+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "ef9944deeb7bc9fde641653ebb7e0dd328401934",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden/memory",
+      "file": ".warden/memory/backtests/docs-accuracy-promote-slice-2026-08-29.json",
+      "line": 12,
+      "severity": "LOW",
+      "finding": "Artifact's quoted stats line went stale against the branch's own later attest round",
+      "evidence": "n=83/0.899 quoted vs n=85/0.901 live",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Refreshed to live values with a stats_as_of note; rules_version re-pinned after each rule-note edit (final: 3e622735412d)",
+      "id": "ce5dca89432ded29"
+    },
+    {
+      "ts": "2026-08-29T14:47:21+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "ef9944deeb7bc9fde641653ebb7e0dd328401934",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/docs-accuracy.md",
+      "line": 36,
+      "severity": "LOW",
+      "finding": "Round 2: the note tied both slice halves to checkedDocs while the registry validator enforces a wider doc list \u2014 understated coverage",
+      "evidence": "TestDocRegistryFencesValidate's own 5-doc list includes quickstart and registry.md",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "One-clause fix distinguishing the Go-compile list from the registry validator's wider list \u2014 the re-review's prescribed remedy",
+      "id": "67c4e8b81cf65c9b"
+    }
+  ]
+}
