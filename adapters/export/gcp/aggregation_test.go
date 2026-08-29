@@ -201,7 +201,8 @@ func TestFailedSendCommitsNothing(t *testing.T) {
 			if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err == nil {
 				t.Fatal("want an export error, got nil")
 			}
-			// emit re-credits the same delta and the caller retries it.
+			// The same delta arrives again: emit re-credits the drop counter,
+			// and a caller may re-send any family.
 			failing.status = http.StatusOK
 			if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
 				t.Fatalf("retry: %v", err)
