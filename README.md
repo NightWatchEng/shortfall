@@ -91,8 +91,8 @@ through an export adapter. At incident time the engine reads them back
 through a query adapter and computes the legs.
 
 Adapters are the only vendor-aware code, and each one is its own nested
-Go module — a Prometheus shop never pulls the AWS SDK, and nobody pulls
-stripe-go by accident.
+Go module — a Prometheus shop never pulls the AWS SDK, a GCP shop pulls
+neither, and nobody pulls stripe-go by accident.
 
 ## The opinions, stated up front
 
@@ -281,7 +281,7 @@ coverage ratio on top.
 | Instrument | `ValueContext`, int64 minor-unit `Money`, the PII guard | `biz` |
 | Record | `Record` per stage, `InFlightTracker`/`SetInFlight` backlog gauges, `Flush` | `emit` |
 | Propagate | HTTP Baggage middleware + egress-fenced Transport; Kafka, SQS, AMQP carriers | `propagate/*` |
-| Export | Prometheus (metrics), CloudWatch EMF (metrics + events) | `adapters/export/*` |
+| Export | Prometheus (metrics), CloudWatch EMF (metrics + events), Google Cloud (Cloud Monitoring metrics + Cloud Logging events) | `adapters/export/*` |
 | Query back | `promql` (metrics); `cwinsights`, `sql` (events) | `adapters/query/*` |
 | Compute & render | four legs + coverage + suggested severity, as text/JSON/markdown | `engine`, `cmd/shortfall` |
 | Reconcile | Stripe ledger reconciler feeding the coverage ratio | `adapters/payment/stripe` |

@@ -83,6 +83,17 @@ CREATE TABLE biz_outcomes (
 |---|---|---|---|
 | `adapters/export/prometheus` | ✅ | — | Prometheus (scrape) |
 | `adapters/export/cloudwatch` | ✅ | ✅ | CloudWatch (EMF / PutMetricData) |
+| `adapters/export/gcp` | ✅¹ | ✅ | Google Cloud (Cloud Monitoring / Cloud Logging) |
+
+¹ The GCP adapter reports `Metrics: false` until a monitoring client is
+configured. Cloud Logging does not extract metrics from log entries the way
+CloudWatch EMF does, so the two paths are independent: outcome events need no
+credentials at all (structured JSON on stdout, which the logging agent
+collects), while the metric families are written to Cloud Monitoring's
+`timeSeries.create` API. Counter families are accumulated in-process and sent
+as `CUMULATIVE`; the two in-flight families are sent as `GAUGE`. Every point
+is `INT64` — amounts cross the wire as proto3 quoted integers, never as a
+double.
 
 Pair a metrics exporter with an events exporter (or use one that does both) to
 ground every leg. The exporter you write ships the same fixed `biz_*` families
@@ -101,6 +112,16 @@ em.Record(ctx, "auth", biz.ResultSuccess)
 
 ```go
 exp := cloudwatch.New()    // EMF metrics + events to CloudWatch Logs
+em, _ := emit.New(&reg, exp)
+defer em.Close(ctx)
+```
+
+```go
+// GCP: outcome events to Cloud Logging via stdout (no credentials), and the
+// metric families to Cloud Monitoring through an authenticated client the
+// caller supplies — google.DefaultClient in production, so this module never
+// pulls a cloud SDK.
+exp := gcp.New(gcp.WithMonitoring("my-project", authedClient))
 em, _ := emit.New(&reg, exp)
 defer em.Close(ctx)
 ```

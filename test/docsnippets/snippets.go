@@ -93,6 +93,7 @@ var importsFor = map[string]string{
 	"engine":     "github.com/NightWatchEng/shortfall/engine",
 	"httpmw":     "github.com/NightWatchEng/shortfall/propagate/httpmw",
 	"cloudwatch": "github.com/NightWatchEng/shortfall/adapters/export/cloudwatch",
+	"gcp":        "github.com/NightWatchEng/shortfall/adapters/export/gcp",
 	"promexport": "github.com/NightWatchEng/shortfall/adapters/export/prometheus",
 	"promql":     "github.com/NightWatchEng/shortfall/adapters/query/promql",
 	"sqlq":       "github.com/NightWatchEng/shortfall/adapters/query/sql",
@@ -169,6 +170,7 @@ go 1.25.0
 require (
 	github.com/NightWatchEng/shortfall v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/cloudwatch v0.0.0
+	github.com/NightWatchEng/shortfall/adapters/export/gcp v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/prometheus v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/promql v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/sql v0.0.0
@@ -177,6 +179,8 @@ require (
 replace github.com/NightWatchEng/shortfall => ROOT
 
 replace github.com/NightWatchEng/shortfall/adapters/export/cloudwatch => ROOT/adapters/export/cloudwatch
+
+replace github.com/NightWatchEng/shortfall/adapters/export/gcp => ROOT/adapters/export/gcp
 
 replace github.com/NightWatchEng/shortfall/adapters/export/prometheus => ROOT/adapters/export/prometheus
 
