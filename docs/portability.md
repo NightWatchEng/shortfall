@@ -794,10 +794,23 @@ event is a dollar figure that is quietly wrong.
 
 ### 6.2 An unrecognised `biz_*` family fails loudly
 
-An exporter handed a metric point whose family it does not recognise MUST
-surface an error for that batch. It MUST NOT drop the point, and MUST NOT
-invent a mapping. A silently unexported family is a metric that reads zero
-on a dashboard during the incident it was built for.
+An exporter that declares `Metrics: true` and is handed a metric point whose
+family it does not recognise MUST surface an error for that batch. It MUST
+NOT drop the point, and MUST NOT invent a mapping. A silently unexported
+family is a metric that reads zero on a dashboard during the incident it was
+built for, and a family guessed into the wrong kind is worse: an unrecognised
+*level* shipped as a monotonic counter is summed by the backend, which is
+silently wrong arithmetic on money rather than a loud stop.
+
+The qualifier is load-bearing, not a hedge. An exporter declaring
+`Metrics: false` still receives metric points — the emitting layer hands
+every batch to whatever exporter it holds, without consulting the declared
+capability first — and it MUST no-op on them rather than error. Erroring
+would be read as a failed batch, and the emitting layer answers a failed
+metric batch by re-crediting its drop counters and warning; an events-only
+exporter would then warn on every flush, for a signal it never claimed to
+carry. Recognising no families at all is not the same as failing to
+recognise one.
 
 ### 6.3 An ungrounded leg reports unavailable, never zero
 
@@ -967,7 +980,7 @@ assertion.
 **Behaviour**
 
 - [ ] outcome events emit regardless of trace sampling
-- [ ] an unrecognised `biz_*` family errors rather than dropping
+- [ ] a metrics-capable exporter errors on an unrecognised `biz_*` family rather than dropping or guessing its kind; an exporter declaring `Metrics: false` no-ops on metric points instead of erroring
 - [ ] an ungrounded leg is structurally marked unavailable, never zeroed
 - [ ] realized and estimated value are never merged
 - [ ] every drop increments `biz_dropped_events_total{reason}`

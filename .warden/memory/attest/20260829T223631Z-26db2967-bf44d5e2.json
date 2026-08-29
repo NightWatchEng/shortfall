@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "26db2967d590ba8d033f81e1d4d1e6da11a9ea7f",
+  "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T22:36:31+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "self-review",
+      "agent": "parent session \u2014 a docs-only, single-file scoping change whose two factual claims were verified directly against emit/emitter.go (Capabilities absent from the flush path; the failed-batch branch warns and re-credits). No independent reviewer was convened, and the attestation records that rather than implying one."
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T22:36:31+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "26db2967d590ba8d033f81e1d4d1e6da11a9ea7f",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 795,
+      "severity": "MEDIUM",
+      "finding": "\u00a76.2 stated the unrecognised-family MUST with no capability qualifier, so it bound an exporter shipping no metrics \u2014 reachable since adapters/export/gcp became events-only, because the emitting layer hands metric points to every exporter regardless of declared capability.",
+      "evidence": "gcp declares emit.Caps{Metrics: false} and ExportMetrics returns nil unconditionally; emit.Std.Flush calls ExportMetrics without consulting Capabilities. adapters.md was scoped when that adapter landed; portability.md was not, leaving one standard at two widths after the diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-82c",
+      "reason": "Scoped to exporters declaring Metrics: true, with the no-op requirement for incapable exporters stated alongside and the reason erroring is wrong (a failed metric batch is answered by re-crediting drop counters and warning, so an events-only exporter would warn on every flush forever). The port checklist is scoped to match. Both claims verified against emit/emitter.go:294-306 rather than assumed.",
+      "id": "0e07b14c0175e74c"
+    }
+  ]
+}

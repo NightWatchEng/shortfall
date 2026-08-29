@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "45edf78b4c8c82898d7dbf23fbde0e52444c567b",
+  "base_sha": "4ea72011dc282c368d6573075a4d9292bc708636",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T23:01:38+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; engine:claude rule bodies verbatim, project review charter, reviewer-split memory recall; verified every changed claim against emit/emitter.go, adapters/export/gcp, and the three metrics-capable exporters in a dedicated worktree at the head under review)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; received only the findings list and the review package, never the reviewer's reasoning; examiner-split memory recall as non-binding precedent)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T23:01:38+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "45edf78b4c8c82898d7dbf23fbde0e52444c567b",
+      "base_sha": "4ea72011dc282c368d6573075a4d9292bc708636",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 808,
+      "severity": "MEDIUM",
+      "finding": "Alleged that the new 6.2 paragraph makes it a normative MUST that a Metrics:false exporter no-ops on metric points rather than error, while the testkit/conformance suite declares the opposite permission for the same case (metricHonesty discards the export error and its comment says an incapable signal may error) \u2014 i.e. one standard stated at two widths across the diff boundary.",
+      "evidence": "docs/portability.md:805-808 'An exporter declaring `Metrics: false` still receives metric points ... and it MUST no-op on them rather than error.' versus testkit/conformance/conformance.go:245-247 '// An incapable signal may return an error (signalling a drop) \u2014 that is honest. What it must never do is silently deliver.' with `_, _ = batchesOfMetrics(exp, n)'.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "pr": "95",
+      "bead": "workspace-82c",
+      "reason": "REFUTED by the cross-examiner on three independent grounds. (1) The load-bearing premise is false: docs/portability.md never mentions testkit/conformance. Its preamble says 'backed by an ADR and, where it can be, by machine-checkable conformance vectors', and its Conformance vectors section names exactly two artifacts \u2014 testkit/vectors/vc-codec.json and testkit/vectors/registry.json \u2014 neither covering exporter behaviour. Section 6.2 claims no enforcement mechanism at all, so there is no enforcement-claim drift; the section 8 checklist is an unchecked self-audit list for a porter in another language, introduced by 'A claim of parity means all of these, in order.' (2) These are not two statements of one standard. metricHonesty's declared property is its own test name \u2014 'metrics-incapable exporter delivers no metrics' \u2014 and its only assertion is be.MetricPoints() != 0; the discarded error is explained for that property alone. 'Erroring is honest' and 'the contract requires a no-op' are compatible predicates over one fact, not contradictory ones, and the repo already discloses the suite's narrower scope at docs/adapters.md:132-133. (3) No failure scenario exists: the only Metrics:false exporter in the tree, adapters/export/gcp, already returns nil unconditionally (gcp.go:87-93) and its doc comment states the identical rule. The added text's factual claims check out against emit/emitter.go:293-309 \u2014 Flush calls ExportMetrics with no Capabilities() consultation, and the error branch warns and re-credits dropCounts. At most there is mild prose tension in one test comment's 'may', which would be a comment tweak in testkit/conformance, not a docs-accuracy defect in this diff's changed file.",
+      "id": "8046f08a85c17775"
+    }
+  ]
+}
