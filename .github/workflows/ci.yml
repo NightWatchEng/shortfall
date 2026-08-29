@@ -25,6 +25,10 @@ permissions:
 jobs:
   core:
     name: core checks
+    # These six ci-go.sh steps are exactly repo.yaml's verify.core list, in
+    # the same order, so `warden verify --scope core` really is what this
+    # job will say. Adding or removing a step here means the same edit in
+    # repo.yaml, in the same PR (workspace-dfd).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -44,14 +48,23 @@ jobs:
         run: ./scripts/ci-go.sh vuln
       - name: install golangci-lint (pinned release binary, checksum-verified)
         # Building from source proved network-fragile (sumdb stream errors)
-        # and slow; a sha256-verified release binary is content-addressed —
-        # a stronger pin than any tag.
+        # and slow ON A COLD RUNNER; a sha256-verified release binary is
+        # content-addressed — a stronger pin than any tag. ci-go.sh falls
+        # back to `go run` at the same pin where no binary is installed
+        # (developer machines), which pays that build cost once, cached.
+        #
+        # The VERSION is read back from scripts/ci-go.sh so the pin has one
+        # home. The sha256 below is that version's linux-amd64 tarball: bump
+        # the two together, and if they ever separate this step fails on the
+        # checksum instead of quietly linting with a different analyzer.
         run: |
+          V="$(./scripts/ci-go.sh lint-version)"; V="${V#v}"
+          echo "ci-go.sh pins golangci-lint v${V}"
           curl -sSfL -o /tmp/golangci-lint.tar.gz \
-            https://github.com/golangci/golangci-lint/releases/download/v2.13.1/golangci-lint-2.13.1-linux-amd64.tar.gz
+            "https://github.com/golangci/golangci-lint/releases/download/v${V}/golangci-lint-${V}-linux-amd64.tar.gz"
           echo "b17bfbc9d4aaa48be7f4f1ce3240bc3d8200c870c072bacf15c26219e2cfb9cc  /tmp/golangci-lint.tar.gz" | sha256sum -c -
           tar -xzf /tmp/golangci-lint.tar.gz -C /tmp
-          install -m 0755 /tmp/golangci-lint-2.13.1-linux-amd64/golangci-lint /usr/local/bin/golangci-lint
+          install -m 0755 "/tmp/golangci-lint-${V}-linux-amd64/golangci-lint" /usr/local/bin/golangci-lint
           golangci-lint version
       - name: golangci-lint (all modules)
         run: ./scripts/ci-go.sh lint

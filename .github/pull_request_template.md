@@ -36,10 +36,15 @@ its current head rather than from an earlier run.
     ./scripts/ci-go.sh vet
     ./scripts/ci-go.sh build
     ./scripts/ci-go.sh test
+    ./scripts/ci-go.sh vuln
+    ./scripts/ci-go.sh lint
 
 Those run across every Go module in the repository, nested adapter modules
-included. `.warden/bin/warden verify --scope core` runs the same commands
-through the policy in repo.yaml.
+included. `.warden/bin/warden verify --scope core` runs the same six
+commands through the policy in repo.yaml, and they are the same six steps
+the required `core checks` job runs — so a green verify here is what CI will
+say. `vuln` and `lint` need no local install: both are pinned in
+scripts/ci-go.sh and run through `go run` when the tool is not on PATH.
 -->
 
 ```text

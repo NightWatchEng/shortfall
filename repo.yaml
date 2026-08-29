@@ -46,15 +46,33 @@ protected_paths:
   - {path: "LICENSE",            reason: "Apache-2.0 decided at bootstrap; changing later is painful and a founder call"}
 
 # Deterministic gates. Commands live here, not in CI YAML or code.
-# One source of truth for the core checks: ci-go.sh discovers every module
-# dynamically, so `warden verify --scope core` and the CI core job can never
-# drift apart or silently skip a nested adapter module.
+#
+# `warden verify --scope core` and the CI "core checks" job agree on two
+# separate axes, and the comment that used to sit here claimed only the
+# first while sounding like it claimed both (workspace-dfd):
+#
+#   MODULES — ci-go.sh discovers every go.mod dynamically, so neither runner
+#     can silently skip a nested adapter module when it lands. Guaranteed by
+#     the script; nothing to keep in step.
+#   STEPS — the six commands below are exactly the six steps of the CI core
+#     job, in this order. NOT guaranteed by any script: it holds only while
+#     both lists are edited together. A step added to one and not the other
+#     is real drift, and it has happened — `vuln` and `lint` ran only in CI
+#     until workspace-dfd, so a locally green branch could fail the required
+#     job on lint findings `go vet` cannot see.
+#
+# So: adding, removing, or reordering a step here means the same edit in
+# .github/workflows/ci.yml's core job, in the same PR.
 verify:
   core:
     - {run: "./scripts/ci-go.sh fmt"}
     - {run: "./scripts/ci-go.sh vet"}
     - {run: "./scripts/ci-go.sh build"}
     - {run: "./scripts/ci-go.sh test"}
+    - {run: "./scripts/ci-go.sh vuln"}
+    # golangci-lint needs no local install: ci-go.sh uses a PATH binary at
+    # the pinned version when there is one and otherwise `go run`s that pin.
+    - {run: "./scripts/ci-go.sh lint"}
   graph:
     - {run: ".warden/bin/warden graph validate"}
 

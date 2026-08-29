@@ -11,9 +11,14 @@ no exceptions, including for maintainers (enforce_admins is on).
 
 - `./scripts/ci-go.sh fmt|vet|build|test|vuln|lint` — the core checks, run
   across **every** Go module in the repo (nested adapter modules included;
-  zero modules found is a failure, not a pass).
-- `.warden/bin/warden verify --scope core` — the attested verify, same
-  commands via the policy in `repo.yaml`.
+  zero modules found is a failure, not a pass). `vuln` and `lint` need no
+  setup: govulncheck and golangci-lint are pinned in the script and run
+  through `go run` when they are not already on PATH at the pinned version
+  (the first such run builds the tool, later ones are cached).
+- `.warden/bin/warden verify --scope core` — the attested verify, same six
+  commands via the policy in `repo.yaml`, and the same six the required
+  `core checks` job runs. Running it before opening a PR is what CI will
+  say about the core job.
 - `.warden/bin/warden explain` — orientation: components, risk tiers,
   rules, protected paths.
 

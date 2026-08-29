@@ -6,8 +6,13 @@ The per-project contract the AgentOps skill pack reads (platform
 ## Verify
 
 - Go changed: `.warden/bin/warden verify --scope core` (gofmt clean, vet,
-  build, test across the workspace — nested adapter modules join the scope
-  as they land).
+  build, test, govulncheck, golangci-lint across the workspace — nested
+  adapter modules join the scope as they land). Those six steps are exactly
+  the CI `core checks` job's six, so this scope is what CI will say; both
+  lists live next to each other in `repo.yaml` and `.github/workflows/ci.yml`
+  and are edited together. Neither govulncheck nor golangci-lint needs a
+  local install — `scripts/ci-go.sh` pins both and runs them via `go run`
+  when they are not on PATH.
 - `graph.yaml` changed: `.warden/bin/warden verify --scope graph`.
 - Iteration budget before revert: 3 attempts (the platform cap).
 
