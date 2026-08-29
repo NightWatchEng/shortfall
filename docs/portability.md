@@ -631,11 +631,10 @@ fails both — so a flow declaring `recovered_fraction: .nan` with no
 but as `recovery_within_without_fraction`, because NaN fails the `> 0`
 test too: the right verdict for the wrong reason.) That is a defect in
 the reference implementation, tracked separately — not a licence to copy
-it. A
-conforming implementation MUST reject a non-finite `recovered_fraction`
-under `recovery_fraction`. There is no vector for it yet, because a
-vector asserts what the reference implementation does, and here that is
-the wrong answer; the vector lands with the fix.
+it. A conforming implementation MUST reject a non-finite
+`recovered_fraction` under `recovery_fraction`. There is no vector for it
+yet, because a vector asserts what the reference implementation does, and
+here that is the wrong answer; the vector lands with the fix.
 
 ### 4.4 Allowlist matching
 

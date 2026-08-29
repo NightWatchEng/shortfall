@@ -398,7 +398,11 @@ func TestRegistryFactsEqualNilVersusEmpty(t *testing.T) {
 			f := base()
 			f.Segments = nil
 			return f
-		}(), base(), false},
+		}(), func() RegistryFacts {
+			f := base()
+			f.Segments = []string{}
+			return f
+		}(), false},
 		{"allow_hosts", func() RegistryFacts {
 			f := base()
 			f.AllowHosts = nil
@@ -416,6 +420,13 @@ func TestRegistryFactsEqualNilVersusEmpty(t *testing.T) {
 		{"stages", withFlow(FlowFact{Stages: nil}), base(), false},
 		{"signals", withFlow(FlowFact{Stages: []StageFact{{Name: "auth"}}}),
 			withFlow(FlowFact{Stages: []StageFact{{Name: "auth", Signals: []string{}}}}), false},
+		// Estimator is omitempty but a POINTER, so it obeys neither rule:
+		// absence is omitted, an empty estimator is rendered in full. That
+		// is the answer a port wants — FactsOf sets Estimator only for a
+		// flow that declares one, so "no estimator" and "an estimator of
+		// zero" must not collapse.
+		{"estimator (omitempty pointer)", withFlow(FlowFact{Stages: []StageFact{}}),
+			withFlow(FlowFact{Stages: []StageFact{}, Estimator: &EstimatorFact{}}), false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

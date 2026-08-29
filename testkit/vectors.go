@@ -377,7 +377,14 @@ func FactsOf(r registry.Registry) RegistryFacts {
 // registry yields non-nil collections for all of them, so no committed
 // vector carries a `null` — but a port comparing its own derived facts
 // against these should know which half of the struct forgives an empty
-// collection. TestRegistryFactsEqualNilVersusEmpty pins both halves.
+// collection.
+//
+// Estimator obeys neither rule: it is an omitempty POINTER, so a nil one
+// is omitted while a pointer to a zero EstimatorFact renders in full.
+// That is deliberate — FactsOf sets it only for a flow that declares an
+// estimator, so "no estimator" and "an estimator of zero" must not
+// collapse into each other.
+// TestRegistryFactsEqualNilVersusEmpty pins all three behaviours.
 //
 // A fact set with no JSON rendering has no comparable form, so Equal
 // fails closed rather than comparing two error strings: reporting
