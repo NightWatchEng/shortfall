@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+  "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T15:13:53+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, round 1 + round-2 combined scoped re-review + round-3 self-verified prescribed fix"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter, round 1"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/comment-hygiene.md",
+      "line": 5,
+      "severity": "MEDIUM",
+      "finding": "implements link overclaimed: a bead-id regex does not enforce the comments-explain-WHY lens; the link muted a row no local rule enforces",
+      "evidence": "catalog row is a claude judgment lens; comment-hygiene self-describes as the mechanical slice",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Link removed; row answered honestly (misleading-comment bullet covers the harmful subset, WHY lens declined with cost-unmeasured reasoning)",
+      "id": "7793f921e87953ed"
+    },
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".warden",
+      "file": ".warden/catalog-answers.yaml",
+      "line": 113,
+      "severity": "MEDIUM",
+      "finding": "swallowed-exceptions answer credited go vet for a class vet does not check",
+      "evidence": "no vet analyzer flags discarded error returns; errcheck via golangci-lint v2 defaults is the real CI guard",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Answer names errcheck/golangci-lint with the config facts; re-verified exact in round 2",
+      "id": "c2840e891406038b"
+    },
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden",
+      "file": ".warden/catalog-answers.yaml",
+      "line": 142,
+      "severity": "MEDIUM",
+      "finding": "weak-cryptography answer claimed no cryptographic surface while the tree hand-rolls SigV4 HMAC-SHA256 signing and verifies Stripe signatures; the xxhash claim described hashing the tree does not do",
+      "evidence": "cwinsights/sigv4.go crypto/hmac chain; stripe-go webhook verification; xxhash only an indirect dep",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Answer states the real surface and argues no WEAK-crypto instance (stdlib HMAC-SHA256 only, no MD5/SHA1, flip conditions stated)",
+      "id": "66cbf02d5be10517"
+    },
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/sql-injection.md",
+      "line": 21,
+      "severity": "MEDIUM",
+      "finding": "Body claimed 'the conformance suite pins it' \u2014 the exporter suite never touches the sql adapter; round 1's repair script silently no-opped while the commit message claimed the fix, caught by round 2",
+      "evidence": "testkit/conformance is the exporter suite; f319c3d diff omitted the file its message claimed to fix",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Round 3 landed the real edit naming TestBadTableRejected and TestParityWithMemq, verified in-tree by grep; artifacts re-pinned",
+      "id": "15d3fd338375000e"
+    },
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/os-command-injection.md",
+      "line": 9,
+      "severity": "LOW",
+      "finding": "Pattern missed exec.CommandContext, the idiomatic non-test form",
+      "evidence": "literal ( after Command cannot match CommandContext",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Widened with (Context)? and optional leading arg; 4/4 positive 0/4 negative probes, tree still measured 0",
+      "id": "6c271b321c8e0128"
+    },
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/security-misconfiguration.md",
+      "line": 9,
+      "severity": "LOW",
+      "finding": "Pattern covered only the struct-literal spelling; the assignment form escaped",
+      "evidence": "probe: cfg.InsecureSkipVerify = true did not match",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Pattern now [:=]; 3/3 positive 0/3 negative probes, tree measured 0",
+      "id": "c3413c99e108a608"
+    },
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "unmapped:decision-record-drift",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden/memory",
+      "file": ".warden/memory/decide/20260829T1448190000-b5fb6f99-1c021940.json",
+      "line": 15,
+      "severity": "LOW",
+      "finding": "First triage shard said 23 answers; the delivered file held 20 after the implements conversion, unrecorded",
+      "evidence": "shard vs id count in catalog-answers.yaml",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Addendum shard records the final 3 adopted + 21 answered + 2 implements split; arithmetic and warden sections verified consistent in round 2",
+      "id": "f770b229c3d178c5"
+    },
+    {
+      "ts": "2026-08-29T15:13:53+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "995e63b0fc1a5a31841c61658c0bfe9ff1a76944",
+      "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/tests-required.md",
+      "line": 5,
+      "severity": "LOW",
+      "finding": "implements marked an always-on catalog row enforced while applies_to omitted adapters/** and test/** (anchored globs)",
+      "evidence": "platform glob anchoring; this branch's own corpus holds a tests-required finding in test/ outside the declared scope",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "applies_to widened to adapters/** and test/**; engine confirmed diff-scoped so no retroactive firing",
+      "id": "57daa22455ba21be"
+    }
+  ]
+}
