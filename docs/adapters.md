@@ -92,13 +92,16 @@ integration reaches Datadog, Honeycomb, Grafana, Google Cloud and anything
 else a collector fans out to, which is why the supported surface stays small
 while the reachable backend set does not.
 
-For Google Cloud both paths work today and the choice is a real trade:
-`adapters/export/gcp` needs no collector and pulls nothing beyond the standard
-library, but is GCP-shaped and reimplements aggregation and writer identity
-that the OpenTelemetry SDK already owns; OTLP hands those to the SDK and is
-the path Google itself documents, at the cost of running a collector and
-pulling the gRPC stack into that module. Prefer OTLP if you run a collector or
-expect a second backend.
+For Google Cloud both paths work today and the choice is a real trade.
+`adapters/export/gcp` pulls nothing beyond the standard library and talks to
+the API directly, but it is GCP-shaped, and because Cloud Monitoring expresses
+a counter as a running total it has to accumulate deltas in-process — an
+accumulator, a per-writer resource and a commit protocol it must get right.
+OTLP has no accumulator at all: `emit` produces deltas and OTLP takes delta
+temporality, so the arithmetic moves to the backend. Its cost is the otel
+module graph, which pulls grpc and protobuf as indirect dependencies even on
+the HTTP transport this adapter uses. Prefer OTLP if you already run a
+collector, or expect a second backend.
 
 Metric mapping is fixed by `emit`'s semantics, not chosen: the counter
 families become **delta** monotonic `Sum[int64]`s, because `emit.MetricPoint`

@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	logexp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	metricexp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -32,10 +33,13 @@ import (
 	"github.com/NightWatchEng/shortfall/emit"
 )
 
-// eventQueueSize bounds the log SDK's record queue and, with it, the chunk
-// size emit ships in. The two must agree: the queue drops its oldest record
-// on overflow with no error anywhere the caller can observe, so the only
-// safe batch is one that cannot overflow it.
+// eventQueueSize bounds the log SDK's record queue and the chunk size
+// providerSink.emit hands it. The two must agree: an overflowing queue
+// discards records with no error anywhere the caller can observe. It is
+// deliberately not tied to emit's larger event buffer — chunking already
+// makes that size irrelevant, and matching it would hold 10k records in
+// memory before any drain. Setting it explicitly also overrides
+// OTEL_BLRP_MAX_QUEUE_SIZE, which the chunking contract depends on.
 const eventQueueSize = 2048
 
 // metricPusher is the narrow slice of the otel metric exporter this
@@ -58,15 +62,20 @@ type eventSink interface {
 // from the emit ctx, so each outcome carrying a trace id is emitted under
 // a reconstructed span context; ForceFlush ships the batch synchronously.
 type providerSink struct {
-	provider  *sdklog.LoggerProvider
-	logger    otellog.Logger
-	queueSize int
+	provider *sdklog.LoggerProvider
+	logger   otellog.Logger
+
+	// mu serialises emit. The queue below is per-sink, not per-call, so two
+	// overlapping ExportEvents calls would put twice its capacity in flight
+	// and overflow it — emit releases its own lock before calling the
+	// exporter, and its ticker can race a caller-driven Flush.
+	mu sync.Mutex
 }
 
 // newProviderSink builds the real event pipeline over an otel log exporter.
 // The queue is sized explicitly rather than left to the SDK default, because
 // emit's chunking guarantee below is stated in terms of it.
-func newProviderSink(exp sdklog.Exporter) *providerSink {
+func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink {
 	// WithAttributeCountLimit(-1) disables the attribute cap so every biz.*
 	// field survives however many an outcome carries. The SDK default (128)
 	// clears today's ~12, but is a silent cliff — pin the safe value rather
@@ -74,23 +83,25 @@ func newProviderSink(exp sdklog.Exporter) *providerSink {
 	provider := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(exp, sdklog.WithMaxQueueSize(eventQueueSize))),
 		sdklog.WithAttributeCountLimit(-1),
+		sdklog.WithResource(res),
 	)
 	return &providerSink{
-		provider:  provider,
-		logger:    provider.Logger("github.com/NightWatchEng/shortfall"),
-		queueSize: eventQueueSize,
+		provider: provider,
+		logger:   provider.Logger("github.com/NightWatchEng/shortfall"),
 	}
 }
 
 // emit ships outcomes in chunks no larger than the processor's queue,
-// flushing each chunk before the next. The log SDK's queue DROPS THE OLDEST
-// record on overflow and reports it nowhere the caller can see — Emit
-// returns no error and ForceFlush reports only export failures — so a batch
-// larger than the queue would lose outcome events silently, which ADR-0002
-// makes a defect. Chunking keeps the queue from ever overflowing.
+// flushing each chunk before the next. On overflow the queue overwrites its
+// oldest record and reports it through no channel the caller can reach: Emit
+// returns nothing and ForceFlush surfaces only export failures. Chunking
+// under a lock is what keeps it from overflowing, which ADR-0002 requires —
+// a dropped outcome must be counted, never silent.
 func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
-	for start := 0; start < len(batch); start += s.queueSize {
-		end := min(start+s.queueSize, len(batch))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for start := 0; start < len(batch); start += eventQueueSize {
+		end := min(start+eventQueueSize, len(batch))
 		if err := s.emitChunk(ctx, batch[start:end]); err != nil {
 			return err
 		}
@@ -137,10 +148,10 @@ type Options struct {
 	resource *resource.Resource
 }
 
-// WithResource overrides the resource every exported point carries. The
-// default names this service and gives it a per-process instance id, which
-// is what keeps replicas off each other's gauge series; an override must
-// still distinguish one writer from another.
+// WithResource overrides the resource carried by both signals — metric
+// points and log records alike. The default names this service and gives it
+// a per-process instance id, which is what keeps replicas off each other's
+// gauge series; an override must still distinguish one writer from another.
 func WithResource(res *resource.Resource) func(*Options) {
 	return func(o *Options) { o.resource = res }
 }
@@ -175,7 +186,7 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 		_ = m.Shutdown(ctx)
 		return nil, fmt.Errorf("otlp: log exporter: %w", err)
 	}
-	return &Exporter{metrics: m, logs: newProviderSink(l), resource: o.resource}, nil
+	return &Exporter{metrics: m, logs: newProviderSink(l, o.resource), resource: o.resource}, nil
 }
 
 // newWith wires arbitrary pushers — the seam the unit tests and the

@@ -31,13 +31,11 @@ func (c *countingMetric) Export(_ context.Context, rm *metricdata.ResourceMetric
 }
 func (c *countingMetric) Shutdown(context.Context) error { return nil }
 
-// countingLogExporter is an otel log Exporter that tallies the records
-// actually DELIVERED to it. The seam is deliberately here, at the outermost
-// transport, rather than at the eventSink interface: substituting the sink
-// would excise buildRecord, the LoggerProvider, the BatchProcessor and
-// ForceFlush, and "events flush on shutdown with no loss" would reduce to
-// counting what the exporter accepted — arithmetically incapable of failing,
-// and blind to exactly the buffering layer the suite exists to judge.
+// countingLogExporter tallies records that reach the transport. The seam sits
+// here rather than at eventSink so the record builder, provider, batch
+// processor and flush all run under the suite: a seam above them would count
+// what was accepted rather than what was delivered, and the no-loss invariant
+// would hold by arithmetic.
 type countingLogExporter struct {
 	mu      sync.Mutex
 	records int
@@ -76,7 +74,8 @@ type otlpHarness struct{}
 func (otlpHarness) New() (emit.Exporter, conformance.Backend) {
 	m := &countingMetric{}
 	l := &countingLogExporter{}
-	e := &Exporter{metrics: m, logs: newProviderSink(l), resource: defaultResource()}
+	res := defaultResource()
+	e := &Exporter{metrics: m, logs: newProviderSink(l, res), resource: res}
 	return e, otlpBackend{m: m, l: l}
 }
 

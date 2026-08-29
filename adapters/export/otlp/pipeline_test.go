@@ -23,10 +23,10 @@ type capturingLogExporter struct {
 	mu   sync.Mutex
 	recs []sdklog.Record
 	fail error
-	// delay simulates a collector that cannot keep up. It is what makes the
-	// overflow reachable: with an instant exporter the batch processor drains
-	// as fast as a caller can fill it and no record is ever overwritten, so a
-	// test using one proves nothing about the queue.
+	// delay simulates a collector that cannot keep up, which is what makes an
+	// overflow reachable at all: against an instant exporter the processor
+	// drains as fast as a caller fills it, so no record is overwritten and the
+	// fixture proves nothing about the queue.
 	delay time.Duration
 }
 
@@ -59,30 +59,30 @@ func outcomes(n int) []biz.Outcome {
 	return out
 }
 
-// TestNoOutcomeIsLostToQueueOverflow is the regression test for the defect
-// this module shipped with: the log SDK's batch queue drops its OLDEST record
-// on overflow, reports it through no channel the caller can see (Emit returns
-// nothing, ForceFlush reports only export failures), and emit's default event
-// buffer is five times the queue's default size. A batch larger than the
-// queue therefore lost outcome events silently — realized loss and customer
-// impact both read from these — while every layer reported success. ADR-0002
-// makes a silent drop a defect.
+// TestNoOutcomeIsLostToQueueOverflow pins that a batch larger than the log
+// SDK's queue loses nothing. The queue overwrites its oldest record on
+// overflow and surfaces it through no channel the caller can reach, and
+// emit's event buffer is several times the queue's size, so an unchunked
+// batch would destroy outcome events while every layer reported success.
+// Only the largest case below can catch that: the processor drains 512
+// records per export, so a batch just over the queue size never fills it.
+// The smaller cases pin the chunk arithmetic instead.
 func TestNoOutcomeIsLostToQueueOverflow(t *testing.T) {
 	cases := []struct {
 		name  string
 		count int
 	}{
-		{"well under the queue", 10},
-		{"exactly the queue", eventQueueSize},
-		{"one over the queue", eventQueueSize + 1},
-		{"emit's full default event buffer", 10000},
+		{"chunk arithmetic: a partial chunk", 10},
+		{"chunk boundary: exactly one chunk", eventQueueSize},
+		{"chunk boundary: one past a chunk", eventQueueSize + 1},
+		{"overflow: emit's full default event buffer", 10000},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			// A slow collector is the condition under which the queue
 			// overflows — and the condition this library exists to measure.
 			exp := &capturingLogExporter{delay: 2 * time.Millisecond}
-			sink := newProviderSink(exp)
+			sink := newProviderSink(exp, defaultResource())
 			if err := sink.emit(context.Background(), outcomes(c.count)); err != nil {
 				t.Fatalf("emit: %v", err)
 			}
@@ -101,14 +101,15 @@ func TestNoOutcomeIsLostToQueueOverflow(t *testing.T) {
 // rather than believing the batch landed.
 func TestEventExportFailureSurfaces(t *testing.T) {
 	exp := &capturingLogExporter{fail: errors.New("collector unreachable")}
-	sink := newProviderSink(exp)
+	sink := newProviderSink(exp, defaultResource())
 	if err := sink.emit(context.Background(), outcomes(3)); err == nil {
 		t.Fatal("want an error, got nil — a failed event export must not report success")
 	}
 }
 
-// TestTraceLinking covers providerSink.emit's branching, which previously ran
-// only under the integration build tag and so was never exercised in CI.
+// TestTraceLinking covers providerSink.emit's branching: an outcome links to
+// its trace when it carries a usable id, and emits unlinked rather than being
+// dropped when it does not.
 func TestTraceLinking(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -124,7 +125,7 @@ func TestTraceLinking(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			exp := &capturingLogExporter{}
-			sink := newProviderSink(exp)
+			sink := newProviderSink(exp, defaultResource())
 			o := biz.Outcome{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed, TraceID: c.traceID}
 			if err := sink.emit(context.Background(), []biz.Outcome{o}); err != nil {
 				t.Fatalf("emit: %v", err)
@@ -156,7 +157,7 @@ func TestTraceLinking(t *testing.T) {
 // silently trimmed biz.* fields would pass a builder-only test.
 func TestRecordCarriesEveryBizField(t *testing.T) {
 	exp := &capturingLogExporter{}
-	sink := newProviderSink(exp)
+	sink := newProviderSink(exp, defaultResource())
 	o := biz.Outcome{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed, Source: "stripe:webhook"}
 	if err := sink.emit(context.Background(), []biz.Outcome{o}); err != nil {
 		t.Fatalf("emit: %v", err)
@@ -187,10 +188,10 @@ func TestRecordCarriesEveryBizField(t *testing.T) {
 	}
 }
 
-// TestUnknownMetricFamilyIsRejected matches the guarantee the three sibling
-// exporters already enforce and docs/adapters.md states repo-wide. Shipping
-// an unrecognised family as a monotonic counter is worse than dropping it: a
-// mistyped or newly added LEVEL family would be summed by the backend.
+// TestUnknownMetricFamilyIsRejected matches the guarantee the sibling
+// exporters enforce. Shipping an unrecognised family as a monotonic counter
+// is worse than refusing it: a mistyped or newly added level family would be
+// summed by the backend.
 func TestUnknownMetricFamilyIsRejected(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -251,5 +252,73 @@ func TestEveryPointCarriesWriterIdentity(t *testing.T) {
 	}
 	if !strings.Contains(inst, strconv.Itoa(os.Getpid())) {
 		t.Errorf("service.instance.id = %q, want it to distinguish this process (pid %d)", inst, os.Getpid())
+	}
+}
+
+// TestConcurrentEmitLosesNothing pins the capacity guarantee across calls, not
+// just within one. The queue belongs to the sink, so overlapping ExportEvents
+// calls would put several times its capacity in flight and overflow it — and
+// emit reaches this: Flush releases its own lock before calling the exporter,
+// and its background ticker can race a caller-driven Flush.
+func TestConcurrentEmitLosesNothing(t *testing.T) {
+	const callers, per = 4, eventQueueSize
+	exp := &capturingLogExporter{delay: 2 * time.Millisecond}
+	sink := newProviderSink(exp, defaultResource())
+
+	var wg sync.WaitGroup
+	errs := make(chan error, callers)
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := sink.emit(context.Background(), outcomes(per)); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("emit: %v", err)
+	}
+	if err := sink.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	if got, want := len(exp.all()), callers*per; got != want {
+		t.Errorf("delivered %d of %d outcomes across %d concurrent callers — the shared queue overflowed with no error returned", got, want, callers)
+	}
+}
+
+// TestBothSignalsCarryTheSameWriterIdentity pins that metrics and events agree
+// about who wrote them. The log pipeline defaults to the SDK's own resource
+// when it is not given one, which would leave events under
+// "unknown_service:<binary>" with no instance id while metrics carried the
+// real identity — and a backend correlating the two legs by service.name
+// could not.
+func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
+	exp := &capturingLogExporter{}
+	res := defaultResource()
+	sink := newProviderSink(exp, res)
+	if err := sink.emit(context.Background(), outcomes(1)); err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	recs := exp.all()
+	if len(recs) != 1 {
+		t.Fatalf("delivered %d records, want 1", len(recs))
+	}
+	got := recs[0].Resource()
+	attrs := map[string]string{}
+	for _, kv := range got.Attributes() {
+		attrs[string(kv.Key)] = kv.Value.Emit()
+	}
+	if attrs["service.name"] != "shortfall" {
+		t.Errorf("event-leg service.name = %q, want shortfall — the log provider fell back to its own default", attrs["service.name"])
+	}
+	inst := attrs["service.instance.id"]
+	if inst == "" {
+		t.Fatal("event-leg records carry no service.instance.id, so events and metrics disagree about the writer")
+	}
+	if !strings.Contains(inst, strconv.Itoa(os.Getpid())) {
+		t.Errorf("event-leg service.instance.id = %q, want it to name this process (pid %d)", inst, os.Getpid())
 	}
 }
