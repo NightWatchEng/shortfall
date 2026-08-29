@@ -10,11 +10,12 @@ palette. shortfall is a **library**, not a deployed system, so the classes
 carry a library's distinctions rather than a deployment's — see
 [What the colours mean here](#what-the-colours-mean-here).
 
-**Scope:** every diagram in this directory, and any diagram added to it.
-The three C4 diagrams are drawn to it today. The money-path sequences
-(`seq-*.md`) are governed by it but have not been redrawn yet; a sequence
-diagram has no `classDef` surface, so when they are, they take the label
-grammar, the edge table, and the key-facts section, and skip the palette.
+**Scope:** every diagram in this directory, and any diagram added to it —
+the three C4 diagrams and the three money-path sequences. Sections 1–4
+below are the C4 half; [section 5](#5--sequences-the-same-grammar-a-different-renderer)
+is the sequence half. A sequence has no `classDef` surface, so it takes the
+label grammar, the step table and the key-facts section, and skips the
+palette — the differences are enumerated there rather than left to taste.
 
 ---
 
@@ -179,6 +180,10 @@ reviewer can check them against the code.
 Name the mechanism: the interface, the header, the wire format, the
 enforcement. "Sends data" is not a row worth writing.
 
+A sequence diagram carries the same section in the same place, keyed on the
+`autonumber` step instead of on a node pair — see
+[§5.6](#56--the-step-table-replaces-the-edge-table).
+
 ### Key facts this diagram encodes
 
 Closing section, `##`-level, headed exactly:
@@ -195,20 +200,165 @@ things the picture was drawn to prove. A bullet that merely restates a box
 
 ---
 
-## 5 · Checklist
+## 5 · Sequences: the same grammar, a different renderer
 
-A diagram is on-stencil when all of these hold:
+A C4 diagram answers *where*; a sequence answers *when*, and *in what order*.
+The two families have to read as one system, so a sequence keeps the label
+grammar and both required sections. It does not keep the palette, and it
+**cannot** keep the markup — the sections below say exactly what carries
+over and what is replaced.
+
+### 5.1 · `autonumber`, always
+
+The first line inside the fence, no exceptions:
+
+```
+sequenceDiagram
+    autonumber
+```
+
+The numbers are not decoration: they are the **row keys of the step table**.
+Without them a table row cannot be pointed at, and a reviewer checking a
+claim against the code has to count arrows to find the one being described.
+
+### 5.2 · No markup in labels — the grammar survives, the tags do not
+
+Mermaid renders sequence participant labels, notes and messages as plain SVG
+text. `<b>` and `<i>` come out **as literal angle brackets**, and Markdown
+`**bold**` comes out as literal asterisks. Only `<br/>` works. That is a
+property of the renderer, verified by rendering rather than assumed, so the
+C4 grammar transfers by **line position** instead of by weight:
+
+```
+participant EM as emit.Std<br/>core module — Record buffers, Flush exports
+```
+
+- **Line 1 — the name**, spelled as the repo spells it. Where a C4 node
+  bolds it, a sequence puts it first and alone.
+- **Line 2 — the technology / module line.** Where a C4 node italicises it,
+  a sequence puts it second.
+- **No third line.** A C4 node states its responsibilities because nothing
+  else on the page does; a sequence participant's responsibilities are the
+  messages on its own lifeline.
+
+Human actors use Mermaid's `actor` keyword — the sequence equivalent of the
+stadium shape — and, together with the entry point, carry the leading emoji
+glyph. Inner participants do not.
+
+Copying `<b>`/`<i>` in from a C4 label is the one mistake this section
+exists to prevent: it renders as visible punctuation, and it looks fine in
+the source.
+
+**No semicolons in message or note text.** A C4 label is quoted, so `;` is
+just a character there. Sequence text is unquoted, and `;` **terminates the
+statement** — the rest of the line is then parsed as a new one and the fence
+fails to render. Use an em dash or a full stop.
+
+### 5.3 · `box` marks a boundary, exactly as `subgraph` does
+
+Group participants in a `box` only where a real boundary runs between them —
+a process, a module, a trust boundary — and name the boundary in the label.
+Same rule as [§3](#3--subgraph-marks-a-real-boundary), same reason: a `box`
+is a claim about everything inside it.
+
+**A sequence has no ownership palette, deliberately.** Mermaid gives a
+sequence no `classDef` surface, so a participant cannot be coloured by who
+owns it; only the `box` around a group can be filled, and the groups here
+are processes, not ownership bands. Asserting the palette on a `box` would
+make an ownership claim about participants that do not all share one class.
+So sequences use **one neutral tint for every band**, and the ownership fact
+lives in the technology line and the step table, where it can be stated
+precisely.
+
+The tint is always low-alpha `rgba`, never opaque `rgb`:
+
+```
+box rgba(140,140,140,0.10) Your api service — one process
+```
+
+Opaque fills are banned because GitHub renders these diagrams in both a light
+and a dark theme, and a solid pale fill puts pale text on a pale ground in
+one of them. A 10% tint bands the diagram in both.
+
+### 5.4 · `rect` is a phase; `Note over` is a guarantee
+
+Two constructs, two jobs, and keeping them apart is what lets a reader skim
+a long flow:
+
+- **`rect` — a phase.** A contiguous run of steps belonging to one stage of
+  the flow, in the same neutral tint as a `box`. Every `rect` opens with a
+  `Note over` naming the phase, so the band says what it is:
+  `Note over API,K: Phase 2 — the queue hop`.
+- **`Note over` — a guarantee.** A property that holds, worded as a claim a
+  reader could go and check, placed over exactly the participants it binds.
+  Not a caption for the arrow above it, and not somewhere to park detail that
+  belongs in the step table.
+
+The guarantees are why these diagrams exist. Draw the fence where the
+guarantee starts and stops holding — an egress allowlist, a de-dup key, an
+unavailable marker — instead of leaving it as prose under the fence, where
+it is neither placed nor scoped.
+
+### 5.5 · `alt` / `opt` only for a branch that is in the code
+
+A branch drawn is a branch asserted, and the reviewer should be able to find
+its `if`. `alt … else` is right when the code really takes one of two paths
+(an allowlisted host versus any other host; an events-capable backend versus
+a metrics-only one). It is wrong as a way to show two things that both
+happen — those are two steps.
+
+### 5.6 · The step table replaces the edge table
+
+Same section, same position — immediately below the fence — keyed on the
+`autonumber` step instead of on a node pair:
+
+```markdown
+| # | Step | Mechanism / constraint |
+|---|---|---|
+| 3 | `api` → `emit` | `em.Record(ctx, "auth", biz.ResultSuccess)` — buffered, not exported here |
+```
+
+One row per **numbered step that carries a real constraint**. Notes and
+phase bands are not numbered and do not get rows; if a note needs defending,
+it belongs in the key facts. `## Key facts this diagram encodes` closes the
+file unchanged.
+
+---
+
+## 6 · Checklist
+
+A diagram is on-stencil when all of these hold.
+
+**Every diagram:**
+
+- [ ] Labels name the thing as the repo spells it, then what it is built
+      from — bold/italic in C4, line 1 / line 2 in a sequence.
+- [ ] Human actors and entry points carry a leading emoji glyph; inner
+      participants and components do not.
+- [ ] Arrow and message labels are short; the detail is in the table.
+- [ ] An edge table (C4) or step table (sequence) follows the fence.
+- [ ] A `## Key facts this diagram encodes` section closes the file.
+- [ ] The fence parses as valid Mermaid and **renders** — checked by
+      rendering it, not by reading it.
+
+**C4 diagrams additionally:**
 
 - [ ] Every node is in exactly one semantic class, and the class is true
       at this diagram's level of zoom.
 - [ ] The `classDef` block is present, verbatim, minus unused classes.
-- [ ] Labels follow bold name / italic technology / plain responsibilities.
-- [ ] Human actors and entry-point nodes carry a leading emoji glyph.
 - [ ] Every `subgraph` is a real boundary and declares a `direction`.
-- [ ] Arrow labels are short; the detail is in the edge table.
-- [ ] An edge table follows the fence.
-- [ ] A `## Key facts this diagram encodes` section closes the file.
-- [ ] The fence still parses as valid Mermaid and renders on github.com.
+
+**Sequence diagrams additionally:**
+
+- [ ] `autonumber` is the first line inside the fence.
+- [ ] No `<b>`, `<i>` or `**bold**` anywhere in the fence — only `<br/>`.
+- [ ] No `;` in any message or note text.
+- [ ] Every `box` is a real boundary, named, and tinted with the one
+      low-alpha neutral; no opaque `rgb`.
+- [ ] Every `rect` is a phase and opens with a `Note over` naming it.
+- [ ] Every free `Note over` states a guarantee and spans exactly the
+      participants it binds.
+- [ ] Every `alt` / `opt` corresponds to a branch that exists in the code.
 
 ## Related
 

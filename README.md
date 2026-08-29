@@ -283,7 +283,7 @@ coverage ratio on top.
 | Instrument | `ValueContext`, int64 minor-unit `Money`, the PII guard | `biz` |
 | Record | `Record` per stage, `InFlightTracker`/`SetInFlight` backlog gauges, `Flush` | `emit` |
 | Propagate | HTTP Baggage middleware + egress-fenced Transport; Kafka, SQS, AMQP carriers | `propagate/*` |
-| Export | OTLP (metrics + events, to any collector), Prometheus (metrics), CloudWatch EMF (metrics + events), Google Cloud (Cloud Monitoring metrics + Cloud Logging events) | `adapters/export/*` |
+| Export | OTLP (metrics + events, to any collector), Prometheus (metrics), CloudWatch EMF (metrics + events), Google Cloud (Cloud Logging events; metrics over OTLP) | `adapters/export/*` |
 | Query back | `promql` (metrics); `cwinsights`, `sql` (events) | `adapters/query/*` |
 | Compute & render | four legs + coverage + suggested severity, as text/JSON/markdown | `engine`, `cmd/shortfall` |
 | Reconcile | Stripe ledger reconciler feeding the coverage ratio | `adapters/payment/stripe` |

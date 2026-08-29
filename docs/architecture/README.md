@@ -11,8 +11,10 @@ the affected diagram in the same PR (see CONTRIBUTING).
 directory — a semantic palette, a label grammar, and the edge table and
 key-facts sections each diagram carries. The palette encodes ownership,
 so a node in the wrong colour is a factual defect and a reviewer should
-say so. Read it before adding or redrawing a diagram. The three C4
-diagrams are drawn to it; the sequences have not been redrawn yet.
+say so. Read it before adding or redrawing a diagram. All six diagrams
+are drawn to it — sections 1–4 govern the C4 set, section 5 the
+sequences, which keep the label grammar and the tables and skip the
+palette.
 
 | Diagram | What it shows |
 |---|---|
