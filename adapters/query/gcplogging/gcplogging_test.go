@@ -440,31 +440,125 @@ func TestTruncationIsLoud(t *testing.T) {
 		events = append(events, outcome("invoice.pay", "capture", "failed",
 			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", 100, from.Add(time.Duration(i)*time.Minute)))
 	}
-	srv := newFakeBigQuery(t, entriesFor(events))
+	// pageSize 0 means "one page"; the cases that set it force the cap and
+	// the paging loop to interact, which is where the loop's own bound
+	// (len(all) <= maxRows) lives. Without a case that crosses a page
+	// boundary, an off-by-one there returns a truncated window as a
+	// smaller number with no error at all.
 	cases := []struct {
-		name    string
-		maxRows int
-		wantErr string
+		name     string
+		maxRows  int
+		pageSize int
+		wantErr  string
+		wantSum  int64 // total when no error is expected (5 events x 100)
 	}{
-		{name: "cap below the window's row count", maxRows: 3, wantErr: "truncated"},
-		{name: "cap exactly at the row count still fits", maxRows: 5},
-		{name: "cap above the row count fits", maxRows: 50},
+		{name: "cap below the row count, single page", maxRows: 3, wantErr: "truncated"},
+		{name: "cap below the row count, across pages", maxRows: 3, pageSize: 2, wantErr: "truncated"},
+		{name: "cap one below the row count, across pages", maxRows: 4, pageSize: 2, wantErr: "truncated"},
+		{name: "cap exactly at the row count still fits", maxRows: 5, wantSum: 500},
+		{name: "cap exactly at the row count, across pages", maxRows: 5, pageSize: 2, wantSum: 500},
+		{name: "cap above the row count fits", maxRows: 50, wantSum: 500},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := srv.querier(t, WithMaxRows(c.maxRows)).QueryEvents(context.Background(), query.EventQuery{
+			srv := newFakeBigQuery(t, entriesFor(events))
+			if c.pageSize > 0 {
+				srv.pageSize = c.pageSize
+			}
+			groups, err := srv.querier(t, WithMaxRows(c.maxRows)).QueryEvents(context.Background(), query.EventQuery{
 				Range: window(), Filters: map[string]string{"currency": "USD"},
 			})
-			if c.wantErr == "" {
-				if err != nil {
-					t.Fatalf("err = %v, want nil", err)
+			if c.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+					t.Fatalf("err = %v, want a loud truncation error", err)
+				}
+				if groups != nil {
+					t.Fatalf("groups = %+v, want nil alongside the truncation error", groups)
 				}
 				return
 			}
-			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
-				t.Fatalf("err = %v, want a loud truncation error", err)
+			if err != nil {
+				t.Fatalf("err = %v, want nil", err)
+			}
+			var sum int64
+			for _, g := range groups {
+				sum += g.SumMinor
+			}
+			if sum != c.wantSum {
+				t.Fatalf("sum = %d, want %d — the whole window, not a truncated part of it", sum, c.wantSum)
 			}
 		})
+	}
+}
+
+// TestPagingFailuresAreLoud covers the paging loop's own defences. Each is
+// a way a page could go missing, and a missing page is money missing from
+// the answer with no error to say so.
+func TestPagingFailuresAreLoud(t *testing.T) {
+	var events []biz.Outcome
+	for i := 0; i < 6; i++ {
+		events = append(events, outcome("invoice.pay", "capture", "failed",
+			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", 100, from.Add(time.Duration(i)*time.Minute)))
+	}
+	cases := []struct {
+		name      string
+		configure func(*fakeBigQuery)
+		wantErr   string
+	}{
+		{
+			name:      "the API repeats a page token",
+			configure: func(f *fakeBigQuery) { f.repeatToken = true },
+			wantErr:   "repeated page token",
+		},
+		{
+			name:      "the job goes incomplete while paging",
+			configure: func(f *fakeBigQuery) { f.incompleteOnPage = true },
+			wantErr:   "went incomplete while paging",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := newFakeBigQuery(t, entriesFor(events))
+			srv.pageSize = 2
+			c.configure(srv)
+			groups, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
+				Range: window(), Filters: map[string]string{"currency": "USD"},
+			})
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
+			}
+			if groups != nil {
+				t.Fatalf("groups = %+v, want nil rather than a partial answer", groups)
+			}
+		})
+	}
+}
+
+// TestPollAndPageURLsCarryTheLocation: a linked dataset lives in the log
+// bucket's region, and a getQueryResults without a matching location is a
+// 404 against real GCP — which would surface as a failed read for every
+// window, on every non-default-region bucket.
+func TestPollAndPageURLsCarryTheLocation(t *testing.T) {
+	var events []biz.Outcome
+	for i := 0; i < 4; i++ {
+		events = append(events, outcome("invoice.pay", "capture", "failed",
+			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", 100, from.Add(time.Duration(i)*time.Minute)))
+	}
+	srv := newFakeBigQuery(t, entriesFor(events))
+	srv.pageSize = 2
+	srv.stallOnce = true // one poll, then two pages
+	if _, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
+		Range: window(), Filters: map[string]string{"currency": "USD"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(srv.pollLocations) < 2 {
+		t.Fatalf("saw %d getQueryResults calls, want the poll plus at least one page", len(srv.pollLocations))
+	}
+	for i, loc := range srv.pollLocations {
+		if loc != "us" {
+			t.Fatalf("getQueryResults %d carried location %q, want \"us\"", i, loc)
+		}
 	}
 }
 

@@ -55,13 +55,21 @@ type fakeBigQuery struct {
 	stalled    bool
 	failStatus int
 	failBody   string
+	// repeatToken makes every page hand back the SAME pageToken — the
+	// runaway an API bug would produce, which the adapter must refuse
+	// rather than loop on.
+	repeatToken bool
+	// incompleteOnPage makes the getQueryResults for a later page answer
+	// jobComplete:false; those rows would be silently missing.
+	incompleteOnPage bool
 
-	queries    int
-	lastQuery  string
-	lastParams map[string]string
-	lastAuth   string
-	lastBody   map[string]any
-	served     []fakeRow // the rows the current query resolved to
+	queries       int
+	lastQuery     string
+	lastParams    map[string]string
+	lastAuth      string
+	lastBody      map[string]any
+	pollLocations []string  // the ?location= on each getQueryResults
+	served        []fakeRow // the rows the current query resolved to
 }
 
 func newFakeBigQuery(t *testing.T, rows []fakeRow) *fakeBigQuery {
@@ -144,6 +152,7 @@ func (f *fakeBigQuery) handleInsert(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *fakeBigQuery) handleGetResults(w http.ResponseWriter, r *http.Request) {
+	f.pollLocations = append(f.pollLocations, r.URL.Query().Get("location"))
 	from := 0
 	if tok := r.URL.Query().Get("pageToken"); tok != "" {
 		n, err := strconv.Atoi(tok)
@@ -151,19 +160,41 @@ func (f *fakeBigQuery) handleGetResults(w http.ResponseWriter, r *http.Request) 
 			f.t.Errorf("bad pageToken %q", tok)
 		}
 		from = n
+		if f.incompleteOnPage {
+			f.writeJSON(w, map[string]any{
+				"jobComplete":  false,
+				"jobReference": map[string]any{"jobId": "job-1", "location": "us"},
+			})
+			return
+		}
 	}
 	f.writePage(w, from)
 }
 
 // --- the statement interpreter ----------------------------------------
 
+// payloadPredicate is one pushed-down payload equality: the JSON key the
+// statement extracts, and the value it was compared against.
+type payloadPredicate struct {
+	key   string
+	value string
+}
+
 // stmtPlan is what the interpreter recovers from one statement.
+//
+// filters is a SLICE, not a map keyed by JSON key, and that is load-bearing.
+// Two query labels can resolve to the same JSONPath — that is exactly what a
+// drifted payloadPaths entry looks like — and the statement then carries two
+// contradictory equalities on one key, which real BigQuery answers with zero
+// rows. A map would keep only the last of them and quietly serve the rows the
+// dropped predicate should have excluded: a predicate this harness would be
+// pretending to check.
 type stmtPlan struct {
 	table   string
 	from    time.Time // @window_from, inclusive
 	to      time.Time // @window_to, exclusive
 	marker  string    // required value of the payload's "event" key
-	filters map[string]string
+	filters []payloadPredicate
 	limit   int
 }
 
@@ -187,7 +218,7 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 		f.t.Errorf("fake cannot parse the statement — extend the interpreter or the adapter drifted:\n%s", f.lastQuery)
 		return stmtPlan{}, false
 	}
-	plan := stmtPlan{table: m[1], filters: map[string]string{}}
+	plan := stmtPlan{table: m[1]}
 	limit, err := strconv.Atoi(m[3])
 	if err != nil {
 		f.t.Errorf("bad LIMIT %q", m[3])
@@ -223,7 +254,7 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 			plan.marker = param(markerRE.FindStringSubmatch(clause)[1])
 		case filterRE.MatchString(clause):
 			g := filterRE.FindStringSubmatch(clause)
-			plan.filters[g[1]] = param(g[2])
+			plan.filters = append(plan.filters, payloadPredicate{key: g[1], value: param(g[2])})
 		default:
 			f.t.Errorf("fake cannot evaluate WHERE clause %q — it would be silently ignored", clause)
 			ok = false
@@ -232,6 +263,20 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 	if plan.from.IsZero() || plan.to.IsZero() {
 		f.t.Errorf("statement bound no window: %s", f.lastQuery)
 		ok = false
+	}
+	// Two labels on one JSONPath is a drifted payloadPaths entry, not a
+	// legitimate statement: the adapter has emitted two contradictory
+	// equalities on one key, which real BigQuery answers with zero rows.
+	// Name it here rather than letting the evaluation below merely return
+	// nothing.
+	seen := map[string]string{}
+	for _, p := range plan.filters {
+		if prev, dup := seen[p.key]; dup && prev != p.value {
+			f.t.Errorf("statement filters key %q against both %q and %q — two labels share one JSONPath, "+
+				"which real BigQuery answers with zero rows:\n%s", p.key, prev, p.value, f.lastQuery)
+			ok = false
+		}
+		seen[p.key] = p.value
 	}
 	return plan, ok
 }
@@ -279,8 +324,8 @@ func matchesPlan(row fakeRow, plan stmtPlan) bool {
 	if plan.marker != "" && jsonValue(payload, "event") != plan.marker {
 		return false
 	}
-	for key, want := range plan.filters {
-		if jsonValue(payload, key) != want {
+	for _, p := range plan.filters {
+		if jsonValue(payload, p.key) != p.value {
 			return false
 		}
 	}
@@ -334,7 +379,11 @@ func (f *fakeBigQuery) writePage(w http.ResponseWriter, from int) {
 		"rows": rows,
 	}
 	if end < len(f.served) {
-		resp["pageToken"] = strconv.Itoa(end)
+		if f.repeatToken {
+			resp["pageToken"] = strconv.Itoa(from)
+		} else {
+			resp["pageToken"] = strconv.Itoa(end)
+		}
 	}
 	f.writeJSON(w, resp)
 }

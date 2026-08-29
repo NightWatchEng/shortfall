@@ -155,9 +155,15 @@ type queryResponse struct {
 // into a truncation error rather than a smaller number).
 func (q *Querier) run(ctx context.Context, stmt string, params []queryParam) ([]bqRow, error) {
 	body := queryRequest{
-		Query:           stmt,
-		UseLegacySQL:    false,
-		ParameterMode:   "NAMED",
+		Query:         stmt,
+		UseLegacySQL:  false,
+		ParameterMode: "NAMED",
+		// MaxResults is a PAGE-size hint, not a total: it caps how many rows
+		// one response carries, and the loop below pages until the rows run
+		// out. The total is bounded by the statement's own LIMIT maxRows+1,
+		// which is also the truncation sentinel — so do not read this field
+		// as the money-safety mechanism. It is here only to keep a single
+		// response from being unbounded.
 		QueryParameters: params,
 		TimeoutMs:       serverWait.Milliseconds(),
 		MaxResults:      int64(q.maxRows) + 1,
