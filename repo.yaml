@@ -15,7 +15,7 @@ components:
   propagate: {path: propagate/, lang: go, description: "ValueContext over HTTP Baggage and queue header carriers"}
   engine:    {path: engine/,    lang: go, description: "realized/deferred/unrealized/customers/coverage + report renderers"}
   query:     {path: query/,     lang: go, description: "query AST + Querier: the only questions the engine may ask a backend"}
-  cli:       {path: cmd/,       lang: go, description: "shortfall CLI: validate, impact, reconcile, simulate"}
+  cli:       {path: cmd/,       lang: go, description: "shortfall CLI: validate, impact, reconcile"}
   adapters:  {path: adapters/,  lang: go, description: "export/query/payment/incident adapters, each a nested module"}
   harness:   {path: examples/,  lang: go, description: "synthetic checkout system with ground-truth ledger"}
   testkit:   {path: testkit/,   lang: go, description: "scenario runner + exporter conformance suite"}
