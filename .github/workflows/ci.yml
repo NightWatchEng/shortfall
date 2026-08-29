@@ -25,6 +25,15 @@ permissions:
 jobs:
   core:
     name: core checks
+    # The six ci-go.sh steps below are exactly repo.yaml's verify.core
+    # list, in the same order: every CHECK this job applies, local verify
+    # applies too. Adding or removing one means the same edit in repo.yaml,
+    # in the same PR (workspace-dfd).
+    #
+    # The job is still not identical to verify.core: it also installs the
+    # linter, which has no local counterpart and can fail on its own (a 404,
+    # a checksum mismatch). So a green local verify means the checks agree,
+    # not that this job cannot go red.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -44,15 +53,12 @@ jobs:
         run: ./scripts/ci-go.sh vuln
       - name: install golangci-lint (pinned release binary, checksum-verified)
         # Building from source proved network-fragile (sumdb stream errors)
-        # and slow; a sha256-verified release binary is content-addressed —
-        # a stronger pin than any tag.
-        run: |
-          curl -sSfL -o /tmp/golangci-lint.tar.gz \
-            https://github.com/golangci/golangci-lint/releases/download/v2.13.1/golangci-lint-2.13.1-linux-amd64.tar.gz
-          echo "b17bfbc9d4aaa48be7f4f1ce3240bc3d8200c870c072bacf15c26219e2cfb9cc  /tmp/golangci-lint.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/golangci-lint.tar.gz -C /tmp
-          install -m 0755 /tmp/golangci-lint-2.13.1-linux-amd64/golangci-lint /usr/local/bin/golangci-lint
-          golangci-lint version
+        # and slow on a cold runner, so every CI job that lints installs the
+        # checksum-verified release binary instead. ci-go.sh's `go run`
+        # fallback is for machines that have no pinned binary — after this
+        # step, this runner does. The version and the checksum each live in
+        # exactly one file; the script is the seam between them.
+        run: ./scripts/install-golangci-lint.sh
       - name: golangci-lint (all modules)
         run: ./scripts/ci-go.sh lint
 
@@ -227,6 +233,23 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0   # review diffs base...head; a shallow clone has no merge-base
+      # This job runs `warden verify --scope core` below, and that scope
+      # includes `ci-go.sh lint` — so this runner needs the linter for the
+      # same reason the core job does. Without it, ci-go.sh would fall back
+      # to building golangci-lint from source on a cold runner: the slow,
+      # network-fragile path this file rejected for the core job, silently
+      # acquired by a second required check (workspace-dfd).
+      #
+      # Placed BEFORE the base-ref pin so it runs before the deploy key is
+      # written to disk. That ordering is not what decides WHICH copy runs:
+      # the pin below restores five paths and none is under scripts/, so
+      # this job executes the PR's installer wherever the step sits — one
+      # of the PR-controlled executions that pin does not cover, alongside
+      # the ci-go.sh that `warden verify` invokes further down (tracked in
+      # workspace-8v0). The committed script only fetches a release tarball
+      # and installs it if it matches a hardcoded checksum.
+      - name: install golangci-lint (pinned release binary, checksum-verified)
+        run: ./scripts/install-golangci-lint.sh
       # The gate must never execute PR-controlled gate code: a PR could swap
       # the shim for `exit 0` (vacuous pass) or read the deploy key. Restore
       # the entire executable gate surface from the BASE ref before the key
