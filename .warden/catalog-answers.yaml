@@ -1,13 +1,5 @@
 version: 1
 answers:
-  - id: review-lens-documentation
-    verdict: not-applicable
-    reason: >-
-      Enforced locally under a different id: the docs-accuracy rule
-      (n=83 judged, wilson floor 0.899, promotable) IS this lens, with a
-      deterministic slice delegated to test/docsnippets. Adopting the
-      catalog id would double-fire one class.
-    decided_in: workspace-a74
   - id: authentication-failures
     verdict: not-applicable
     reason: >-
@@ -62,12 +54,6 @@ answers:
       the operator's own flags; the library reads no request-derived
       filenames. Flips if any adapter ever maps external input to paths.
     decided_in: workspace-a74
-  - id: review-lens-comments
-    verdict: not-applicable
-    reason: >-
-      Enforced locally: comment-hygiene (declarative) plus docs-accuracy's
-      comment bullets (doc and inline, Go and shell) carry this lens.
-    decided_in: workspace-a74
   - id: review-lens-complexity
     verdict: not-applicable
     reason: >-
@@ -102,12 +88,6 @@ answers:
     reason: >-
       gofmt is enforced deterministically — scripts/ci-go.sh fmt fails CI
       on any unformatted file, parse errors included.
-    decided_in: workspace-a74
-  - id: review-lens-tests
-    verdict: not-applicable
-    reason: >-
-      Enforced locally under a different id: the tests-required rule
-      (n=40 judged, wilson floor 0.835, promotable).
     decided_in: workspace-a74
   - id: ssrf
     verdict: not-applicable

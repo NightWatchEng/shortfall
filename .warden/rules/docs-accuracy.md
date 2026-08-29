@@ -2,6 +2,7 @@
 id: docs-accuracy
 severity: MEDIUM
 engine: claude
+implements: [review-lens-documentation]
 applies_to: ["**/*.md", "**/*.go", "**/*.sh"]
 excludes: [".warden/memory/**"]
 covers: [docs-drift, enforcement-claim-drift, scope-misstatement, misleading-comment]

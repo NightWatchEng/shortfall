@@ -2,6 +2,7 @@
 id: tests-required
 severity: MEDIUM
 engine: claude
+implements: [review-lens-tests]
 applies_to: ["biz/**", "registry/**", "emit/**", "propagate/**", "engine/**", "query/**", "testkit/**", "examples/**", "cmd/**"]
 ---
 Definition of Done: new logic carries unit tests in the same diff; bugs found
