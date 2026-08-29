@@ -1,0 +1,427 @@
+{
+  "vectors": "biz.vc",
+  "vectors_version": 1,
+  "member_key": "biz.vc",
+  "codec_version": "1",
+  "delimiter": "|",
+  "field_order": [
+    "version",
+    "flow",
+    "entity_id",
+    "customer_id",
+    "segment",
+    "amount_minor",
+    "currency",
+    "exponent",
+    "kind",
+    "flags",
+    "deadline_unix"
+  ],
+  "max_encoded_bytes": 512,
+  "encode": [
+    {
+      "name": "reference",
+      "note": "the worked example in docs/portability.md",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "inv_8Ka92j",
+        "customer_id": "h:3f9ac2",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": true,
+        "deadline_unix": 1787841120
+      },
+      "encoded": "1|invoice.pay|inv_8Ka92j|h:3f9ac2|smb|14900|USD|2|fee|1|1787841120"
+    },
+    {
+      "name": "no_optional_fields",
+      "note": "empty customer, empty segment, no deadline, flags 0",
+      "vc": {
+        "flow": "checkout",
+        "entity_id": "ord_1",
+        "customer_id": "",
+        "segment": "",
+        "amount_minor": 0,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "gmv",
+        "estimated": false,
+        "deadline_unix": 0
+      },
+      "encoded": "1|checkout|ord_1|||0|USD|2|gmv|0|0"
+    },
+    {
+      "name": "escaping_all_reserved",
+      "note": "every byte the escape rule covers: delimiter, escape, baggage-forbidden, space, control",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "a|b%c\"d;e,f\\g",
+        "customer_id": "h:1 2\t3",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": true,
+        "deadline_unix": 1787841120
+      },
+      "encoded": "1|invoice.pay|a%7Cb%25c%22d%3Be%2Cf%5Cg|h:1%202%093|smb|14900|USD|2|fee|1|1787841120"
+    },
+    {
+      "name": "utf8_escaped_bytewise",
+      "note": "escaping is over UTF-8 BYTES, not code points or UTF-16 units",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "inv_café",
+        "customer_id": "h:naïve",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": true,
+        "deadline_unix": 1787841120
+      },
+      "encoded": "1|invoice.pay|inv_caf%C3%A9|h:na%C3%AFve|smb|14900|USD|2|fee|1|1787841120"
+    },
+    {
+      "name": "jpy_exponent_zero",
+      "note": "a zero-exponent currency: 14900 means ¥14900, not ¥149.00",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "inv_8Ka92j",
+        "customer_id": "h:3f9ac2",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "JPY",
+        "exponent": 0,
+        "kind": "gmv",
+        "estimated": false,
+        "deadline_unix": 1787841120
+      },
+      "encoded": "1|invoice.pay|inv_8Ka92j|h:3f9ac2|smb|14900|JPY|0|gmv|0|1787841120"
+    },
+    {
+      "name": "int64_max_amount",
+      "note": "the largest amount the wire admits",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "inv_8Ka92j",
+        "customer_id": "h:3f9ac2",
+        "segment": "smb",
+        "amount_minor": 9223372036854775807,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": false,
+        "deadline_unix": 1787841120
+      },
+      "encoded": "1|invoice.pay|inv_8Ka92j|h:3f9ac2|smb|9223372036854775807|USD|2|fee|0|1787841120"
+    },
+    {
+      "name": "deadline_max",
+      "note": "the last encodable deadline instant",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "inv_8Ka92j",
+        "customer_id": "h:3f9ac2",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": true,
+        "deadline_unix": 32503680000
+      },
+      "encoded": "1|invoice.pay|inv_8Ka92j|h:3f9ac2|smb|14900|USD|2|fee|1|32503680000"
+    }
+  ],
+  "encode_reject": [
+    {
+      "name": "oversize",
+      "note": "escaping inflates: 128 percent signs are 384 bytes per field",
+      "vc": {
+        "flow": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "entity_id": "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",
+        "customer_id": "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": true,
+        "deadline_unix": 1787841120
+      },
+      "error": "oversize",
+      "reference_message": "biz: encoded ValueContext is 869 bytes, cap is 512 (ADR-0003)"
+    },
+    {
+      "name": "deadline_before_epoch",
+      "note": "0 means \"no deadline\", so the encodable domain is (1970, 3000]",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "inv_8Ka92j",
+        "customer_id": "h:3f9ac2",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": true,
+        "deadline_unix": -1
+      },
+      "error": "deadline_domain",
+      "reference_message": "biz: deadline 1969-12-31 23:59:59 +0000 UTC outside the encodable domain (1970, 3000]"
+    },
+    {
+      "name": "deadline_past_year_3000",
+      "note": "an instant a decoder would refuse must not be encodable",
+      "vc": {
+        "flow": "invoice.pay",
+        "entity_id": "inv_8Ka92j",
+        "customer_id": "h:3f9ac2",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": true,
+        "deadline_unix": 32503680001
+      },
+      "error": "deadline_domain",
+      "reference_message": "biz: deadline 3000-01-01 00:00:01 +0000 UTC outside the encodable domain (1970, 3000]"
+    }
+  ],
+  "decode": [
+    {
+      "name": "non_canonical_escape_of_safe_byte",
+      "note": "a decoder accepts %XX for a byte that needs no escape; re-encoding shrinks it back to canonical",
+      "encoded": "1|checkout|%69nv1|%68:c|smb|100|USD|2|fee|0|0",
+      "vc": {
+        "flow": "checkout",
+        "entity_id": "inv1",
+        "customer_id": "h:c",
+        "segment": "smb",
+        "amount_minor": 100,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": false,
+        "deadline_unix": 0
+      },
+      "canonical": "1|checkout|inv1|h:c|smb|100|USD|2|fee|0|0"
+    },
+    {
+      "name": "zero_padded_amount_and_signed_exponent",
+      "note": "integer fields are parsed, not pattern-matched; the canonical form has neither padding nor a sign",
+      "encoded": "1|checkout|ord_1|h:c|smb|0014900|USD|+2|fee|0|0",
+      "vc": {
+        "flow": "checkout",
+        "entity_id": "ord_1",
+        "customer_id": "h:c",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": false,
+        "deadline_unix": 0
+      },
+      "canonical": "1|checkout|ord_1|h:c|smb|14900|USD|2|fee|0|0"
+    },
+    {
+      "name": "negative_amount_passes_the_codec",
+      "note": "the codec reports what the wire carried; a negative amount is rejected by validation, not by decoding",
+      "encoded": "1|checkout|ord_1|h:c|smb|-1|USD|2|fee|0|0",
+      "vc": {
+        "flow": "checkout",
+        "entity_id": "ord_1",
+        "customer_id": "h:c",
+        "segment": "smb",
+        "amount_minor": -1,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": false,
+        "deadline_unix": 0
+      },
+      "canonical": "1|checkout|ord_1|h:c|smb|-1|USD|2|fee|0|0"
+    },
+    {
+      "name": "exponent_outside_semantic_range_passes_the_codec",
+      "note": "exponent 7 decodes; [0,4] is a validation rule, not a wire rule",
+      "encoded": "1|checkout|ord_1|h:c|smb|1|USD|7|fee|0|0",
+      "vc": {
+        "flow": "checkout",
+        "entity_id": "ord_1",
+        "customer_id": "h:c",
+        "segment": "smb",
+        "amount_minor": 1,
+        "currency": "USD",
+        "exponent": 7,
+        "kind": "fee",
+        "estimated": false,
+        "deadline_unix": 0
+      },
+      "canonical": "1|checkout|ord_1|h:c|smb|1|USD|7|fee|0|0"
+    },
+    {
+      "name": "undeclared_kind_passes_the_codec",
+      "note": "an unknown kind decodes; the kind enumeration is enforced by validation",
+      "encoded": "1|checkout|ord_1|h:c|smb|1|USD|2|mrr|0|0",
+      "vc": {
+        "flow": "checkout",
+        "entity_id": "ord_1",
+        "customer_id": "h:c",
+        "segment": "smb",
+        "amount_minor": 1,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "mrr",
+        "estimated": false,
+        "deadline_unix": 0
+      },
+      "canonical": "1|checkout|ord_1|h:c|smb|1|USD|2|mrr|0|0"
+    },
+    {
+      "name": "all_optional_fields_empty",
+      "note": "empty customer, segment, currency and kind are five empty fields, not absent ones",
+      "encoded": "1|f|e|||0||0||0|0",
+      "vc": {
+        "flow": "f",
+        "entity_id": "e",
+        "customer_id": "",
+        "segment": "",
+        "amount_minor": 0,
+        "currency": "",
+        "exponent": 0,
+        "kind": "",
+        "estimated": false,
+        "deadline_unix": 0
+      },
+      "canonical": "1|f|e|||0||0||0|0"
+    }
+  ],
+  "decode_reject": [
+    {
+      "name": "empty_input",
+      "note": "an empty value is one field, not a default context",
+      "error": "field_count",
+      "reference_message": "biz: biz.vc has 1 fields, want 11"
+    },
+    {
+      "name": "too_few_fields",
+      "note": "ten fields",
+      "encoded": "1|f|e|c|s|0|USD|2|fee|0",
+      "error": "field_count",
+      "reference_message": "biz: biz.vc has 10 fields, want 11"
+    },
+    {
+      "name": "too_many_fields",
+      "note": "a version-2 producer's extra field is not silently ignored",
+      "encoded": "1|invoice.pay|inv_8Ka92j|h:3f9ac2|smb|14900|USD|2|fee|1|1787841120|extra",
+      "error": "field_count",
+      "reference_message": "biz: biz.vc has 12 fields, want 11"
+    },
+    {
+      "name": "unknown_version",
+      "note": "decoders reject versions they do not know rather than guessing",
+      "encoded": "2|invoice.pay|inv_8Ka92j|h:3f9ac2|smb|14900|USD|2|fee|1|1787841120",
+      "error": "unknown_version",
+      "reference_message": "biz: unknown biz.vc version \"2\""
+    },
+    {
+      "name": "amount_not_a_number",
+      "encoded": "1|f|e|c|s|14x00|USD|2|fee|0|0",
+      "error": "amount_syntax",
+      "reference_message": "biz: biz.vc amount \"14x00\""
+    },
+    {
+      "name": "amount_past_int64",
+      "note": "the int64 range is a WIRE rule an implementation enforces, not a language property it inherits",
+      "encoded": "1|f|e|c|s|9223372036854775808|USD|2|fee|0|0",
+      "error": "amount_range",
+      "reference_message": "biz: biz.vc amount \"9223372036854775808\""
+    },
+    {
+      "name": "amount_past_int64_negative",
+      "encoded": "1|f|e|c|s|-9223372036854775809|USD|2|fee|0|0",
+      "error": "amount_range",
+      "reference_message": "biz: biz.vc amount \"-9223372036854775809\""
+    },
+    {
+      "name": "exponent_not_a_number",
+      "encoded": "1|f|e|c|s|1|USD|x|fee|0|0",
+      "error": "exponent_syntax",
+      "reference_message": "biz: biz.vc exponent \"x\""
+    },
+    {
+      "name": "exponent_past_int8",
+      "note": "the wire field is a signed 8-bit integer",
+      "encoded": "1|f|e|c|s|1|USD|300|fee|0|0",
+      "error": "exponent_range",
+      "reference_message": "biz: biz.vc exponent \"300\""
+    },
+    {
+      "name": "bad_hex_digits",
+      "encoded": "1|f|%zz|c|s|1|USD|2|fee|0|0",
+      "error": "escape_syntax",
+      "reference_message": "biz: biz.vc entity: bad % escape \"%zz\""
+    },
+    {
+      "name": "truncated_escape",
+      "encoded": "1|f|ab%7|c|s|1|USD|2|fee|0|0",
+      "error": "escape_syntax",
+      "reference_message": "biz: biz.vc entity: truncated % escape"
+    },
+    {
+      "name": "lowercase_hex_escape",
+      "note": "escapes are UPPERCASE hex only — the single likeliest thing a port gets wrong",
+      "encoded": "1|f|%7c|c|s|1|USD|2|fee|0|0",
+      "error": "escape_syntax",
+      "reference_message": "biz: biz.vc entity: bad % escape \"%7c\""
+    },
+    {
+      "name": "raw_space",
+      "encoded": "1|f|a b|c|s|1|USD|2|fee|0|0",
+      "error": "raw_unescaped_byte",
+      "reference_message": "biz: biz.vc entity: raw byte ' ' must be %XX-escaped in canonical biz.vc"
+    },
+    {
+      "name": "raw_quote",
+      "encoded": "1|f|a\"b|c|s|1|USD|2|fee|0|0",
+      "error": "raw_unescaped_byte",
+      "reference_message": "biz: biz.vc entity: raw byte '\"' must be %XX-escaped in canonical biz.vc"
+    },
+    {
+      "name": "flags_undefined_bit",
+      "note": "version 1 defines flag values 0 and 1 only",
+      "encoded": "1|f|e|c|s|1|USD|2|fee|2|0",
+      "error": "flags_undefined",
+      "reference_message": "biz: biz.vc flags \"2\" not defined in version 1"
+    },
+    {
+      "name": "deadline_negative",
+      "encoded": "1|f|e|c|s|1|USD|2|fee|0|-5",
+      "error": "deadline_domain",
+      "reference_message": "biz: biz.vc deadline \"-5\" outside [0, 32503680000]"
+    },
+    {
+      "name": "deadline_past_year_3000",
+      "note": "a peer cannot smuggle an overflowing instant into SLA math",
+      "encoded": "1|f|e|c|s|1|USD|2|fee|0|9223372036854775807",
+      "error": "deadline_domain",
+      "reference_message": "biz: biz.vc deadline \"9223372036854775807\" outside [0, 32503680000]"
+    },
+    {
+      "name": "oversize",
+      "note": "the cap is checked before parsing",
+      "encoded": "1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": "oversize",
+      "reference_message": "biz: biz.vc value 602 bytes exceeds the 512 cap"
+    }
+  ]
+}
