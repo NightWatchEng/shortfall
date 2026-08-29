@@ -296,7 +296,7 @@ func buildVCVectors() testkit.VCVectors {
 //
 // It is split at the flows boundary only so the no_flows case can be
 // that same one edit rather than a hand-written second document that
-// would differ in four places at once (review finding, workspace-ldf).
+// would differ in four places at once.
 const baseHeaderYAML = `version: 1
 segments: [smb, enterprise]
 propagation:
