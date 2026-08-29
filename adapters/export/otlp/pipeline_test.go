@@ -228,9 +228,10 @@ func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
 	}
 	eventAttrs := attrSet(recs[0].Resource().Attributes())
 
-	// Compare the legs rather than asserting a literal on each: two
-	// independently-worded expectations both stay green while the legs
-	// disagree, which is the failure this test is named for.
+	// Both legs are built from one resource value, so comparing them proves
+	// it reaches each leg but says nothing about what it holds. The literal
+	// below is what pins the content; the comparison is what pins the
+	// plumbing. Neither substitutes for the other.
 	rm, err := buildResourceMetrics([]emit.MetricPoint{{
 		Name:   "biz_txn_total",
 		Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
@@ -241,6 +242,9 @@ func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
 	}
 	metricAttrs := attrSet(rm.Resource.Attributes())
 
+	if got := eventAttrs["service.name"]; got != "shortfall" {
+		t.Errorf("service.name = %q, want shortfall", got)
+	}
 	for _, key := range []string{"service.name", "service.instance.id"} {
 		if eventAttrs[key] == "" {
 			t.Errorf("event leg carries no %s", key)
@@ -263,11 +267,11 @@ func attrSet(kvs []attribute.KeyValue) map[string]string {
 }
 
 // boundedExporter records how many records arrive between one ForceFlush and
-// the next, which is the property the chunking guarantee is actually about:
-// no more than the queue's capacity may be in flight before it is drained.
-// Asserting that directly is deterministic, where asserting lost records is
-// not — loss only occurs when the producer outruns the consumer, and the race
-// detector slows the producer enough to hide it.
+// the next: no more than the queue's capacity may be in flight before it is
+// drained. That is a fact about what the code does rather than about which
+// goroutine wins, so it holds identically under the race detector — where an
+// assertion about lost records does not, since loss needs the producer to
+// outrun the consumer.
 type boundedExporter struct {
 	mu        sync.Mutex
 	sinceLast int
@@ -341,10 +345,9 @@ func TestEmitNeverExceedsQueueBetweenFlushes(t *testing.T) {
 }
 
 // TestConcurrentEmitNeverExceedsQueue is the per-sink half of the same
-// guarantee, and deterministic for the same reason. The queue belongs to the
-// sink, so overlapping ExportEvents calls must not put more than its capacity
-// in flight between drains — emit.Std.Flush releases its own lock before
-// calling the exporter, and its ticker can race a caller-driven Flush.
+// guarantee: the queue is shared across calls, so overlapping ExportEvents
+// calls must not put more than its capacity in flight between drains. Why
+// overlap is reachable at all is on providerSink.mu.
 func TestConcurrentEmitNeverExceedsQueue(t *testing.T) {
 	const callers, per = 4, eventQueueSize
 	exp := &boundedExporter{}
