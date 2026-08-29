@@ -1,0 +1,13 @@
+{
+  "rule_id": "security-misconfiguration",
+  "action": "adopt",
+  "judged": 0,
+  "upheld": 0,
+  "refuted": 0,
+  "dismissed": 0,
+  "window": "2026-08-27..2026-08-29",
+  "source": "guardrail catalog prior-art row \u2014 no local judged evidence either way; adopted per founder-accepted retro proposal workspace-a74",
+  "backtest": "Catalog starter patterns are Python idioms that cannot fire on Go; the adopted checks are Go-adapted equivalents. Measured against the full current tree at adoption: 0 matches (a true measured zero, not an unmeasured blank). Historical replay not run: scope:added declarative checks over history would report could-fire sites, not firings.",
+  "rules_version": "665bf6d03117",
+  "bead": "workspace-a74"
+}
