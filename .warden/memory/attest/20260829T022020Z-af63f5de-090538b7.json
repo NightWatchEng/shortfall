@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "af63f5de57ee82da31ebec8b962d6091e7cb3398",
+  "base_sha": "17ac305fa0c2ef92ee6730e4c0711614ff5469b3",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T02:20:20+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "session agent direct inspection (five-line CI step mirroring the adjacent promgolden step; combined pass per the trivial-diff allowance)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "verified the step's working-directory module exists with the SHORTFALL_GOLDEN gate contract (skip-without/hard-fail-with), timeout covers both container pulls, and no rule/tier changed; the harness itself ran green locally twice and its own PR's CI"
+    }
+  ],
+  "records": []
+}
