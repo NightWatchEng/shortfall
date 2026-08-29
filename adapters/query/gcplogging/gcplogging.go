@@ -384,11 +384,13 @@ func outcomeMarker(payload []byte) (marked, isObject bool) {
 	return event == eventMarker, true
 }
 
-// validProjectID accepts the character set GCP project ids use — lowercase
-// letters, digits and hyphens, plus the dot and colon a legacy
-// domain-scoped id carries. The point is not to reproduce Google's naming
-// rules: it is that none of these characters can close the backtick quoting
-// the table reference sits in, or open a string or comment.
+// validProjectID accepts letters in either case, digits, the hyphen and
+// underscore, and the dot and colon a legacy domain-scoped id carries. That
+// is wider than Google's own project-id rules, and deliberately so: the
+// point is not to reproduce those rules but that none of these characters
+// can close the backtick quoting the table reference sits in, or open a
+// string or comment. The set below is the whole of what is admitted, so
+// the safety argument quantifies over all of it.
 func validProjectID(s string) bool {
 	if s == "" {
 		return false

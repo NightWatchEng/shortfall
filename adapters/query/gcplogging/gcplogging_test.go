@@ -284,6 +284,12 @@ func TestIdentifierValidation(t *testing.T) {
 		{name: "negative poll interval", project: "p", dataset: "d", opts: []Option{WithPollInterval(-time.Second)}, wantErr: "poll interval must be positive"},
 		{name: "legitimate names accepted", project: "my-project", dataset: "logs_analytics", opts: []Option{WithView("_AllLogs")}},
 		{name: "domain-scoped project id accepted", project: "acme.com:legacy-project", dataset: "logs_analytics"},
+		// validProjectID's doc comment enumerates the admitted set and rests
+		// the no-injection argument on that enumeration being complete. These
+		// two classes are admitted and were once absent from the sentence, so
+		// they are pinned here: if the set narrows, the comment is wrong again.
+		{name: "uppercase project accepted", project: "MyProject", dataset: "logs_analytics"},
+		{name: "underscore in project accepted", project: "my_project", dataset: "logs_analytics"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
