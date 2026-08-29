@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "2c8a8290ceae63d6f7c3d14ab1c325483ef4d890",
+  "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T22:32:35+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; rule bodies verbatim, review charter; ran every claimed mutation itself in plain and -race modes on a scratch copy, plus three mutants of its own)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T22:32:35+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "2c8a8290ceae63d6f7c3d14ab1c325483ef4d890",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 244,
+      "severity": "MEDIUM",
+      "finding": "The rewritten TestBothSignalsCarryTheSameWriterIdentity compared two values both derived from one resource, so it verified the resource reaches each leg but could no longer discriminate its content. The deleted line was the only assertion in the repo pinning service.name.",
+      "evidence": "Reviewer's mutant H: semconv.ServiceName(\"shortfall\") -> \"oops\" left the whole package green under the rewrite, and failed under the pre-change test. Reproduced here before and after the fix.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-yqu",
+      "reason": "Both assertions kept, because they cover different things: the literal pins the content, the cross-leg comparison pins the plumbing. Mutant H now fails with 'service.name = \"oops\", want shortfall'. The comment states why they are not redundant, so the next reader does not collapse them again.",
+      "id": "c0d2603416590197"
+    },
+    {
+      "ts": "2026-08-29T22:32:35+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "2c8a8290ceae63d6f7c3d14ab1c325483ef4d890",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "comment-hygiene",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 231,
+      "severity": "LOW",
+      "finding": "Two added comments justified the code by contrast with the commit before it, which ADR-0014 lists under change history \u2014 a fresh reader has no prior version to compare against, so the sentences only parse as an argument aimed at a reviewer of the diff.",
+      "evidence": "'Compare the legs rather than asserting a literal on each\u2026' and 'Asserting that directly is deterministic, where asserting lost records is not\u2026'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-yqu",
+      "reason": "Rewritten to state the constraint rather than the contrast. The load-bearing half of each survives.",
+      "id": "b0a94bb159190fc7"
+    },
+    {
+      "ts": "2026-08-29T22:32:35+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "2c8a8290ceae63d6f7c3d14ab1c325483ef4d890",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "comment-hygiene",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 344,
+      "severity": "LOW",
+      "finding": "TestConcurrentEmitNeverExceedsQueue's doc comment restated providerSink.mu's rationale almost verbatim instead of citing it; ADR-0014 calls duplicated prose a defect because the copies drift.",
+      "evidence": "The test comment and otlp.go's mu comment both explained that emit.Std.Flush releases its lock before calling the exporter and its ticker can race a caller-driven Flush.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-yqu",
+      "reason": "The test comment now cites providerSink.mu as the rule's home rather than restating it.",
+      "id": "9080ad457aa8975c"
+    },
+    {
+      "ts": "2026-08-29T22:32:35+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "2c8a8290ceae63d6f7c3d14ab1c325483ef4d890",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "unmapped:timing-dependent-assertion",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 268,
+      "severity": "LOW",
+      "finding": "Reviewer's own mutant D \u2014 queue size and chunk size disagreeing \u2014 is caught by delivered() rather than peak(), and the delivered() half still flips run-to-run under -race at the subtest level. So the suite is not wholly speed-independent, as the first commit message claimed.",
+      "evidence": "WithMaxQueueSize(512) with the chunk size left at eventQueueSize: plain FAIL ('delivered 2027 of 2048'); under -race the parent failed 3/3 but two subtests passed in 2 of 3 runs. peak() cannot see it because it compares against the same constant that drives the chunking.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-yqu",
+      "reason": "RULED ON rather than parked. peak() \u2014 the assertion this item exists to make deterministic \u2014 is speed-independent and kills all three original mutants in both modes. The residual is a different defect class (two constants disagreeing) that the pre-change suite did not catch in any configuration, so nothing regressed. The overstatement in the first commit message is corrected on the branch rather than left standing.",
+      "id": "6bc5890748cd6901"
+    }
+  ]
+}
