@@ -1,0 +1,210 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+  "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T21:10:27+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 round 1 over main..HEAD, every arrow, step-table row and key fact checked against Go source"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, findings only) \u2014 sole arbiter; rounds 2 and 3 re-reviews scoped to the fixes"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-impact-query.md",
+      "line": 95,
+      "severity": "MEDIUM",
+      "finding": "Step-table row 3 claimed cmd/shortfall's combined Querier reports Capabilities() as the AND of its two backends. It is a field-wise merge \u2014 Metrics and its history depth from the metric backend, Events and its depth from the event backend. A real AND over promql {Metrics:true,Events:false} and sql {Metrics:false,Events:true} yields {false,false}, under which every leg is ungrounded \u2014 so the claim falsified the very branch its next sentence explained.",
+      "evidence": "Claim: 'Capabilities() is the **AND** of the two'. Code: cmd/shortfall/impact.go combined.Capabilities() returns query.Caps{Metrics: m.Metrics, Events: e.Events, MetricHistoryWeeks: m.MetricHistoryWeeks, EventHistoryWeeks: e.EventHistoryWeeks}; adapters/query/promql/promql.go Caps{Metrics:true,Events:false}; adapters/query/sql/sql.go Caps{Metrics:false,Events:true}. An AND gives {false,false}, and engine/realized.go falls through both cases to 'engine: realized leg needs an event or metric source; this backend serves neither'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Row 3 rewritten to state the field-wise merge, the {false,false} consequence, and that a single flag is what makes the realized leg's alt resolve either way. Round 2 verdicted addressed against cmd/shortfall/impact.go.",
+      "id": "b5df2a84f0614b58"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-impact-query.md",
+      "line": 115,
+      "severity": "MEDIUM",
+      "finding": "Step-table row 23 claimed all three --format renderers show n/a for an unavailable leg and that every leg renders with its evidence tag. No --format path emits n/a \u2014 that form is report.Summary's, which the CLI never calls \u2014 and CustomersLeg has no Evidence field.",
+      "evidence": "Claim: 'an unavailable leg renders as n/a off the marker'. Code: engine/report/render.go RenderText prints money()'s 'none' (render.go money(): 'if len(byCur) == 0 { return \"none\" }') plus caveat lines; the only n/a writes are engine/report/summary.go inside Summary(), and cmd/shortfall/impact.go's --format switch calls only RenderText / RenderMarkdown / RenderJSON. Claim: 'Each leg renders with its evidence tag'. Code: engine/engine.go CustomersLeg{Distinct, BySegment, TopN, NotAvailableReason} has no Evidence field.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Row 23 rewritten. Round 2 found the first rewrite still over-claimed (see the next finding); the second rewrite was verified clause by clause in round 3 against render.go, summary.go, csv.go, engine.go and impact.go.",
+      "id": "1ab31bf88a0159b7"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-impact-query.md",
+      "line": 113,
+      "severity": "MEDIUM",
+      "finding": "Round 2, introduced by round 1's own fix to the same row: 'Every leg that has an Evidence field renders with its tag' is false for coverage in both text renderers, in exactly the case this diagram guarantees always occurs. CoverageLeg has an Evidence field and Compute always sets it to EvidenceTrust, but RenderText and RenderMarkdown print the tag only in the grounded branch \u2014 and step 20 of the same table says coverage is never grounded in an impact report. Also 'prints none' is a text-render artifact; RenderJSON marshals the struct verbatim.",
+      "evidence": "Claim: 'Every leg that has an Evidence field renders with its tag'. Code: engine/engine.go Compute assigns report.Coverage = CoverageLeg{Evidence: EvidenceTrust, Unavailable: \"coverage needs a provider ledger \u2014 run shortfall reconcile for the trust number\"} unconditionally; engine/report/render.go RenderText prints 'COVERAGE   unavailable: %s' with no tag in that branch, and RenderMarkdown prints '_Unavailable: %s_'. Claim: 'An ungrounded money leg prints none'. Code: engine/report/render.go RenderJSON is json.MarshalIndent(r, \"\", \"  \") with no json tags and no omitempty anywhere, so it emits the struct verbatim.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Row 23 now states each renderer's behaviour per leg: the three money legs always tag, CustomersLeg has no Evidence field, coverage tags only when grounded, RenderJSON marshals verbatim with empty maps included. Round 3 verified all six clauses true and returned no new findings.",
+      "id": "7ec0fdb4d4895a63"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-impact-query.md",
+      "line": 28,
+      "severity": "LOW",
+      "finding": "A box labelled 'adapters/query/* \u2014 nested modules' wrapped a participant in neither place: query.Querier is a root-module interface and combined is declared in cmd/shortfall/impact.go, a module the same diagram already boxes separately. STYLE.md 5.3, added by this same branch, is what makes it a factual defect rather than a layout choice.",
+      "evidence": "Claim: box 'adapters/query/* \u2014 nested modules' wrapping 'participant Q as query.Querier<br/>the CLI's combined adapter'. Code: query.Querier is declared in query/query.go in the root module github.com/NightWatchEng/shortfall; combined is declared in cmd/shortfall/impact.go, whose module cmd/shortfall has its own go.mod and is already a separate box in the same fence. Neither is under adapters/query/. Rule: STYLE.md section 5.3, added by this diff \u2014 'a box is a claim about everything inside it'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Box removed and the participant relabelled 'combined query.Querier / cmd/shortfall \u2014 promql for metrics, sql for events'. Round 2 verified both lines true and confirmed the step-table numbering was unaffected.",
+      "id": "3ceb9b176f88522f"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-impact-query.md",
+      "line": 3,
+      "severity": "LOW",
+      "finding": "The rewritten opening said 'only the four verbs' and then enumerated eight. In this repo 'the four verbs' is a term of art meaning the four METRIC verbs \u2014 c4-l1 and c4-l2 both write sum, count, group-by, range PLUS event order \u2014 so the sentence contradicted its own count and two diagrams stating the same standard.",
+      "evidence": "Claim: 'the engine asks any backend only the four verbs \u2014 sum, count, group-by and time range over metrics, filter/group-by/order/distinct-count over events'. Contradicting artifacts: docs/architecture/c4-l1-context.md 'only four verbs: sum \u00b7 count \u00b7 group-by \u00b7 range, plus event order' and c4-l2-containers.md 'the 4-verb AST ... sum \u00b7 count \u00b7 group-by \u00b7 range + event order'. Both put the event side outside the count; the new sentence names four and enumerates eight.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Restored to the c4-l1 wording: four named, four enumerated, event order carried outside the count. Round 2 confirmed all three files now agree.",
+      "id": "6380a6d4e183eb99"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-stripe-webhook.md",
+      "line": 128,
+      "severity": "LOW",
+      "finding": "The wrapped Stripe backend was called 'inbound' and the reconciler 'the only outbound one'. The stripe.Backend decorator fires on a call your own code makes outbound to Stripe \u2014 the diagram draws that arrow itself \u2014 so both statements were contradicted by the same picture. The intended distinction was polling versus reacting.",
+      "evidence": "Claim: 'Webhooks and the wrapped backend are inbound and event-driven' and 'The third capture point and the only outbound one'. Code: adapters/payment/stripe/client.go type Backend embeds stripe.Backend and overrides Call, which wraps b.Backend.Call \u2014 the outbound API call your own code makes. Contradicted by the diagram's own arrows in the same file: 'WB->>ST: POST /v1/payment_intents' and 'ST-->>WB: response, or 4xx, 5xx, 429, timeout'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Both statements rewritten to name direction and polling correctly. Round 2 verified against client.go, webhook.go and reconcile.go and the diagram's own arrows.",
+      "id": "6ef4712ae36f5f99"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-stripe-webhook.md",
+      "line": 95,
+      "severity": "MEDIUM",
+      "finding": "Candidate: the new Stripe sequence's 'the adapter emits nothing' contradicts c4-l2-containers.md's PAY -> EMIT arrow and edge-table row, leaving two diagrams in one governed set stating the seam two disagreeing ways.",
+      "evidence": "New claim (seq-stripe-webhook.md): 'The adapter emits nothing. It imports biz and stripe-go and nothing else in this repo ... Drawing an arrow from the adapter to an exporter would assert an import that does not exist.' Unchanged artifact: docs/architecture/c4-l2-containers.md 'PAY -->|\"Outcomes\"| EMIT' and its edge-table row. Refuting evidence: c4-l2 draws no PAY->EXP edge, so the quoted prohibition (an arrow to an EXPORTER) is not what c4-l2 draws; its row describes container-zoom dataflow via your code, and that table marks import edges explicitly elsewhere ('Compile-time dependency, not a call').",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "REFUTED by the cross-examiner. The changed file's claim is true against source (the adapter imports only biz; its go.mod requires only the core module and stripe-go). The prohibition quoted is on an arrow to an EXPORTER and c4-l2 draws no PAY->EXP edge; its table row describes container-zoom dataflow via your code rather than an import, and that same table marks import edges explicitly. Nothing in this diff is inaccurate. If that arrow is ever judged too coarse it is a defect in c4-l2, which belongs to a concurrent workstream \u2014 filed as workspace-35o rather than edited here.",
+      "id": "df3f8833505d867c"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/seq-impact-query.md",
+      "line": 122,
+      "severity": "LOW",
+      "finding": "Candidate: the new key fact 'There is no fan-out here' contradicts c4-l3-components.md's 'One Compute() fans out to realized, deferred, unrealized and customers'.",
+      "evidence": "New claim: 'There is no fan-out here and no all-or-nothing.' Unchanged artifact: docs/architecture/c4-l3-components.md '| Request \u2192 the four legs | One Compute() fans out to realized, deferred, unrealized and customers; each answers independently ... A leg whose query fails is marked unavailable on itself rather than failing the report |'. Refuting evidence: the c4-l3 row's second half agrees in substance with the new bullet, and the new bullet's clause is scoped by its own first sentence ('The legs run one at a time ... Compute is a single goroutine'), which engine/engine.go confirms with four sequential blocks and no goroutine.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "REFUTED by the cross-examiner. Two senses of one word: c4-l3 means structural dispatch of one call into four legs and its second half agrees in substance with the new bullet; the new bullet's clause is scoped by its own first sentence to concurrency, which engine.go confirms. No substantive disagreement in either file.",
+      "id": "0a937a181667e1d0"
+    },
+    {
+      "ts": "2026-08-29T21:10:27+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "fc06b3b8655b7e041560d8e54cab14bfa6e9cd2a",
+      "base_sha": "2baa44c30e0211075c68062a4d454a5a22e6b7f1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/STYLE.md",
+      "line": 240,
+      "severity": "LOW",
+      "finding": "Candidate: section 5.2 says a sequence participant gets 'No third line' and states its responsibilities are the messages on its lifeline, but its own example and all 18 participants in the governed diagrams append a responsibilities fragment to line 2 after an em dash.",
+      "evidence": "Rule text: STYLE.md 5.2 '- Line 2 \u2014 the technology / module line. ... - No third line. A C4 node states its responsibilities because nothing else on the page does; a sequence participant's responsibilities are the messages on its own lifeline.' Its own example: 'participant EM as emit.Std<br/>core module \u2014 Record buffers, Flush exports'. Refuting evidence: that example has exactly two lines, as do all 18 participants across the three governed diagrams, and STYLE.md section 6's checklist encodes the checkable form ('line 1 / line 2 in a sequence'), so no participant would be flagged.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "REFUTED by the cross-examiner. The normative rule is 'No third line' and every participant has exactly two. The sentence relied on is the stated REASON responsibilities get no line of their own, not a ban on a short gloss on line 2, and the section 6 checklist encodes the checkable form. At most rhetorical looseness, not a rule contradicted by its example.",
+      "id": "7afbb190b4089957"
+    }
+  ]
+}
