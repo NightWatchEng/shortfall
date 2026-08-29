@@ -1,0 +1,16 @@
+{
+  "bead": "workspace-a74",
+  "head_sha": "b5fb6f9939223be939480ea04f094c7a3a18e5ae",
+  "base_sha": "b5fb6f9939223be939480ea04f094c7a3a18e5ae",
+  "rules_version": "456493333d3e",
+  "decided_at": "2026-08-29T14:48:19+00:00",
+  "decided": "The guardrail gap closes: all 26 unanswered catalog rows get a recorded decision. Three entries with a genuine local surface are ADOPTED with Go-adapted starters (os-command-injection, sql-injection, security-misconfiguration \u2014 the catalog's Python-idiom patterns would never fire on Go, so adoption adapts them rather than shipping theater; each measured 0 matches on today's tree). Twenty-three rows are ANSWERED not-applicable in .warden/catalog-answers.yaml, each with an argument a later reader can disagree with and a stated flip condition where one exists.",
+  "why": "Founder-accepted retro proposal: a money+PII library should not go public with 26 undecided security rows. The adopt/answer split follows the surface: shell-out, SQL construction, and TLS dialing exist in this tree (harnesses, the sql adapter, HTTP adapters) so drift guards earn their keep at zero measured noise; authentication, sessions, browsers, crypto, and user-supplied paths do not exist here, and seven review-lens rows are already enforced under local rule ids (docs-accuracy, tests-required, comment-hygiene, gofmt-in-CI) \u2014 adopting catalog ids for them would double-fire classes.",
+  "cost_if_wrong": "A wrong not-applicable is self-correcting for the three starter-bearing classes (a matching starter CONTRADICTS the answer and re-counts the row as unanswered) and one retro proposal away for the argued ones. A wrong adoption costs a one-line dismissal per false fire \u2014 measured zero today.",
+  "alternatives": [
+    "Adopt the catalog starters verbatim \u2014 rejected: Python-idiom regexes (shell=True, execute(f, verify=False) cannot match Go; a rule that can never fire is the checklist-that-technically-passes failure the catalog itself names",
+    "Answer everything, adopt nothing \u2014 rejected: shell-out, SQL text, and TLS config genuinely exist in this tree and a zero-noise declarative guard is cheaper than the first incident",
+    "Defer the security lenses behind a bead \u2014 rejected: deferral without a date on a pre-flip repo is an unanswered row with extra steps"
+  ],
+  "scope": ".warden/catalog-answers.yaml (new, 23 answers) + three new .warden/rules/*.md with Go-adapted declarative checks (rules_version changes; per-rule adoption artifacts committed at the new version). Explicitly a policy item."
+}

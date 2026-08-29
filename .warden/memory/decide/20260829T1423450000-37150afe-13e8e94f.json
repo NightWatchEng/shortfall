@@ -1,0 +1,16 @@
+{
+  "bead": "workspace-ohq",
+  "head_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "base_sha": "37150afee527c7b8778b2a3b2ddb4533b2ad4016",
+  "rules_version": "b51f166ce220",
+  "decided_at": "2026-08-29T14:23:45+00:00",
+  "decided": "The mechanical slice of docs-accuracy becomes a deterministic checker implemented as a nested test module, test/docsnippets: it extracts every fenced go block from README.md and the guide docs (quickstart, adapters, integration example) and compiles them per-doc in a synthesized temp module (per-doc stub sets for doc-implied identifiers), and extracts every fenced yaml block containing a flows: key and runs registry.Load on it. It joins CI through scripts/ci-go.sh's dynamic module discovery \u2014 no .github or scripts edit at all.",
+  "why": "The uncompilable-snippet class cost paid review judgment three times and the registry-fails-validate class once (with recurrence) in a two-day corpus; docs-accuracy's stats (n=83, floor 0.899) clear the promotion bar and the compile/validate slice is exactly the part a machine can hold. Landing as an auto-discovered test module keeps the gate surface untouched: ci-go.sh discovers modules via git ls-files, so the checker binds into the existing core job with zero CI wiring.",
+  "cost_if_wrong": "A stub set to maintain per checked doc; a doc edit that adds a fence with new doc-implied identifiers fails CI until its stub is added \u2014 that friction is the check working. Worst case the founder deletes one test module.",
+  "alternatives": [
+    "Shell script under scripts/ plus a CI step \u2014 rejected: scripts/** and .github/** are HIGH gate surface; the test-module form needs neither",
+    "Parse-only check (no type-check) \u2014 rejected: catches only 1 of the 3 recurred classes (structural impossibility) and misses declared-not-used and undefined identifiers",
+    "warden declarative rule \u2014 rejected: compiling Go is not a regex; the rule engine has no compile check"
+  ],
+  "scope": "New module test/docsnippets (test code, LOW-tier path) + go.work entry + a note in .warden/rules/docs-accuracy.md that the mechanical slice is delegated (rules_version changes; backtest artifact committed at the new version). Explicitly a policy item for the rule-file touch."
+}
