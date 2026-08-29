@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "4796d4a9150d7eadddfa3543c43da5e4aba71f4e",
+  "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T04:59:27+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter \u2014 no candidate findings to arbitrate this round"
+    }
+  ],
+  "records": []
+}
