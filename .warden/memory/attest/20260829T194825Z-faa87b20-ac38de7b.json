@@ -1,0 +1,214 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+  "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T19:48:25+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-opus-5), independent context; rule bodies + charter quoted verbatim, reviewer-side memory recall (empty)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-opus-5), separate context, findings-only; examiner-side memory recall (empty); sole arbiter per graph.yaml verification.independent_judges"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "general-purpose subagent (claude-opus-5), fresh context; per-finding addressed/not-addressed verdicts over the repair commit"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l2-containers.md",
+      "line": 81,
+      "severity": "MEDIUM",
+      "finding": "New edge-table row asserted a CLI to incident-adapter hand-off that does not exist. cmd/shortfall/go.mod requires no adapters/incident/* module and main.go dispatches only version/validate/impact/reconcile; the CLI renders to stdout via engine/report. Incident adapters take an engine.Report value directly (slack.Client.Post/.Refresh), wired by the reader's own program. The CLI --> INC arrow encoded the same false dependency.",
+      "evidence": "Claim: '| engine -> cmd/shortfall -> incident adapter | The CLI composes the report and hands it to an incident adapter to post and refresh |' \u2014 contradicted by cmd/shortfall/go.mod and cmd/shortfall/main.go:31-51.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Arrow replaced with ENGINE -->|engine.Report| INC; the row split into two true rows; a key fact added stating the CLI is not a router. Re-review verdict: addressed.",
+      "id": "d94a42e7fadb64e6"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l3-components.md",
+      "line": 57,
+      "severity": "MEDIUM",
+      "finding": "New edge-table row claimed one Compute() call fans out to coverage. engine.Compute never calls engine.Coverage; it assigns a hard-coded unavailable CoverageLeg because engine.Coverage needs a provider ledger an impact Request does not carry.",
+      "evidence": "engine/engine.go:195-201 'report.Coverage = CoverageLeg{Evidence: EvidenceTrust, Unavailable: \"coverage needs a provider ledger \u2014 run shortfall reconcile for the trust number\"}'; engine/coverage.go:38 takes ledger []biz.LedgerRow; only non-test caller is cmd/shortfall/reconcile.go:79.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Coverage removed from the Compute() fan-out and hung off the report on a dotted reconcile-time edge; subgraph retitled to name both entry points; node label, two table rows and a key fact rewritten. Re-review verdict: addressed.",
+      "id": "dd94be5480b3da70"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l2-containers.md",
+      "line": 75,
+      "severity": "MEDIUM",
+      "finding": "New edge-table row named an edge 'queue carriers -> propagate/httpmw' with no counterpart in code. propagate/httpmw imports no carrier package and propagate/kafka|sqs|amqp import no httpmw; they are sibling seams. A consumer calls propagate.Extract and puts the ValueContext on its own ctx.",
+      "evidence": "propagate/httpmw/httpmw.go imports only log/slog, net/http, strings, otel/baggage, biz, registry; propagate/kafka/kafka.go imports only github.com/NightWatchEng/shortfall/propagate; propagate/carrier.go:49 func Extract(c Carrier).",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Arrow re-pointed from MW to EMIT with the label 'biz.vc off the message -> ctx'; row rewritten to name propagate.Extract and the sibling-seam relationship explicitly. Re-review verdict: addressed.",
+      "id": "98765b70ff4c8e73"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l1-context.md",
+      "line": 41,
+      "severity": "LOW",
+      "finding": "The new stencil made its own L1 diagram unsatisfiable: STYLE.md defined the core class as the core Go module only, while L1's single whole-product box is classed core and its label includes the CLI \u2014 which is a separate module pulling modernc.org/sqlite. STYLE.md picks that exact case as its worked example of a defect and offered no class for a whole-product box.",
+      "evidence": "STYLE.md section 1 worked example vs c4-l1-context.md SHORTFALL node label 'impact engine \u00b7 CLI' with 'class SHORTFALL core;'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The core class is now scoped by zoom in STYLE.md: at Level 1 it is the system in scope, CLI included, and the core/optin module split is declared a Level 2 distinction with the reason stated. The worked example is qualified 'at Level 2', the optin row is scoped 'Level 2 down', the checklist item reads 'true at this diagram's level of zoom', and L1's prose says the box is the whole system in scope. Re-review verdict: addressed.",
+      "id": "9071eca925b7a838"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l3-components.md",
+      "line": 43,
+      "severity": "LOW",
+      "finding": "Raised by the scoped re-review against the repair itself: the dotted edge label 'shortfall reconcile only' asserted the coverage leg flows into the Report under reconcile. cmd/shortfall/reconcile.go calls engine.Coverage and passes the leg straight to renderCoverage, never constructing an engine.Report.",
+      "evidence": "cmd/shortfall/reconcile.go:79-86 then :109 renderCoverage(stdout, leg, slices); the only non-test assignment to Report.Coverage is engine/engine.go:198, always the unavailable stub.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Edge relabelled 'a field on the Report; a real number only from reconcile'; the row and key fact now say the reconcile-time number is rendered on its own and never flows back into a Report.",
+      "id": "1cbc24243c6860c1"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l2-containers.md",
+      "line": 81,
+      "severity": "LOW",
+      "finding": "Raised by the scoped re-review against the repair itself: the new row listed the CLI's verbs as validate/impact/reconcile, omitting the version/--version case main.go also dispatches.",
+      "evidence": "cmd/shortfall/main.go:31-32 'case \"--version\", \"version\":'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Row now reads 'working verbs are validate, impact and reconcile (plus version)', which agrees with the node label and the repo's standing wording in docs/architecture/README.md.",
+      "id": "c570f0f24067c48b"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l3-components.md",
+      "line": 52,
+      "severity": "LOW",
+      "finding": "Alleged that the validate-to-de-dup row wrongly places registry legality of flow/stage and segment-enum membership inside validation.",
+      "evidence": "Reviewer cited emit/emitter.go:358-382 flowStageLabels/segmentLabel as the real enforcement point.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner (sole arbiter). The row never says 'registry-legal', and every item it names is in fact checked by Outcome.Validate: amount via Money.Validate, flow/stage/segment via lowerToken (biz/context.go:102,155), PII via biz.CheckPII over EntityID/CustomerID/Source/Err. The same fence's LABELS node and the adjacent row already assign registry-enum membership and the 'unregistered' fallback to label enforcement, so the diagram already draws the split the finding says is missing.",
+      "id": "fc8fe479cf576ba5"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l2-containers.md",
+      "line": 77,
+      "severity": "LOW",
+      "finding": "Alleged that 'A drop increments biz_dropped_events_total{reason}; it is never silent' on the emit-to-exporter edge overstates coverage, because metric-point drops are logged but not counted.",
+      "evidence": "Reviewer cited emit/emitter.go:298-299 warn-only paths and Record's doc comment.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner (sole arbiter). The counter is event-scoped by name and its antecedent in the same sentence is 'unsampled outcome events'; for events the claim is exact (emit/emitter.go:289 dropCounts[export] += len(events)). Metric drops are warned at :264 and :299 and the deltas are re-credited at :303-307, so nothing is silent there either. Decisively, the unqualified contract already stands untouched on main at emit/emit.go:65 ('drop with a visible counter, never silently') and docs/semconv.md:50; the diagram row agrees with the repo's standing statement rather than contradicting it. Any residual tension is a pre-existing one between emit/emit.go:65 and Record's doc comment, which this diff does not touch.",
+      "id": "902f9178e059c85e"
+    },
+    {
+      "ts": "2026-08-29T19:48:25+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "faa87b20fffd9691c461fb27f42790623472a479",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/STYLE.md",
+      "line": 157,
+      "severity": "LOW",
+      "finding": "Alleged that STYLE.md section 4's unconditional 'Every diagram file carries these' contradicts the Scope paragraph's exemption for the not-yet-redrawn seq-*.md files, and that README.md repeats the absolute form.",
+      "evidence": "Reviewer cited STYLE.md:157 vs STYLE.md:14-16 and README.md:12, plus the absence of edge tables and key-facts sections in the three seq-*.md files.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner (sole arbiter). Section 4 states the requirement; Scope states, in the present tense and two sentences away, which files already meet it ('The three C4 diagrams are drawn to it today. The money-path sequences are governed by it but have not been redrawn yet'). README.md's paragraph carries the same qualification in its closing sentence. A standard plus an explicitly declared gap is the normal shape of one, not two disagreeing wordings. The seq-*.md files are out of scope for this item by design (tracked separately as workspace-qmw).",
+      "id": "dde846df813ef48b"
+    }
+  ]
+}

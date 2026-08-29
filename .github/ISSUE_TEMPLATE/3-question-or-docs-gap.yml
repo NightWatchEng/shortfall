@@ -1,0 +1,78 @@
+# Maintainer note: the "repository is private" paragraph below is true only
+# until the public flip. Delete that markdown block in the same PR as the
+# flip — a stale claim is a docs defect under ADR-0008.
+name: Question / documentation gap
+description: You could not work out how to do something, or the docs were missing, unclear, or wrong.
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This repository is private today.** While it stays private only
+        collaborators can reach this form, so nobody outside can file
+        anything yet. These templates are ready ahead of the public flip
+        rather than waiting on it.
+
+        ---
+
+        This is also the catch-all: if your issue does not fit the bug report
+        or the adapter request, file it here.
+
+        Please do report documentation gaps.
+        [ADR-0008](https://github.com/NightWatchEng/shortfall/blob/main/docs/adr/0008-docs-tell-the-truth.md)
+        (*documentation tells the truth*) makes docs a first-class contract in
+        this repository — honest
+        tense, every reference resolving, and a PR that changes behaviour
+        updating the affected docs in the same PR. So a doc that was missing,
+        stale, or overclaiming is a defect and gets triaged as one, not filed
+        as a wish.
+
+        If your question is really "this number looks wrong", the
+        [bug report](https://github.com/NightWatchEng/shortfall/issues/new?template=1-bug-report.yml)
+        form asks the things needed to answer it. If it is about a
+        vulnerability, use the private advisory route in
+        [SECURITY.md](https://github.com/NightWatchEng/shortfall/blob/main/SECURITY.md)
+        instead.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which is this?
+      options:
+        - "The documentation was missing something I needed"
+        - "The documentation said something that is not true, or no longer true"
+        - "A usage question — I could not work out how to do something"
+        - "Something else"
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where?
+      description: The page, section, or symbol. Skip it if the gap is that there was nowhere to look.
+      placeholder: "docs/adapters.md — 'Which leg needs which signal', or engine.Compute's godoc"
+    validations:
+      required: false
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What were you trying to do, and what did you expect to find?
+      description: >-
+        The task, not just the question — knowing where you were heading often
+        changes the answer.
+      placeholder: |
+        I have CloudWatch only and wanted the deferred leg. I expected the
+        adapters page to tell me whether that was possible before I wired
+        anything up.
+    validations:
+      required: true
+
+  - type: textarea
+    id: found
+    attributes:
+      label: What you found instead, or what you tried
+      description: Quote the passage if a doc said something wrong — that is the fastest fix.
+    validations:
+      required: false
