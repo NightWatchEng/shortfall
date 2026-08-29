@@ -104,5 +104,7 @@ The CLI is one consumer of the library. In your services you:
    (`adapters/query/promql` for metrics, `adapters/query/sql` for events), or
    just run the CLI.
 
-Next: [adapters.md](adapters.md) (which backend gives which leg),
-[money.md](money.md) (what a "dollar" means here), [registry.md](registry.md).
+Next: [integration-webhook-lambdas.md](integration-webhook-lambdas.md) (a
+worked two-system integration), [adapters.md](adapters.md) (which backend
+gives which leg), [money.md](money.md) (what a "dollar" means here),
+[registry.md](registry.md).

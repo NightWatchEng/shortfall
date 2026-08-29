@@ -79,6 +79,7 @@ benchstat:
 
 - [Quickstart](docs/quickstart.md) — `go get` to a rendered impact report in 10 minutes.
 - [Adapters & capability matrix](docs/adapters.md) — which backend grounds which leg, with wiring snippets.
+- [Example integration: webhook Lambdas → payments-service](docs/integration-webhook-lambdas.md) — a two-system flow end to end, and which leg covers which outage direction.
 - [Architecture](docs/architecture/README.md) — C4 diagrams, the money-path sequences, and the repository layout.
 - [Registry reference](docs/registry.md) — every field of the flow registry.
 - [What is a "dollar" here](docs/money.md) — kind semantics, lost vs delayed, why ranges (for Finance).

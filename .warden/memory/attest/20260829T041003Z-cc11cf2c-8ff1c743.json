@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+  "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T04:10:03+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, round 1 + round 2 scoped re-review"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 25,
+      "severity": "MEDIUM",
+      "finding": "Registry example omitted required reconcile block; failed shortfall validate",
+      "evidence": "shortfall validate on the extracted YAML exited 1: 'flow payment.webhook: reconcile source is required' (registry/registry.go:593)",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Added reconcile source (stripe:); doc YAML re-extracted and validates exit 0",
+      "id": "bb08a53530dc11de"
+    },
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 60,
+      "severity": "MEDIUM",
+      "finding": "Section-2 Go snippet uncompilable in any single context (:= mixed with top-level func)",
+      "evidence": "'reg, _ := registry.Load(...)' followed at top level by 'func handle(...)' \u2014 := illegal at package scope, func decl illegal in a body",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Restructured as package-level var block + setup()/handle(); compiled verbatim in round-2 re-review",
+      "id": "0d801ddb05b071b6"
+    },
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 123,
+      "severity": "MEDIUM",
+      "finding": "Section-3 snippet declared handler and never used it",
+      "evidence": "'handler := httpmw.Middleware(&reg)(mux)' was the fence's last line; declared-and-not-used in any function body",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "handler now consumed by http.ListenAndServe; compiles and vets clean",
+      "id": "5d7fd6c849e37879"
+    },
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 100,
+      "severity": "MEDIUM",
+      "finding": "Estimator fill-in claimed on the direct WithValueContext path where no fill-in exists",
+      "evidence": "'the registry estimator's value fills in' vs propagate/httpmw/httpmw.go estimate() reachable only from Middleware's ingress hook; emitter skips biz_value_total for Estimated VCs",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Paragraph scoped to httpmw.Middleware WithIngress path, matching httpmw.estimate exactly",
+      "id": "bc00d29ab3128ca2"
+    },
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 138,
+      "severity": "MEDIUM",
+      "finding": "Deferred leg claimed grounding by deferred outcome events; engine reads only biz_inflight_value",
+      "evidence": "engine/deferred.go: 'deferred leg needs a metric source (biz_inflight_value)'; gauge published only via SetInFlight/InFlightTracker, never wired in the doc",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Table re-grounded on InFlightTracker gauge; wiring paragraph added after section-3 snippet",
+      "id": "8dfddb2777d671b1"
+    },
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 159,
+      "severity": "MEDIUM",
+      "finding": "Claimed cwinsights CLI flags that do not exist (impact wires only --prometheus/--sql)",
+      "evidence": "'plus the query-adapter flags for your backend \u2014 for this CloudWatch wiring, the cwinsights querier' vs cmd/shortfall/impact.go usage: only --prometheus/--sql/--sql-driver",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Section 5 rewritten with real flags; cwinsights described as library path",
+      "id": "a6490c34f4269b22"
+    },
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 160,
+      "severity": "MEDIUM",
+      "finding": "Claimed cwinsights reads metric legs from the CloudWatch metric store; adapter is events-only",
+      "evidence": "adapters/query/cwinsights declares Caps{Events:true, Metrics:false} ('an events-only query.Querier'); no shipped querier reads the CloudWatch metric store",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Now states events-only caps, promql as the only shipped metrics querier, consistent with adapters.md",
+      "id": "53f1134416113cad"
+    },
+    {
+      "ts": "2026-08-29T04:10:03+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "cc11cf2c9bf42be16811b62f7cc84a4fbd8c539c",
+      "base_sha": "6437cbc023ccb8200eb1abe92671797e8dd4037a",
+      "rule_id": "unmapped:http-response-body-leak",
+      "tags": [
+        "http-response-body-leak"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration-webhook-lambdas.md",
+      "line": 83,
+      "severity": "LOW",
+      "finding": "Sample Lambda never closed resp.Body; leaks connections/FDs in a warm Lambda with a lifetime client",
+      "evidence": "'resp, callErr := client.Do(req)' followed only by the status switch and return \u2014 no resp.Body.Close() on any branch",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Added nil-guarded defer resp.Body.Close(); switch confirmed nil-safe",
+      "id": "23aed37b7b9d4a2c"
+    }
+  ]
+}
