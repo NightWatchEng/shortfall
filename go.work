@@ -8,6 +8,8 @@ use ./adapters/export/cloudwatch
 
 use ./adapters/export/gcp
 
+use ./adapters/export/otlp
+
 use ./adapters/query/promql
 
 use ./adapters/query/sql

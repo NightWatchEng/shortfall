@@ -31,7 +31,7 @@ flowchart TB
     subgraph optin["Separate nested Go modules — opt in one at a time"]
         direction TB
         CLI["⌨️ <b>cmd/shortfall</b><br/><i>its own module — pulls a SQLite driver</i><br/>validate · impact · reconcile"]
-        EXP["<b>adapters/export/*</b><br/><i>prometheus · cloudwatch EMF · gcp</i><br/>emit.Exporter implementations"]
+        EXP["<b>adapters/export/*</b><br/><i>otlp · prometheus · cloudwatch EMF · gcp</i><br/>emit.Exporter implementations"]
         QAD["<b>adapters/query/*</b><br/><i>promql · cwinsights · sql</i><br/>query.Querier implementations"]
         PAY["<b>adapters/payment/stripe</b><br/><i>stripe-go</i><br/>webhook receiver ·<br/>wrapped client · reconciler"]
         INC["<b>adapters/incident/*</b><br/><i>slack · incidentio · pagerduty ·<br/>rootly · firehydrant</i><br/>post + refresh the impact ledger"]
