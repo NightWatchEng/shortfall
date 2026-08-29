@@ -30,3 +30,5 @@ use ./adapters/incident/pagerduty
 use ./adapters/query/cwinsights
 
 use ./test/loggolden
+
+use ./test/docsnippets
