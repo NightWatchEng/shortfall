@@ -44,8 +44,9 @@ minutes with zero external services.)
 business facts — flow, entity id, hashed customer, minor-unit amount —
 to the request context, and they ride W3C Baggage across service hops.
 Every `Record()` turns a stage transition into two signal kinds: bounded
-`biz_*` metric families (transaction counts, value, in-flight backlog)
-and one unsampled outcome event carrying the exact amount and ids. Your
+`biz_*` metric families (transaction counts, value) and one unsampled
+outcome event carrying the exact amount and ids; queue consumers add the
+in-flight backlog gauge through `emit.InFlightTracker`. Your
 exporter ships both to the backend you already run — **Prometheus** for
 metrics, **CloudWatch** for metrics and events — and at incident time
 the engine queries them back and computes the four legs, each labelled
@@ -175,10 +176,11 @@ Where step 1 exported decides how you read back:
   | sort failed_minor desc | limit 10
   ```
 
-  One honesty note: these raw sums are triage numbers — they are not
-  de-duplicated by entity and do not exclude entities that later
-  succeeded. `shortfall impact` (the engine) applies the de-dup and
-  recovery exclusions; that is the number Finance sees.
+One honesty note covering both query sets: the ad-hoc sums — PromQL
+value rates and Logs Insights sums alike — are triage numbers. They are
+not de-duplicated by entity, and entities that later succeeded are not
+excluded. `shortfall impact` applies both on the events path; that is
+the number Finance sees.
 
 Out come the four legs, each labelled by its evidence: **realized loss**
 (failed transactions summed, de-duplicated by entity), **deferred
