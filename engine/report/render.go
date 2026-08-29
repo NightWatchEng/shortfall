@@ -60,6 +60,9 @@ func RenderText(r engine.Report) string {
 	}
 
 	fmt.Fprintf(&b, "DEFERRED   [%s] %s in-flight\n", r.Deferred.Evidence, money(r.Deferred.ByCurrency))
+	for _, c := range r.Deferred.Caveats {
+		fmt.Fprintf(&b, "           caveat: %s\n", c)
+	}
 	if len(r.Deferred.ProjectedLostMinor) > 0 {
 		fmt.Fprintf(&b, "           projected lost if SLAs breach: %s\n", money(r.Deferred.ProjectedLostMinor))
 	}
@@ -147,7 +150,28 @@ func RenderMarkdown(r engine.Report) string {
 	)
 	fmt.Fprintf(&b, "| Unrealized (counterfactual) | %s | %s … %s (mid %s) |\n",
 		r.Unrealized.Evidence, money(r.Unrealized.LowMinor), money(r.Unrealized.HighMinor), money(r.Unrealized.MidMinor))
-	b.WriteString("\n> Unrealized is an estimate range and must not be added to realized.\n\n")
+	// Every ungrounded-leg label rides the render: a caveat the reader
+	// never sees turns a degraded leg into a plausible-looking zero.
+	// List items keep the labels visually distinct; the blank line keeps
+	// the never-sum disclaimer its own blockquote paragraph.
+	b.WriteString("\n")
+	hasLabels := false
+	for _, c := range r.Realized.Caveats {
+		fmt.Fprintf(&b, "> - Realized caveat: %s\n", c)
+		hasLabels = true
+	}
+	for _, c := range r.Deferred.Caveats {
+		fmt.Fprintf(&b, "> - Deferred caveat: %s\n", c)
+		hasLabels = true
+	}
+	for _, n := range r.Unrealized.Notes {
+		fmt.Fprintf(&b, "> - Unrealized note: %s\n", n)
+		hasLabels = true
+	}
+	if hasLabels {
+		b.WriteString("\n")
+	}
+	b.WriteString("> Unrealized is an estimate range and must not be added to realized.\n\n")
 
 	b.WriteString("## Customers\n\n")
 	if r.Customers.NotAvailableReason != "" {

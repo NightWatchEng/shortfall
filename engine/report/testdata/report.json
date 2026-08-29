@@ -18,7 +18,8 @@
       "USD": 15000
     },
     "Evidence": "deterministic",
-    "Caveats": null
+    "Caveats": null,
+    "Unavailable": false
   },
   "Deferred": {
     "Count": 0,
@@ -27,6 +28,7 @@
     },
     "Evidence": "deterministic",
     "Caveats": null,
+    "Unavailable": false,
     "ByAgeBucket": {
       "gt2h": {
         "USD": 5568661
@@ -51,7 +53,8 @@
     "Evidence": "estimate",
     "Notes": [
       "assumes 60% recovery within 2h"
-    ]
+    ],
+    "Unavailable": false
   },
   "Customers": {
     "Distinct": 2,

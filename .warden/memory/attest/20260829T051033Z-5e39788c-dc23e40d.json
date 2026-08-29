@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "5e39788c6b05d9d9842c6180714255808dd7d671",
+  "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T05:10:33+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5), independent context, rounds 1-2 + round-3 scoped re-review"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (claude-fable-5), separate context, sole arbiter, rounds 1-2"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T05:10:33+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "5e39788c6b05d9d9842c6180714255808dd7d671",
+      "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+      "rule_id": "unmapped:summary-renderer-drops-ungrounded-labels",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/summary.go",
+      "line": 25,
+      "severity": "MEDIUM",
+      "finding": "Summary() \u2014 PATCHed into vendor impact fields by the four incident writers \u2014 dropped every ungrounded-leg label, rendering 'deferred [deterministic] none in-flight' for a backend serving no metrics",
+      "evidence": "summary.go had no caveat read anywhere; reproduced via Compute over events-only memq",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Leg/EstLeg gain a structural Unavailable bool set by Compute's degradation branches; Summary renders n/a off it; table-driven test pins each leg",
+      "id": "11b563ceef659cde"
+    },
+    {
+      "ts": "2026-08-29T05:10:33+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "5e39788c6b05d9d9842c6180714255808dd7d671",
+      "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-shape"
+      ],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/render_test.go",
+      "line": 195,
+      "severity": "MEDIUM",
+      "finding": "TestUngroundedLegLabelsRendered was a bare nested loop with t.Fatalf, violating ADR-0007's named-subtest requirement",
+      "evidence": "ADR-0007: 'a bare loop with t.Errorf does not satisfy this ADR'",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Converted to a named-case table run via t.Run subtests with a uniform assertion body",
+      "id": "9d4c2eb629008ea1"
+    },
+    {
+      "ts": "2026-08-29T05:10:33+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "5e39788c6b05d9d9842c6180714255808dd7d671",
+      "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+      "rule_id": "unmapped:blockquote-soft-breaks-join-caveat-lines",
+      "tags": [
+        "render-formatting"
+      ],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/render.go",
+      "line": 156,
+      "severity": "LOW",
+      "finding": "Consecutive '>' lines merged caveats and the never-sum disclaimer into one CommonMark blockquote paragraph, rendering as a run-on line on GitHub",
+      "evidence": "Verified in the regenerated report.md golden",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Caveats/notes are '> - ' list items with a blank line separating the disclaimer blockquote",
+      "id": "22e7c53b31e690d5"
+    },
+    {
+      "ts": "2026-08-29T05:10:33+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "5e39788c6b05d9d9842c6180714255808dd7d671",
+      "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+      "rule_id": "unmapped:unavailable-marker-skips-nil-error-degradation",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized.go",
+      "line": 38,
+      "severity": "MEDIUM",
+      "finding": "Unrealized() degrades via nil-error returns in four paths, leaving Unavailable=false \u2014 one Summary line said 'deferred n/a' beside 'unrealized [estimate] none' for the identical degradation class",
+      "evidence": "Empirically reproduced by examiner via Compute over events-only memq; e2e test asserted only 'deferred n/a'",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "All four paths set leg.Unavailable = true; e2e test asserts both 'deferred n/a' and 'unrealized n/a'",
+      "id": "162aef5052fb0a18"
+    },
+    {
+      "ts": "2026-08-29T05:10:33+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "5e39788c6b05d9d9842c6180714255808dd7d671",
+      "base_sha": "ec9d015924c3b5612b94cd28610ae78a43cb62dc",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/engine.go",
+      "line": 7,
+      "severity": "MEDIUM",
+      "finding": "Package doc claimed Report shapes 'frozen (v0.1.0)' while the diff added Unavailable fields with no ADR amendment (ADR-0009 precedent) and no LibraryVersion bump",
+      "evidence": "ADR-0009: 'further ones follow the same ADR route'; regenerated report.json stamped v0.1.0 over a changed shape",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "ADR-0017 (frozen-interface amendment) + index row; package doc names the amendment; LibraryVersion bumped to v0.2.0 \u2014 round-3 verified the one-amendment claim against git history",
+      "id": "286ed503d75054e8"
+    }
+  ]
+}

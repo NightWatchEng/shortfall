@@ -21,9 +21,23 @@ func Summary(r engine.Report) string {
 		flows,
 		r.Request.Window.From.UTC().Format("2006-01-02T15:04Z"),
 		r.Request.Window.To.UTC().Format("2006-01-02T15:04Z"))
-	fmt.Fprintf(&b, "realized [%s] %s", r.Realized.Evidence, money(r.Realized.ByCurrency))
-	fmt.Fprintf(&b, " · deferred [%s] %s in-flight", r.Deferred.Evidence, money(r.Deferred.ByCurrency))
-	fmt.Fprintf(&b, " · unrealized [%s] %s", r.Unrealized.Evidence, moneyRange(r.Unrealized))
+	// An ungrounded leg says n/a, never a plausible-looking zero — the
+	// vendor field this line lands in is read as a measurement.
+	if r.Realized.Unavailable {
+		b.WriteString("realized n/a")
+	} else {
+		fmt.Fprintf(&b, "realized [%s] %s", r.Realized.Evidence, money(r.Realized.ByCurrency))
+	}
+	if r.Deferred.Unavailable {
+		b.WriteString(" · deferred n/a")
+	} else {
+		fmt.Fprintf(&b, " · deferred [%s] %s in-flight", r.Deferred.Evidence, money(r.Deferred.ByCurrency))
+	}
+	if r.Unrealized.Unavailable {
+		b.WriteString(" · unrealized n/a")
+	} else {
+		fmt.Fprintf(&b, " · unrealized [%s] %s", r.Unrealized.Evidence, moneyRange(r.Unrealized))
+	}
 	if r.Customers.NotAvailableReason != "" {
 		b.WriteString(" · customers n/a")
 	} else {

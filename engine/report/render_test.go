@@ -2,6 +2,7 @@ package report
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/NightWatchEng/shortfall/engine"
 	"github.com/NightWatchEng/shortfall/query"
+	"github.com/NightWatchEng/shortfall/query/memq"
+	"github.com/NightWatchEng/shortfall/registry"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -138,6 +141,79 @@ func TestEvidenceTagsPresent(t *testing.T) {
 		if !strings.Contains(text, tag) {
 			t.Fatalf("text render missing evidence tag %q", tag)
 		}
+	}
+}
+
+// TestComputedEventsOnlyReportStatesDeferredGap drives engine.Compute over
+// an events-only backend (the shape the sql/logql/cwinsights/spl queriers
+// serve) and asserts the deferred leg's metrics-unavailable caveat survives
+// into both human renders — the exact plausible-looking zero this package
+// used to print.
+func TestComputedEventsOnlyReportStatesDeferredGap(t *testing.T) {
+	reg, err := registry.Load("../../registry/testdata/registry.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := memq.New(memq.WithCaps(query.Caps{Events: true, EventHistoryWeeks: 520}))
+	rep, err := engine.Compute(context.Background(), &reg, q, engine.Request{
+		Window: query.TimeRange{
+			From: time.Date(2026, 8, 27, 14, 0, 0, 0, time.UTC),
+			To:   time.Date(2026, 8, 27, 16, 0, 0, 0, time.UTC),
+		},
+		Flows: []string{"invoice.pay"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, out := range map[string]string{"text": RenderText(rep), "markdown": RenderMarkdown(rep)} {
+		if !strings.Contains(out, "biz_inflight_value") {
+			t.Fatalf("%s render of an events-only report must state the deferred leg's missing metric source, got:\n%s", name, out)
+		}
+	}
+	s := Summary(rep)
+	for _, marker := range []string{"deferred n/a", "unrealized n/a"} {
+		if !strings.Contains(s, marker) {
+			t.Fatalf("summary of an events-only report must carry %q, got: %q", marker, s)
+		}
+	}
+}
+
+// TestUngroundedLegLabelsRendered is the honesty invariant for degraded
+// reports: every label engine.Compute attaches when a leg cannot be
+// grounded (Caveats, Notes, NotAvailableReason, Unavailable) must appear
+// in BOTH human renders — a dropped label turns an ungrounded leg into a
+// plausible-looking zero.
+func TestUngroundedLegLabelsRendered(t *testing.T) {
+	r := sampleReport()
+	r.Realized.Caveats = []string{"metrics-only: upper bound, not de-duped by entity"}
+	r.Deferred.Caveats = []string{"unavailable: deferred leg needs a metric source (biz_inflight_value)"}
+	r.Unrealized.Notes = []string{"unavailable: unrealized leg needs a metric source"}
+	r.Customers = engine.CustomersLeg{NotAvailableReason: "backend serves no events"}
+	r.Coverage = engine.CoverageLeg{Unavailable: "no reconciliation has run"}
+
+	labels := []string{
+		"metrics-only: upper bound, not de-duped by entity",
+		"unavailable: deferred leg needs a metric source (biz_inflight_value)",
+		"unavailable: unrealized leg needs a metric source",
+		"backend serves no events",
+		"no reconciliation has run",
+	}
+	cases := []struct {
+		name   string
+		render func(engine.Report) string
+	}{
+		{"text", RenderText},
+		{"markdown", RenderMarkdown},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := c.render(r)
+			for _, label := range labels {
+				if !strings.Contains(out, label) {
+					t.Errorf("render drops the ungrounded-leg label %q", label)
+				}
+			}
+		})
 	}
 }
 
