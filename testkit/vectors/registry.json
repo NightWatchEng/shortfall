@@ -276,7 +276,7 @@
       "name": "no_flows",
       "error": "no_flows",
       "reference_message": "no flows declared",
-      "yaml": "version: 1\nsegments: [smb]\npropagation:\n  allow_hosts: [\"api.example.com\"]\nflows: {}\n"
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows: {}\n"
     },
     {
       "name": "flow_name_token",

@@ -365,19 +365,48 @@ func FactsOf(r registry.Registry) RegistryFacts {
 	return f
 }
 
-// Equal compares two fact sets structurally. Comparison runs over the
-// JSON rendering so map ordering and nil-vs-empty never masquerade as
-// drift — the same reason the scenario goldens round-trip before
-// comparing.
-func (f RegistryFacts) Equal(other RegistryFacts) bool { return f.JSON() == other.JSON() }
+// Equal compares two fact sets structurally, over their JSON rendering
+// so that map key ordering never masquerades as drift — the same reason
+// the scenario goldens round-trip before comparing. (Nil and empty
+// slices are NOT folded together: the fact fields carry no omitempty, so
+// `null` and `[]` render differently and compare unequal. FactsOf clones
+// what the loader produced, so the two forms track a real difference in
+// what the loader returned.)
+//
+// A fact set with no JSON rendering has no comparable form, so Equal
+// fails closed rather than comparing two error strings: reporting
+// "equal" because both sides failed is how a drift fence quietly stops
+// being one.
+func (f RegistryFacts) Equal(other RegistryFacts) bool {
+	a, err := f.JSON()
+	if err != nil {
+		return false
+	}
+	b, err := other.JSON()
+	if err != nil {
+		return false
+	}
+	return a == b
+}
 
-// JSON renders the facts for comparison and for failure messages.
-func (f RegistryFacts) JSON() string {
+// JSON renders the facts for comparison. The error is returned rather
+// than folded into a sentinel string — see Equal.
+func (f RegistryFacts) JSON() (string, error) {
 	b, err := json.Marshal(f)
 	if err != nil {
-		return fmt.Sprintf("<unmarshalable facts: %v>", err)
+		return "", err
 	}
-	return string(b)
+	return string(b), nil
+}
+
+// String renders the facts for a failure message, naming the rendering
+// failure when there is one. Never used for comparison.
+func (f RegistryFacts) String() string {
+	s, err := f.JSON()
+	if err != nil {
+		return fmt.Sprintf("<unrenderable facts: %v>", err)
+	}
+	return s
 }
 
 // RegistryAcceptVector is one valid document and the facts it yields.

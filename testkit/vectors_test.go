@@ -1,6 +1,7 @@
 package testkit
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -199,7 +200,7 @@ func TestRegistryAcceptVectors(t *testing.T) {
 			}
 			got := FactsOf(reg)
 			if !got.Equal(vec.Facts) {
-				t.Fatalf("derived facts drifted\n got %s\nwant %s", got.JSON(), vec.Facts.JSON())
+				t.Fatalf("derived facts drifted\n got %s\nwant %s", got, vec.Facts)
 			}
 		})
 	}
@@ -316,6 +317,77 @@ func TestPortabilityDocMatchesVectors(t *testing.T) {
 		if !strings.Contains(doc, want) {
 			t.Errorf("%s does not state %q", portabilityDoc, want)
 		}
+	}
+}
+
+// TestRegistryFactsEqualFailsClosed is the regression test for a review
+// finding: Equal compared two rendering-error sentinels as if they were
+// data, so two demonstrably different fact sets reported equal whenever
+// neither could be rendered. A comparator that degrades to
+// "both broken means the same" is the exact shape the drift fence exists
+// to prevent.
+//
+// The input is reachable, not hypothetical: the reference validator
+// accepts a non-finite recovery fraction, and a non-finite float is what
+// JSON refuses to render.
+func TestRegistryFactsEqualFailsClosed(t *testing.T) {
+	unrenderable := func(version int, segment string) RegistryFacts {
+		return RegistryFacts{
+			Version:  version,
+			Segments: []string{segment},
+			Flows: map[string]FlowFact{
+				"invoice.pay": {Recovery: RecoveryFact{RecoveredFraction: math.NaN()}},
+			},
+		}
+	}
+	renderable := func(version int) RegistryFacts {
+		return RegistryFacts{
+			Version:  version,
+			Segments: []string{"smb"},
+			Flows:    map[string]FlowFact{},
+		}
+	}
+	cases := []struct {
+		name  string
+		a, b  RegistryFacts
+		equal bool
+	}{
+		{"unrenderable and different", unrenderable(1, "smb"), unrenderable(999, "enterprise"), false},
+		{"unrenderable and byte-identical", unrenderable(1, "smb"), unrenderable(1, "smb"), false},
+		{"one side unrenderable", unrenderable(1, "smb"), renderable(1), false},
+		{"other side unrenderable", renderable(1), unrenderable(1, "smb"), false},
+		{"renderable and identical", renderable(1), renderable(1), true},
+		{"renderable and different", renderable(1), renderable(2), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.a.Equal(c.b); got != c.equal {
+				t.Fatalf("Equal = %v, want %v\n a: %s\n b: %s", got, c.equal, c.a, c.b)
+			}
+		})
+	}
+}
+
+// TestRegistryFactsRenderingSurfacesItsError pins the other half of the
+// fix: a fact set with no JSON rendering reports that as an error rather
+// than as a string two different fact sets can share.
+func TestRegistryFactsRenderingSurfacesItsError(t *testing.T) {
+	bad := RegistryFacts{Flows: map[string]FlowFact{
+		"invoice.pay": {Recovery: RecoveryFact{RecoveredFraction: math.NaN()}},
+	}}
+	if _, err := bad.JSON(); err == nil {
+		t.Fatal("JSON reported no error for a fact set encoding/json cannot render")
+	}
+	if s := bad.String(); !strings.Contains(s, "unrenderable") {
+		t.Fatalf("String = %q, want it to name the rendering failure", s)
+	}
+	good := RegistryFacts{Version: 1, Segments: []string{"smb"}, Flows: map[string]FlowFact{}}
+	js, err := good.JSON()
+	if err != nil {
+		t.Fatalf("JSON errored on a renderable fact set: %v", err)
+	}
+	if js != good.String() {
+		t.Fatalf("String %q disagrees with JSON %q for a renderable fact set", good.String(), js)
 	}
 }
 

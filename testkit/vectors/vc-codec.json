@@ -288,7 +288,7 @@
     },
     {
       "name": "all_optional_fields_empty",
-      "note": "empty customer, segment, currency and kind are five empty fields, not absent ones",
+      "note": "empty customer, segment, currency and kind are four empty fields, not absent ones",
       "encoded": "1|f|e|||0||0||0|0",
       "vc": {
         "flow": "f",

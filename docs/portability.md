@@ -231,7 +231,8 @@ The worked example — the `reference` encode vector:
 Fields are positional and never omitted. An empty string field is an empty
 field between two delimiters, not an absent one: the vector
 `all_optional_fields_empty` (`1|f|e|||0||0||0|0`) is a well-formed
-encoding with five empty fields.
+eleven-field encoding in which four of the fields — `customer_id`,
+`segment`, `currency`, `kind` — are the empty string.
 
 ### 2.2 Escaping
 
@@ -579,7 +580,8 @@ declarable, so a JPY flow's estimate cannot inherit a USD estimator's
 
 Every class below has at least one vector in
 [`registry.json`](../testkit/vectors/registry.json), each differing from
-the reference document in exactly one place.
+the reference document by exactly one edit — so a vector isolates the one
+rule it is named for.
 
 | Class | Rejected because |
 |---|---|
@@ -621,6 +623,15 @@ the reference document in exactly one place.
 | `reconcile_source_required` | a flow with no reconcile source |
 | `reconcile_source_scheme` | a reconcile source outside the known schemes (`sql:`, `stripe:`) |
 | `reconcile_stage_unknown` | `reconcile.stage` naming a stage the flow does not declare |
+
+**One known gap in the reference implementation.** The `[0, 1]` bound on
+`recovered_fraction` is a pair of ordinary comparisons, so a YAML `.nan`
+fails both and the document loads. That is a defect in the reference
+implementation, tracked separately — not a licence to copy it. A
+conforming implementation MUST reject a non-finite `recovered_fraction`
+under `recovery_fraction`. There is no vector for it yet, because a
+vector asserts what the reference implementation does, and here that is
+the wrong answer; the vector lands with the fix.
 
 ### 4.4 Allowlist matching
 

@@ -202,7 +202,7 @@ func buildVCVectors() testkit.VCVectors {
 		},
 		{
 			"all_optional_fields_empty",
-			"empty customer, segment, currency and kind are five empty fields, not absent ones",
+			"empty customer, segment, currency and kind are four empty fields, not absent ones",
 			"1|f|e|||0||0||0|0",
 		},
 	}
@@ -292,15 +292,21 @@ func buildVCVectors() testkit.VCVectors {
 
 // baseYAML is the reference registry every mutation below starts from —
 // deliberately the shape docs/registry.md documents, so a rejection
-// vector differs from a valid file in exactly one place.
-const baseYAML = `version: 1
+// vector differs from a valid file by exactly one edit.
+//
+// It is split at the flows boundary only so the no_flows case can be
+// that same one edit rather than a hand-written second document that
+// would differ in four places at once (review finding, workspace-ldf).
+const baseHeaderYAML = `version: 1
 segments: [smb, enterprise]
 propagation:
   allow_hosts: ["*.internal.example.com", "api.example.com"]
 severity:
   - { sev: SEV1, min_per_minute: 100000 }
   - { sev: SEV2, min_per_minute: 10000 }
-flows:
+`
+
+const baseYAML = baseHeaderYAML + `flows:
   invoice.pay:
     money: { kind: fee }
     currencies: [USD]
@@ -331,12 +337,9 @@ flows:
     reconcile: { source: "stripe:charges" }
 `
 
-const noFlowsYAML = `version: 1
-segments: [smb]
-propagation:
-  allow_hosts: ["api.example.com"]
-flows: {}
-`
+// noFlowsYAML is baseYAML with its flows block — and nothing else —
+// replaced by an empty mapping.
+const noFlowsYAML = baseHeaderYAML + "flows: {}\n"
 
 // sub applies one-for-one substitutions to baseYAML, failing when a
 // pattern matches nothing (a silently no-op mutation would produce a
