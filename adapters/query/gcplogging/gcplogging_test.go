@@ -280,6 +280,8 @@ func TestIdentifierValidation(t *testing.T) {
 		{name: "backtick in view", project: "p", dataset: "d", opts: []Option{WithView("v`x")}, wantErr: "invalid view id"},
 		{name: "empty view", project: "p", dataset: "d", opts: []Option{WithView("")}, wantErr: `invalid view id ""`},
 		{name: "non-positive max rows", project: "p", dataset: "d", opts: []Option{WithMaxRows(0)}, wantErr: "max rows must be positive"},
+		{name: "zero poll interval", project: "p", dataset: "d", opts: []Option{WithPollInterval(0)}, wantErr: "poll interval must be positive"},
+		{name: "negative poll interval", project: "p", dataset: "d", opts: []Option{WithPollInterval(-time.Second)}, wantErr: "poll interval must be positive"},
 		{name: "legitimate names accepted", project: "my-project", dataset: "logs_analytics", opts: []Option{WithView("_AllLogs")}},
 		{name: "domain-scoped project id accepted", project: "acme.com:legacy-project", dataset: "logs_analytics"},
 	}
@@ -618,5 +620,85 @@ func TestForeignEntriesAreSkipped(t *testing.T) {
 	}
 	if len(groups) != 1 || groups[0].Count != 1 || groups[0].SumMinor != 14900 {
 		t.Fatalf("groups = %+v, want exactly the one outcome event", groups)
+	}
+}
+
+// TestWrongPayloadColumnIsLoud pins the fail-open shape the marker
+// discrimination could otherwise hide. Skipping an entry that is not a JSON
+// object is right for a plain text log line, but a result set in which NOT
+// ONE row is an object is not a quiet window — it is the wrong column.
+// TO_JSON_STRING over a STRING-typed column yields a JSON string literal,
+// so every row would be skipped and the read would answer an empty window
+// with no error at all: a measured zero on a money leg.
+func TestWrongPayloadColumnIsLoud(t *testing.T) {
+	ev := outcome("invoice.pay", "capture", "failed", "inv_1", "h:c1", "smb", "USD", 14900, from.Add(time.Minute))
+	cases := []struct {
+		name    string
+		rows    []fakeRow
+		wantErr string
+		want    int64 // expected total SumMinor when no error is expected
+	}{
+		{
+			// Every payload double-encoded, as a STRING column would be.
+			name: "no row is a JSON object",
+			rows: []fakeRow{
+				{micros: from.Add(time.Minute).UnixMicro(), payload: `"{\"event\":\"biz.outcome\"}"`},
+				{micros: from.Add(2 * time.Minute).UnixMicro(), payload: `"plain text log line"`},
+			},
+			wantErr: "not a JSON object",
+		},
+		{
+			name:    "a JSON array is not an object either",
+			rows:    []fakeRow{{micros: from.Add(time.Minute).UnixMicro(), payload: `[1,2,3]`}},
+			wantErr: "not a JSON object",
+		},
+		{
+			name:    "a JSON null is not an object either",
+			rows:    []fakeRow{{micros: from.Add(time.Minute).UnixMicro(), payload: `null`}},
+			wantErr: "not a JSON object",
+		},
+		{
+			// One real object among the noise means the column IS
+			// json_payload and the rest are other services' log lines.
+			name: "one object among non-objects is a normal mixed log stream",
+			rows: []fakeRow{
+				{micros: from.Add(time.Minute).UnixMicro(), payload: `plain text log line`},
+				{micros: from.Add(2 * time.Minute).UnixMicro(), payload: eventRecord(ev)},
+			},
+			want: 14900,
+		},
+		{
+			// An empty window is an empty window, not a column error.
+			name: "no rows at all is not a column error",
+			rows: nil,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := newFakeBigQuery(t, c.rows)
+			srv.evaluate = false // the rows reach the decoder as-is
+			groups, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
+				Range: window(), Filters: map[string]string{"currency": "USD"},
+			})
+			if c.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, c.wantErr)
+				}
+				if groups != nil {
+					t.Fatalf("groups = %+v, want nil alongside the error", groups)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var sum int64
+			for _, g := range groups {
+				sum += g.SumMinor
+			}
+			if sum != c.want {
+				t.Fatalf("sum = %d, want %d", sum, c.want)
+			}
+		})
 	}
 }

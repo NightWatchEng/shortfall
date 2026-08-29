@@ -128,9 +128,9 @@ var _ query.Querier = (*Querier)(nil)
 // Option configures the Querier.
 type Option func(*Querier)
 
-// WithHTTPClient injects the HTTP doer (default *http.Client at
-// defaultHTTPTimeout). Bring an
-// oauth2 client here to authenticate without WithBearerToken.
+// WithHTTPClient injects the HTTP doer (default: an *http.Client at
+// defaultHTTPTimeout). Bring an oauth2 client here to authenticate without
+// WithBearerToken.
 func WithHTTPClient(d Doer) Option { return func(q *Querier) { q.doer = d } }
 
 // WithEndpoint overrides the API endpoint (private endpoints, tests);
@@ -154,7 +154,9 @@ func WithView(v string) Option { return func(q *Querier) { q.view = v } }
 func WithLocation(l string) Option { return func(q *Querier) { q.location = l } }
 
 // WithPollInterval sets the cadence for polling a query job that did not
-// complete inline (default 250ms).
+// complete inline (default 250ms). It must be positive: a zero or negative
+// interval turns the poll into an unthrottled loop against a billed API,
+// so New refuses it rather than letting it through as "no delay".
 func WithPollInterval(d time.Duration) Option { return func(q *Querier) { q.pollInterval = d } }
 
 // WithMaxRows caps how many entries one window may fetch (default 100000).
@@ -198,6 +200,9 @@ func New(projectID, dataset string, opts ...Option) (*Querier, error) {
 	}
 	if q.maxRows <= 0 {
 		return nil, fmt.Errorf("gcplogging: max rows must be positive, got %d", q.maxRows)
+	}
+	if q.pollInterval <= 0 {
+		return nil, fmt.Errorf("gcplogging: poll interval must be positive, got %s", q.pollInterval)
 	}
 	return q, nil
 }
@@ -306,14 +311,26 @@ func (q *Querier) statement(qy query.EventQuery) (string, []queryParam) {
 // decodeRows turns (event_micros, payload) rows into outcomes, preserving
 // the store's order.
 //
-// An entry without the outcome marker is skipped: a log bucket's view
-// carries every log the project writes, and refusing to read a window
-// because an unrelated service logged JSON would make the adapter useless.
-// An entry that IS marked and still fails to parse is a loud error — that
-// is a truncated or corrupted outcome record, and counting it as nothing
-// would understate money.
+// Three cases, and the difference between them is where money can go
+// missing:
+//
+//   - A payload that is a JSON object WITHOUT the outcome marker is
+//     skipped. A log bucket's view carries every log the project writes,
+//     and refusing to read a window because an unrelated service logged
+//     JSON would make the adapter useless.
+//   - A payload that is not a JSON object at all is also skipped — a plain
+//     text log line is not ours either — but it is counted, because a
+//     result set in which NOTHING decoded as an object is not a quiet
+//     window, it is the wrong column: TO_JSON_STRING over a STRING-typed
+//     column yields a JSON string literal, not an object, so every row
+//     would be dropped and the read would answer an empty window with no
+//     error at all. That shape is refused below.
+//   - A payload that IS a marked object and still fails to parse is a loud
+//     error — a truncated or corrupted outcome record, and counting it as
+//     nothing would understate money.
 func decodeRows(rows []bqRow) ([]biz.Outcome, error) {
 	out := make([]biz.Outcome, 0, len(rows))
+	nonObjects := 0
 	for i, r := range rows {
 		if len(r.F) != 2 {
 			return nil, fmt.Errorf("gcplogging: row %d has %d columns, want 2 (event_micros, payload)", i, len(r.F))
@@ -323,7 +340,12 @@ func decodeRows(rows []bqRow) ([]biz.Outcome, error) {
 			return nil, fmt.Errorf("gcplogging: row %d: unparsable event_micros %q: %w", i, r.F[0].V, err)
 		}
 		payload := []byte(r.F[1].V)
-		if !isOutcomeEntry(payload) {
+		marked, isObject := outcomeMarker(payload)
+		if !isObject {
+			nonObjects++
+			continue
+		}
+		if !marked {
 			continue
 		}
 		o, err := eventline.Parse(payload, time.UnixMicro(micros).UTC())
@@ -332,20 +354,34 @@ func decodeRows(rows []bqRow) ([]biz.Outcome, error) {
 		}
 		out = append(out, o)
 	}
+	// Every row came back, and not one of them was a JSON object: the
+	// payload column is not the JSON column this adapter reads. Answering
+	// "no outcomes" there would be a measured zero on a money leg.
+	if len(rows) > 0 && nonObjects == len(rows) {
+		return nil, fmt.Errorf("gcplogging: all %d rows carry a payload that is not a JSON object — "+
+			"the view's payload column is not Log Analytics' json_payload; check WithView", len(rows))
+	}
 	return out, nil
 }
 
-// isOutcomeEntry reports whether a payload carries the exporter's marker.
-// It is a plain decode of the one key, so a non-JSON line from another
-// service is simply not ours.
-func isOutcomeEntry(payload []byte) bool {
-	var marker struct {
-		Event string `json:"event"`
+// outcomeMarker reports whether a payload is a JSON object, and if so
+// whether it carries the exporter's marker. The two answers are separate
+// because "not ours" and "not the column we asked for" need different
+// handling: the first is skipped, the second is refused by the caller.
+func outcomeMarker(payload []byte) (marked, isObject bool) {
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &probe); err != nil || probe == nil {
+		return false, false
 	}
-	if err := json.Unmarshal(payload, &marker); err != nil {
-		return false
+	raw, ok := probe["event"]
+	if !ok {
+		return false, true
 	}
-	return marker.Event == eventMarker
+	var event string
+	if err := json.Unmarshal(raw, &event); err != nil {
+		return false, true
+	}
+	return event == eventMarker, true
 }
 
 // validProjectID accepts the character set GCP project ids use — lowercase

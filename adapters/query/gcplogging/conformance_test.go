@@ -43,12 +43,18 @@ func scenarioEvents() ([]biz.Outcome, query.TimeRange) {
 // per-entity max that ADR-0009 de-dup is built on, and an ordered+limited
 // top-accounts read.
 //
-// Between them they filter on EVERY label in payloadPaths. That is not
-// decoration: a filter label is the only thing that puts its JSONPath into
-// the pushed-down WHERE, and the fake evaluates that WHERE — so a drifted
-// path shows up here as a parity mismatch rather than as a silent zero
-// against real BigQuery. TestPushdownCoversEveryLabel keeps the set
-// exhaustive as payloadPaths grows.
+// Between them they filter on EVERY label in payloadPaths, and each of
+// those filters MATCHES something in the fixture. Both halves are load-
+// bearing. A filter label is the only thing that puts its JSONPath into the
+// pushed-down WHERE, and the fake evaluates that WHERE — but a filter that
+// matches nothing compares empty to empty, and a JSONPath is then free to
+// drift to any other key the exporter writes without a single test noticing.
+// (That is not hypothetical: the first version of this suite filtered stage
+// on "capture", which the api-5xx locus never produces, and mis-mapping
+// $."biz.stage" to $."biz.flow" left the whole package green.) The
+// conformance loop therefore records a per-label WITNESS — a query filtering
+// on that label whose oracle answer is non-empty — and fails on any label
+// that has none.
 func engineQueries(w query.TimeRange, entity, customer string) []query.EventQuery {
 	return []query.EventQuery{
 		{Range: w, Filters: map[string]string{"outcome": "failed"}, GroupBy: []string{"currency", "entity"}, Agg: query.EventAggMaxPerGroup},
@@ -60,7 +66,7 @@ func engineQueries(w query.TimeRange, entity, customer string) []query.EventQuer
 		// The flow filter the engine adds whenever Request.Flows is set,
 		// plus the remaining pushed-down labels.
 		{Range: w, Filters: map[string]string{"flow": "invoice.pay", "outcome": "failed", "currency": "USD"}, GroupBy: []string{"stage"}},
-		{Range: w, Filters: map[string]string{"stage": "capture", "currency": "USD"}, GroupBy: []string{"outcome"}},
+		{Range: w, Filters: map[string]string{"stage": "settle", "currency": "USD"}, GroupBy: []string{"outcome"}},
 		{Range: w, Filters: map[string]string{"kind": "fee", "segment": "smb", "currency": "USD"}, GroupBy: []string{"outcome"}},
 		{Range: w, Filters: map[string]string{"entity": entity, "currency": "USD"}, GroupBy: []string{"entity"}, Agg: query.EventAggMaxPerGroup},
 		{Range: w, Filters: map[string]string{"customer": customer, "currency": "USD"}, GroupBy: []string{"customer"}},
@@ -119,7 +125,12 @@ func TestQuerierConformanceAgainstMemq(t *testing.T) {
 			srv.evaluate = mode.evaluate
 			q := srv.querier(t)
 
-			var sawMoney, sawGroups, sawDistinct, sawIDFiltered bool
+			var sawMoney, sawGroups, sawDistinct bool
+			// witnessed[label] means: some query filtered on that label and
+			// the oracle answered with data. Only then is that label's
+			// JSONPath actually compared through the fake's evaluation of
+			// the pushed-down WHERE.
+			witnessed := map[string]bool{}
 			for i, qy := range engineQueries(window, entity, customer) {
 				want, err := mq.QueryEvents(ctx, qy)
 				if err != nil {
@@ -132,11 +143,10 @@ func TestQuerierConformanceAgainstMemq(t *testing.T) {
 				if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
 					t.Fatalf("query %d parity mismatch:\ngcplogging=%+v\nmemq      =%+v", i, got, want)
 				}
-				if _, byID := qy.Filters["entity"]; byID && len(want) > 0 {
-					sawIDFiltered = true
-				}
-				if _, byID := qy.Filters["customer"]; byID && len(want) > 0 {
-					sawIDFiltered = true
+				if len(want) > 0 {
+					for label := range qy.Filters {
+						witnessed[label] = true
+					}
 				}
 				for _, g := range want {
 					if g.SumMinor != 0 || g.MaxMinor != 0 {
@@ -161,39 +171,23 @@ func TestQuerierConformanceAgainstMemq(t *testing.T) {
 			if !sawDistinct {
 				t.Fatal("parity is vacuous: the distinct-count verb returned zero customers")
 			}
-			if !sawIDFiltered {
-				t.Fatal("parity is vacuous: the entity/customer-filtered queries matched nothing")
-			}
 			if srv.queries == 0 {
 				t.Fatal("parity is vacuous: the adapter never issued a query")
 			}
+			// The per-label witness. A label with no witness is a JSONPath
+			// this suite compares empty against empty — free to drift to any
+			// other key the exporter writes, which against real BigQuery is
+			// a silent zero on a money leg.
+			if len(payloadPaths) == 0 {
+				t.Fatal("payloadPaths is empty — the witness check would pass vacuously")
+			}
+			for label, path := range payloadPaths {
+				if !witnessed[label] {
+					t.Errorf("label %q has no witness: no conformance query filters on it AND matches data, "+
+						"so its JSONPath %s is never really compared", label, path)
+				}
+			}
 		})
-	}
-}
-
-// TestPushdownCoversEveryLabel keeps the conformance suite exhaustive as
-// payloadPaths grows. A JSONPath only becomes load-bearing when some query
-// filters on its label — the fake evaluates the emitted WHERE, but only
-// over the predicates the queries actually produce. A label added to
-// payloadPaths with no conformance query filtering on it would ship
-// untested, and its failure mode against real BigQuery is zero rows: a
-// realized figure the engine reports as a deterministic measurement.
-func TestPushdownCoversEveryLabel(t *testing.T) {
-	w := query.TimeRange{From: from, To: to}
-	filtered := map[string]bool{}
-	for _, qy := range engineQueries(w, "e", "c") {
-		for k := range qy.Filters {
-			filtered[k] = true
-		}
-	}
-	if len(payloadPaths) == 0 {
-		t.Fatal("payloadPaths is empty — this check would pass vacuously")
-	}
-	for label := range payloadPaths {
-		if !filtered[label] {
-			t.Errorf("no conformance query filters on %q, so its JSONPath %s is never evaluated",
-				label, payloadPaths[label])
-		}
 	}
 }
 
