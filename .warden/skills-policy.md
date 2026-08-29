@@ -8,11 +8,13 @@ The per-project contract the AgentOps skill pack reads (platform
 - Go changed: `.warden/bin/warden verify --scope core` (gofmt clean, vet,
   build, test, govulncheck, golangci-lint across the workspace — nested
   adapter modules join the scope as they land). Those six steps are exactly
-  the CI `core checks` job's six, so this scope is what CI will say; both
-  lists live next to each other in `repo.yaml` and `.github/workflows/ci.yml`
-  and are edited together. Neither govulncheck nor golangci-lint needs a
-  local install — `scripts/ci-go.sh` pins both and runs them via `go run`
-  when they are not on PATH.
+  the six checks the CI `core checks` job runs, so no check can fail there
+  that could not fail here; the two lists live in `repo.yaml` and
+  `.github/workflows/ci.yml` and are edited together. It does not follow
+  that a green verify makes the job green — the job also installs the
+  pinned linter, which has no local counterpart. Neither govulncheck nor
+  golangci-lint needs a local install: `scripts/ci-go.sh` pins both and
+  runs them through `go run` when the pinned binary is not present.
 - `graph.yaml` changed: `.warden/bin/warden verify --scope graph`.
 - Iteration budget before revert: 3 attempts (the platform cap).
 

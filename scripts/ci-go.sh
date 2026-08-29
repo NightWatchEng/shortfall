@@ -23,53 +23,83 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.7.0}"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.13.1}"
 
-# The golangci-lint pin lives HERE and nowhere else: CI's installer reads it
-# back with `ci-go.sh lint-version` instead of hardcoding a second copy, so
-# the local gate and the CI job cannot end up on different analyzers.
+# The golangci-lint VERSION has one home: this variable. CI's installer
+# (scripts/install-golangci-lint.sh) reads it back with `lint-version`
+# rather than hardcoding a second copy, so a bump here moves both. The
+# env override is the same escape hatch GOVULNCHECK_VERSION has above, and
+# it moves both too — the installer reads the overridden value as well.
 if [ "$mode" = "lint-version" ]; then
   echo "$GOLANGCI_LINT_VERSION"
   exit 0
 fi
 
-# Resolve the linter ONCE, before the module loop:
-#   - a PATH golangci-lint AT the pin -> use it. That is what CI installs
-#     (a sha256-verified release tarball, content-addressed), and a dev
-#     machine that installed the same version gets the same speed.
-#   - anything else — absent, or present at a DIFFERENT version -> the
-#     pinned `go run`, exactly the pattern GOVULNCHECK_VERSION already uses.
-#     No manual install is needed anywhere, and the pin, never the machine,
-#     decides what `lint` means.
-# `go run` builds the linter on first use and caches it afterwards; a build
-# failure exits non-zero and fails the check, so the linter is never
-# silently skipped.
+# Resolve the linter ONCE, before the module loop. Candidates in order:
+# PATH, then $GOBIN, then $GOPATH/bin (`go install` puts it in one of the
+# latter two without touching PATH). A candidate is used only if it IS the
+# pinned version; a different version is ignored in favour of `go run` at
+# the pin, so the analyzer is the same one CI runs no matter what a machine
+# happens to have installed.
+#
+# The `go run` route is the pattern GOVULNCHECK_VERSION already uses: no
+# manual install anywhere. It builds the linter on first use and caches it;
+# a build failure exits non-zero and fails the check, so a missing or
+# unbuildable linter is LOUD, never a silent skip.
+lint_bin=""
 lint_via=""
 if [ "$mode" = "lint" ]; then
   want="${GOLANGCI_LINT_VERSION#v}"
-  have=""
-  if command -v golangci-lint >/dev/null 2>&1; then
-    have="$(golangci-lint version --short 2>/dev/null || true)"
-  fi
-  if [ "$have" = "$want" ]; then
-    lint_via=path
-    echo "ci-go.sh: using golangci-lint $want from PATH" >&2
-  else
+  found=""
+  seen=""
+  for cand in \
+    "$(command -v golangci-lint 2>/dev/null || true)" \
+    "$(go env GOBIN 2>/dev/null || true)/golangci-lint" \
+    "$(go env GOPATH 2>/dev/null || true)/bin/golangci-lint"
+  do
+    [ -n "$cand" ] && [ -x "$cand" ] || continue
+    # GOBIN and GOPATH/bin are frequently the same directory; report once.
+    case "$seen" in *"[$cand]"*) continue ;; esac
+    seen="$seen[$cand]"
+    got="$("$cand" version --short 2>/dev/null || true)"
+    if [ "$got" = "$want" ]; then
+      lint_bin="$cand"; lint_via=binary
+      echo "ci-go.sh: using golangci-lint $want at $cand" >&2
+      break
+    fi
+    # Plain `[ ... ] && x=y` would be the loop body's last command, and a
+    # false test there trips errexit. Keep it an if.
+    if [ -n "$got" ]; then found="${found}${found:+, }$cand ($got)"; fi
+  done
+  if [ -z "$lint_via" ]; then
     lint_via=gorun
-    if [ -n "$have" ]; then
-      echo "ci-go.sh: PATH golangci-lint is $have, not the pinned $want — ignoring it" >&2
+    if [ -n "$found" ]; then
+      echo "ci-go.sh: ignoring golangci-lint not at the pinned $want: $found" >&2
     else
-      echo "ci-go.sh: no golangci-lint on PATH" >&2
+      echo "ci-go.sh: no golangci-lint $want installed" >&2
     fi
     echo "ci-go.sh: linting via pinned 'go run golangci-lint@${GOLANGCI_LINT_VERSION}' (first run builds it, later runs are cached)" >&2
   fi
 fi
 
+# golangci-lint searches every ancestor directory AND $HOME for a
+# .golangci.* file, so an unrelated config above someone's clone would
+# silently change which linters run — locally green, red on CI's bare
+# runner, which is the whole failure this script exists to prevent. Pin the
+# config the same way the version is pinned: this repo's file if it has
+# one, and --no-config when it does not.
+lint_cfg=""
+for c in "$root/.golangci.yml" "$root/.golangci.yaml" "$root/.golangci.toml" "$root/.golangci.json"; do
+  if [ -f "$c" ]; then lint_cfg="$c"; break; fi
+done
+
 # Runs the resolved linter in $1. A function, not a command string: IFS is
 # newline-only here, so an unquoted string would never split into argv.
 run_lint() {
-  if [ "$lint_via" = path ]; then
-    (cd "$1" && golangci-lint run ./...)
+  if [ -n "$lint_cfg" ]; then set -- "$1" --config "$lint_cfg"; else set -- "$1" --no-config; fi
+  d="$1"; shift
+  if [ "$lint_via" = binary ]; then
+    (cd "$d" && "$lint_bin" run "$@" ./...)
   else
-    (cd "$1" && go run "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}" run ./...)
+    (cd "$d" && go run "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}" run "$@" ./...)
   fi
 }
 

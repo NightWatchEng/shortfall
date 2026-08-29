@@ -54,15 +54,19 @@ protected_paths:
 #   MODULES — ci-go.sh discovers every go.mod dynamically, so neither runner
 #     can silently skip a nested adapter module when it lands. Guaranteed by
 #     the script; nothing to keep in step.
-#   STEPS — the six commands below are exactly the six steps of the CI core
-#     job, in this order. NOT guaranteed by any script: it holds only while
-#     both lists are edited together. A step added to one and not the other
-#     is real drift, and it has happened — `vuln` and `lint` ran only in CI
-#     until workspace-dfd, so a locally green branch could fail the required
-#     job on lint findings `go vet` cannot see.
+#   STEPS — the six commands below are exactly the six ci-go.sh steps the
+#     CI core job runs, in this order. NOT guaranteed by any script: it
+#     holds only while both lists are edited together. A step added to one
+#     and not the other is real drift, and it has happened — `vuln` and
+#     `lint` ran only in CI until workspace-dfd, so a locally green branch
+#     could fail the required job on lint findings `go vet` cannot see.
 #
 # So: adding, removing, or reordering a step here means the same edit in
 # .github/workflows/ci.yml's core job, in the same PR.
+#
+# What this does NOT promise: that a green verify makes the job green. The
+# core job also installs the pinned linter, a step with no counterpart here
+# that can fail on its own. The guarantee is over the CHECKS, not the job.
 verify:
   core:
     - {run: "./scripts/ci-go.sh fmt"}
