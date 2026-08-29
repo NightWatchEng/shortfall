@@ -101,14 +101,16 @@ worth reconciling. If you disagree with one, you will disagree with the
 library.
 
 - **Money is `int64` minor units.** Every amount the library holds,
-  propagates, and does arithmetic on is an integer count of cents, and
-  `biz/` is float-free by a gate rule rather than by convention. Where a
-  backend imposes floats — a TSDB stores `float64`, so the metric
-  exporters and the PromQL querier convert at that boundary — the
-  conversion is confined to the adapter and the engine owns reading
-  money back out of it. Statistical code (baselines, recovery
-  fractions) uses floats freely and lives outside `biz/` by design
-  (ADR-0001).
+  propagates, and does arithmetic on is an integer count of minor units,
+  and `biz/` is float-free by a gate rule rather than by convention.
+  Currencies disagree about how many decimal places that is (USD two,
+  JPY zero, BHD three), so `Money` carries its own `Exponent` instead of
+  assuming cents. Where a backend imposes floats, the conversion is
+  confined to the adapter: a TSDB stores `float64`, so the metric
+  exporters and the PromQL querier convert at that boundary and the
+  engine owns reading money back out. Statistical code — baselines,
+  recovery fractions — uses floats freely and lives outside `biz/` by
+  design (ADR-0001).
 - **Deterministic and estimated values never merge into one figure.**
   No renderer sums realized loss with unrealized loss. You can add them
   yourself; the library will not do it silently on your behalf.
