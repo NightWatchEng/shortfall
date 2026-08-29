@@ -66,7 +66,7 @@ measurement and an estimate is the whole point:
 | **Deferred value** | In-flight and backlogged value, bucketed by age, with the registry's SLA deciding what has become lost | deterministic |
 | **Unrealized loss** | Demand that never arrived, sized against a seasonal baseline — always a range | estimate |
 | **Customer impact** | Distinct entities, segments, top accounts | deterministic |
-| **Coverage ratio** | Of the money your provider's ledger recorded, how much your telemetry also saw | reconciled |
+| **Coverage ratio** | Of the money your provider's ledger recorded, how much your telemetry also saw | trust |
 
 Coverage is the leg that makes the other four defensible. It is computed
 per (flow, currency) against the reconciled ledger and reported as the
@@ -100,10 +100,15 @@ These are decisions, not defaults, and they are the reason the output is
 worth reconciling. If you disagree with one, you will disagree with the
 library.
 
-- **Money is `int64` minor units.** Not `float64`, not `decimal`,
-  nowhere, including in the adapters. Float drift is precisely what
-  reconciliation exists to catch, so it may not be introduced by the
-  thing doing the reconciling.
+- **Money is `int64` minor units.** Every amount the library holds,
+  propagates, and does arithmetic on is an integer count of cents, and
+  `biz/` is float-free by a gate rule rather than by convention. Where a
+  backend imposes floats — a TSDB stores `float64`, so the metric
+  exporters and the PromQL querier convert at that boundary — the
+  conversion is confined to the adapter and the engine owns reading
+  money back out of it. Statistical code (baselines, recovery
+  fractions) uses floats freely and lives outside `biz/` by design
+  (ADR-0001).
 - **Deterministic and estimated values never merge into one figure.**
   No renderer sums realized loss with unrealized loss. You can add them
   yourself; the library will not do it silently on your behalf.
