@@ -1,0 +1,14 @@
+{
+  "rule_id": "docs-accuracy",
+  "action": "extend",
+  "change": "body gains the adjacent-code-contradiction bullet; covers gains misleading-comment",
+  "judged": 3,
+  "upheld": 3,
+  "refuted": 0,
+  "dismissed": 0,
+  "window": "2026-08-27..2026-08-29",
+  "source": "candidate section verbatim: 'PROPOSE RULE misleading-comment: 3 judged, 3 upheld, 0 refuted, 0 dismissed (100%, floor 0.438)'",
+  "backtest": "UNBACKTESTED — a claude rule is a judgment, not a regex; replaying it over history would mean re-running the judge, which is not affordable here. This change ships on the 3/3 candidate evidence alone; historical precision is unmeasured.",
+  "rules_version": "6a9fba74ec54",
+  "bead": "workspace-tgn"
+}

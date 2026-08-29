@@ -4,7 +4,7 @@ severity: MEDIUM
 engine: claude
 applies_to: ["**/*.md", "**/*.go"]
 excludes: [".warden/memory/**"]
-covers: [docs-drift, enforcement-claim-drift, scope-misstatement]
+covers: [docs-drift, enforcement-claim-drift, scope-misstatement, misleading-comment]
 ---
 Documentation tells the truth (ADR-0008). For Markdown files and Go doc
 comments in this diff, flag when:
@@ -21,6 +21,9 @@ comments in this diff, flag when:
   usage doc, diagram, or doc comment describing the OLD behavior.
 - Two statements of one standard (ADR vs CONTRIBUTING vs rule body vs
   comment) disagree after this diff.
+- A comment's description of the adjacent code's behavior is contradicted
+  by that code — wrong condition, wrong consumer, wrong direction
+  (retro 2026-08-29: the misleading-comment candidate, 3/3 upheld).
 
 Do NOT flag: clearly future-tensed roadmap text, ADR Context sections
 describing history, test names, or planned-and-marked design diagrams.
