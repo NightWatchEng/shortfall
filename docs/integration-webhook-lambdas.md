@@ -3,8 +3,8 @@
 A common two-system shape: stateless **webhook Lambdas** ingest provider
 webhooks (Stripe, Adyen, …) and call a **payments-service** API to process
 each one. This walks through instrumenting that pair so that when either
-side goes down, `shortfall impact` answers with the four legs — and shows
-which leg covers which failure direction.
+side goes down, a shortfall impact report answers with the four legs —
+and shows which leg covers which failure direction.
 
 Shortfall does not model services; it models **flows with ordered
 stages**. Here the flow spans both systems: the Lambda owns the entry
@@ -40,6 +40,8 @@ flows:
       model: usage_loss_curve
       recovered_fraction: 0.9
       within: PT2H
+    reconcile:                   # required — the ledger coverage is measured against
+      source: "stripe:payment_intents"
 ```
 
 Two choices worth making deliberately:
@@ -57,13 +59,27 @@ the outbound call through the propagating Transport so payments-service
 sees the same entity and dollars:
 
 ```go
-reg, _ := registry.Load("registry.yaml")
-exporter := cloudwatch.New() // EMF to stdout — the Lambda-native path
-em, _ := emit.New(&reg, exporter)
+var (
+    reg    registry.Registry
+    em     *emit.Std
+    client *http.Client
+)
 
-// One client for the Lambda's lifetime. The Transport is the egress
-// fence: it injects biz.vc only toward registry-allowlisted hosts.
-client := &http.Client{Transport: httpmw.NewTransport(&reg, http.DefaultTransport)}
+func setup() error {
+    r, err := registry.Load("registry.yaml")
+    if err != nil {
+        return err
+    }
+    reg = r
+    em, err = emit.New(&reg, cloudwatch.New()) // EMF to stdout — the Lambda-native path
+    if err != nil {
+        return err
+    }
+    // One client for the Lambda's lifetime. The Transport is the egress
+    // fence: it injects biz.vc only toward registry-allowlisted hosts.
+    client = &http.Client{Transport: httpmw.NewTransport(&reg, http.DefaultTransport)}
+    return nil
+}
 
 func handle(ctx context.Context, wh ProviderWebhook) error {
     ctx, err := biz.WithValueContext(ctx, biz.ValueContext{
@@ -81,6 +97,9 @@ func handle(ctx context.Context, wh ProviderWebhook) error {
     req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
         "https://payments.internal.example.com/internal/webhooks/process", body(wh))
     resp, callErr := client.Do(req)
+    if resp != nil {
+        defer resp.Body.Close() // keep the warm Lambda's connections reusable
+    }
 
     switch {
     case callErr != nil || resp.StatusCode >= 500:
@@ -96,11 +115,15 @@ func handle(ctx context.Context, wh ProviderWebhook) error {
 ```
 
 If the amount is not in the payload (only payments-service prices it),
-set `Estimated: true` and leave `Money.Amount` zero with a valid
-currency — the registry estimator's value fills in, and the report labels
-that value as estimated, never merged with real amounts. For HTTP-shaped
-Lambdas (function URLs, API Gateway proxy) the same stamping can live in
-`httpmw.Middleware` with a `WithIngress` hook instead.
+stamp at ingress through `httpmw.Middleware` with a `WithIngress` hook —
+the hook sets `Estimated: true` with a zero amount and a valid currency,
+and the middleware fills in the registry estimator's value at its
+declared exponent. That fill-in lives only on the middleware's ingress
+path: stamping directly with `biz.WithValueContext` (as above) records
+the amount you give it, and an `Estimated` context with amount zero
+stays zero on the wire — estimated and real value are never merged
+either way. HTTP-shaped Lambdas (function URLs, API Gateway proxy) can
+use the middleware directly.
 
 ## 3. payments-service (processing stage)
 
@@ -121,7 +144,16 @@ mux.HandleFunc("POST /internal/webhooks/process", func(w http.ResponseWriter, r 
 })
 
 handler := httpmw.Middleware(&reg)(mux)
+log.Fatal(http.ListenAndServe(":8080", handler))
 ```
+
+One more wire for the deferred leg: the engine reads backlog from the
+`biz_inflight_value` gauge, not from `deferred` outcome events. Wrap
+payments-service's pending-webhook set in an `emit.InFlightTracker` —
+`Track` on receive, `Done` on completion, and start its publish loop —
+so backlog age and value are visible the moment processing stalls
+(`Record(..., biz.ResultDeferred)` marks the outcome; the tracker is
+what the deferred leg actually measures).
 
 If the Lambda hands off through a queue instead of HTTP, swap
 `propagate/httpmw` for `propagate/sqs` (or `kafka`, `amqp`) — the flow
@@ -135,7 +167,7 @@ Every webhook is stamped at the door, so the report is deterministic:
 | Leg | Grounded by |
 |---|---|
 | Realized loss | `ingest`/`process` failures, summed, de-duped by `EntityID` |
-| Deferred value | webhooks recorded `deferred` that never reached `process`, by age; past `PT30M` they project to loss (`on_breach: lost`) |
+| Deferred value | the backlog the `InFlightTracker` publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`) |
 | Customer impact | distinct hashed customers, segments, top accounts — from ingest stamps |
 
 **Webhook Lambdas down** — the entry itself is dark, so no per-event
@@ -149,17 +181,26 @@ telemetry actually saw (coverage).
 
 ## 5. The report
 
+For a backend the CLI wires directly — `--prometheus` for metrics,
+`--sql` for events — one command answers for any window:
+
 ```sh
 shortfall impact \
   --registry registry.yaml \
   --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
-  --flow payment.webhook --format markdown
+  --flow payment.webhook --format markdown \
+  --prometheus http://prometheus:9090
 ```
 
-plus the query-adapter flags for your backend — for this CloudWatch
-wiring, the `cwinsights` querier reads events from the EMF records and
-metric legs from the CloudWatch metric store (see
-[adapters.md](adapters.md) for which backend grounds which leg).
+The CloudWatch wiring above reads back through the `cwinsights`
+querier instead — an events-only adapter used as a library, not a CLI
+flag: a small reporting job hands it to `engine.Compute` and renders
+the same report. It grounds the event legs (realized loss, customer
+impact) from the EMF records. The metric-grounded legs (deferred,
+unrealized) need a metrics-capable querier — today that is `promql` —
+since the EMF metric families land in CloudWatch's metric store, which
+no shipped querier reads yet. See [adapters.md](adapters.md) for
+exactly which backend grounds which leg.
 
 Next: [registry.md](registry.md) for every registry field,
 [money.md](money.md) for what a "dollar" means here.
