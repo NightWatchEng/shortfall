@@ -36,3 +36,5 @@ use ./adapters/query/cwinsights
 use ./test/loggolden
 
 use ./test/docsnippets
+
+use ./adapters/query/gcplogging
