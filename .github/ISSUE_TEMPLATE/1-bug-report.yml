@@ -34,8 +34,10 @@ body:
 
         - **Ad-hoc PromQL and Logs Insights sums are not the report.** They are
           not de-duplicated by entity and they do not exclude entities that
-          later succeeded. `shortfall impact` applies both corrections, so it
-          will legitimately disagree with a dashboard.
+          later succeeded. `shortfall impact` applies both corrections on the
+          events path, so it will legitimately disagree with a dashboard. A
+          metrics-only backend cannot de-dup a time series: its realized leg is
+          an upper bound and carries a caveat saying so.
         - **Realized and estimated values are never merged** into one figure by
           any renderer, by design.
 
