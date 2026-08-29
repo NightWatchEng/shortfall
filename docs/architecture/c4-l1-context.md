@@ -2,10 +2,11 @@
 
 What an incident cost, who it hit, and how sure you are — where that
 answer sits among the people and systems that produce and consume it.
-shortfall is a single box here on purpose; the module boundaries inside it
-come at [Level 2](c4-l2-containers.md). Colours are semantic
-([the stencil](STYLE.md)); arrow labels are kept short and the constraints
-live in the table below.
+shortfall is a single box here on purpose — the whole system in scope, CLI
+included; the module boundaries inside it, and the `core`/`optin` colour
+split that carries them, come at [Level 2](c4-l2-containers.md). Colours are
+semantic ([the stencil](STYLE.md)); arrow labels are kept short and the
+constraints live in the table below.
 
 ```mermaid
 flowchart TB

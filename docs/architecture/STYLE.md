@@ -26,16 +26,18 @@ where a node happens to sit on the canvas.
 
 That is the whole point of writing it down. A node drawn in the wrong class
 is not a cosmetic nit — it is a **false statement about the code**, and a
-reviewer should say so. Drawing `cmd/shortfall` in `core`, for instance,
-would assert a module boundary that does not exist: the CLI is its own Go
-module, and it pulls a SQLite driver the core module has never depended on.
+reviewer should say so. Drawing `cmd/shortfall` in `core` **at Level 2**,
+for instance, would assert a module boundary that does not exist: the CLI is
+its own Go module, and it pulls a SQLite driver the core module has never
+depended on. (At Level 1 the single shortfall box is the system in scope and
+legitimately covers the CLI — see the `core` row below.)
 
 | Class | Fill | Stroke | Means |
 |---|---|---|---|
 | `person` | `#08427b` | `#052e56` | A **human actor**. Someone who asks shortfall a question or answers for its output. |
 | `yours` | `#6b4c9a` | `#4a3369` | **The reader's own code.** You write it, you own it, shortfall only offers it an interface. |
-| `core` | `#1168bd` | `#0b4884` | **The shortfall core module** (`github.com/NightWatchEng/shortfall`). Imported directly; zero heavy dependencies. |
-| `optin` | `#2e6fb0` | `#0b4884` | **A separate nested Go module shipped from this repo** — every `adapters/*` module and the `cmd/shortfall` CLI. You opt in, and its dependencies stay out of your build until you do. |
+| `core` | `#1168bd` | `#0b4884` | **shortfall's own shipped code.** At Level 1 that is the whole system in scope, CLI included — there are no module boundaries to draw at that zoom. From Level 2 down it narrows to the **core Go module** (`github.com/NightWatchEng/shortfall`), imported directly, zero heavy dependencies, with `optin` carrying the nested modules. |
+| `optin` | `#2e6fb0` | `#0b4884` | **A separate nested Go module shipped from this repo** — every `adapters/*` module and the `cmd/shortfall` CLI. You opt in, and its dependencies stay out of your build until you do. Used from Level 2 down, where module boundaries are the subject. |
 | `ext` | `#8a8a8a` | `#5f5f5f` | **External to the shortfall module.** Reached only through an interface; shortfall does not control its behaviour or its uptime. |
 | `harness` | `#8a6d1f` | `#5c4814`, `stroke-dasharray:6 4` | **Never ships.** Test-only ground truth: `examples/checkout`, `testkit`, `test/*`. |
 
@@ -80,7 +82,11 @@ Two consequences worth stating outright, because they surprise people:
   Collapsing them into one colour would erase the claim the architecture is
   built to make. The class is defined by the **module boundary**, not by the
   word "adapter" — which is why `cmd/shortfall`, its own module pulling a
-  SQLite driver, is `optin` and not `core`.
+  SQLite driver, is `optin` and not `core` from Level 2 down.
+- **The `core`/`optin` split is a Level 2 distinction, deliberately.** Level
+  1 asks who uses shortfall and what it touches; module boundaries are not
+  yet the subject, so shortfall is one `core` box. Splitting it there would
+  answer a question the diagram has not asked.
 
 `harness` is the one class where a reader mistaking it for production code
 would be an expensive error, so it carries a **dashed stroke as well as a
@@ -193,7 +199,8 @@ things the picture was drawn to prove. A bullet that merely restates a box
 
 A diagram is on-stencil when all of these hold:
 
-- [ ] Every node is in exactly one semantic class, and the class is true.
+- [ ] Every node is in exactly one semantic class, and the class is true
+      at this diagram's level of zoom.
 - [ ] The `classDef` block is present, verbatim, minus unused classes.
 - [ ] Labels follow bold name / italic technology / plain responsibilities.
 - [ ] Human actors and entry-point nodes carry a leading emoji glyph.

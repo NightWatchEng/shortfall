@@ -45,7 +45,7 @@ flowchart TB
 
     CODE -->|"Record()"| EMIT
     MW -->|"ValueContext in ctx"| EMIT
-    CARRIERS -->|"one header — biz.vc"| MW
+    CARRIERS -->|"biz.vc off the message → ctx"| EMIT
     BIZ --- EMIT
     REG --- EMIT
     EMIT -->|"Exporter interface"| EXP
@@ -53,8 +53,8 @@ flowchart TB
     REG --- ENGINE
     QUERY --- ENGINE
     PAY -->|"Outcomes"| EMIT
-    ENGINE --> CLI
-    CLI --> INC
+    ENGINE -->|"Compute()"| CLI
+    ENGINE -->|"engine.Report"| INC
     HARNESS --> TESTKIT
     TESTKIT -.->|"goldens judge"| ENGINE
 
@@ -72,13 +72,14 @@ flowchart TB
 |---|---|
 | your code → `emit` | In-process Go call — `Record()` per stage transition; the `ValueContext` comes off the `ctx` the middleware stamped |
 | `propagate/httpmw` → `emit` | The decoded `ValueContext` rides in `context.Context`; ingress stamps it, egress injects it only toward registry-allowlisted hosts (ADR-0003, deny by default) |
-| queue carriers → `propagate/httpmw` | Exactly **one** header, `biz.vc` (ADR-0003) — the carrier interfaces take no Kafka/SQS/AMQP client dependency, so your client stays yours |
+| queue carriers → `emit` | A sibling seam to the HTTP middleware, not a stage before it: your consumer calls `propagate.Extract` to read the single `biz.vc` header (ADR-0003) off the message and puts the `ValueContext` on its `ctx`, where `Record()` finds it. The carrier interfaces take no Kafka/SQS/AMQP client dependency, so your client stays yours |
 | `biz` / `registry` → `emit` | Compile-time dependency, not a call: `emit` gets its money type and PII guard from `biz`, and its legal flows, stages and segment enum from `registry` |
 | `emit` → export adapter | The `emit.Exporter` interface — bounded metrics on the ADR-0004 label families plus **unsampled** outcome events. A drop increments `biz_dropped_events_total{reason}`; it is never silent |
 | `engine` → query adapter | The `query.Querier` interface — the only questions the engine may ask a backend. An adapter that serves no events answers with a `NotAvailableReason`, never zeros |
 | `registry` / `query` → `engine` | Compile-time dependency. The `engine-import-boundary` rule enforces the allowlist mechanically: `engine` may import only `query`, `registry`, `biz`, and its own subpackages |
 | `adapters/payment/stripe` → `emit` | Provider webhooks and wrapped-client responses become `biz.Outcome`s and enter the same capture path your own code uses |
-| `engine` → `cmd/shortfall` → incident adapter | The CLI composes the report and hands it to an incident adapter to post and refresh |
+| `engine` → `cmd/shortfall` | The CLI calls `engine.Compute` and renders the report to stdout via `engine/report` — text, JSON or markdown. Its verbs are `validate`, `impact`, `reconcile`, and it depends on no incident adapter |
+| `engine` → incident adapter | Separately: an incident adapter takes an `engine.Report` value directly (`slack.Client.Post` / `.Refresh`) and posts and refreshes it. Your program wires that call — it is not a CLI hand-off |
 | `examples/checkout` → `testkit` → `engine` | The harness knows the true answer by construction; `testkit` turns it into golden fixtures that judge the engine. Test-only — no production import path reaches either |
 
 ## Key facts this diagram encodes
@@ -103,6 +104,10 @@ flowchart TB
   do not get a private path into the engine; they become `biz.Outcome`s and
   go through `emit` like everything else, so de-dup, the PII guard and the
   label fences apply to them identically.
+- **The CLI is not the only consumer, and not a router.** `cmd/shortfall`
+  renders the report to stdout. An incident adapter takes an
+  `engine.Report` value from your own program — nothing in the CLI module
+  reaches an incident adapter, and its `go.mod` requires none.
 - **Amounts and ids ride events only.** Metrics carry the fixed ADR-0004
   label families, so no customer or entity id can turn into an unbounded
   metric label.
