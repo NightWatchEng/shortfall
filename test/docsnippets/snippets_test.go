@@ -92,9 +92,23 @@ func TestDocGoFencesCompile(t *testing.T) {
 
 // TestDocRegistryFencesValidate loads every complete registry example
 // (version: + flows:, no "..." elision) through registry.Load.
+//
+// docs/portability.md is governed here but deliberately NOT in
+// checkedDocs: it specifies the cross-language contract for readers
+// writing Java and Python, so it carries no Go fences at all (and
+// checkedDocs fails a doc that has none). Its registry example still has
+// to load, because a port copying a document that does not validate is
+// exactly the failure this checker exists to prevent.
 func TestDocRegistryFencesValidate(t *testing.T) {
 	root := repoRoot(t)
-	docs := []string{"README.md", "docs/integration-webhook-lambdas.md", "docs/quickstart.md", "docs/registry.md", "docs/adapters.md"}
+	docs := []string{
+		"README.md",
+		"docs/integration-webhook-lambdas.md",
+		"docs/quickstart.md",
+		"docs/registry.md",
+		"docs/adapters.md",
+		"docs/portability.md",
+	}
 	found := 0
 	for _, doc := range docs {
 		t.Run(strings.ReplaceAll(doc, "/", "_"), func(t *testing.T) {

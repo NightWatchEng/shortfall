@@ -1,0 +1,633 @@
+{
+  "vectors": "registry",
+  "vectors_version": 1,
+  "schema_version": 1,
+  "accept": [
+    {
+      "name": "reference",
+      "note": "the shape docs/registry.md documents",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n",
+      "facts": {
+        "version": 1,
+        "segments": [
+          "smb",
+          "enterprise"
+        ],
+        "allow_hosts": [
+          "*.internal.example.com",
+          "api.example.com"
+        ],
+        "severity": [
+          {
+            "sev": "SEV1",
+            "min_per_minute_minor": 100000
+          },
+          {
+            "sev": "SEV2",
+            "min_per_minute_minor": 10000
+          }
+        ],
+        "flows": {
+          "invoice.pay": {
+            "kind": "fee",
+            "currencies": [
+              "USD"
+            ],
+            "stages": [
+              {
+                "name": "auth",
+                "signals": [
+                  "http:POST /pay"
+                ]
+              },
+              {
+                "name": "capture",
+                "signals": [
+                  "queue:capture.q"
+                ]
+              }
+            ],
+            "value_stage": "capture",
+            "sla": {
+              "capture": {
+                "deadline_seconds": 1800,
+                "on_breach": "lost"
+              }
+            },
+            "estimator": {
+              "default_minor": 18750,
+              "exponent": 2,
+              "by_segment": {
+                "smb": 14200
+              }
+            },
+            "baseline": {
+              "seasonality": "hour_of_week",
+              "lookback_weeks": 8,
+              "holidays": "us"
+            },
+            "recovery": {
+              "model": "usage_loss_curve",
+              "recovered_fraction": 0.6,
+              "within_seconds": 7200
+            },
+            "reconcile": {
+              "source": "sql:ledger.payments",
+              "stage": "capture"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "minimal",
+      "note": "every optional block omitted; value_stage falls back to the last stage (ADR-0016)",
+      "yaml": "version: 1\nsegments: [default]\nflows:\n  checkout:\n    money: { kind: gmv }\n    stages:\n      - { name: pay, signals: [\"http:POST /pay\"] }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 1 }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0 }\n    reconcile: { source: \"stripe:charges\" }\n",
+      "facts": {
+        "version": 1,
+        "segments": [
+          "default"
+        ],
+        "allow_hosts": [],
+        "flows": {
+          "checkout": {
+            "kind": "gmv",
+            "stages": [
+              {
+                "name": "pay",
+                "signals": [
+                  "http:POST /pay"
+                ]
+              }
+            ],
+            "value_stage": "pay",
+            "baseline": {
+              "seasonality": "hour_of_week",
+              "lookback_weeks": 1
+            },
+            "recovery": {
+              "model": "usage_loss_curve",
+              "recovered_fraction": 0,
+              "within_seconds": 0
+            },
+            "reconcile": {
+              "source": "stripe:charges"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "zero_exponent_estimator",
+      "note": "a JPY flow's estimator declares exponent 0, so an estimate cannot inherit a 100x error",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [JPY]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 0, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n",
+      "facts": {
+        "version": 1,
+        "segments": [
+          "smb",
+          "enterprise"
+        ],
+        "allow_hosts": [
+          "*.internal.example.com",
+          "api.example.com"
+        ],
+        "severity": [
+          {
+            "sev": "SEV1",
+            "min_per_minute_minor": 100000
+          },
+          {
+            "sev": "SEV2",
+            "min_per_minute_minor": 10000
+          }
+        ],
+        "flows": {
+          "invoice.pay": {
+            "kind": "fee",
+            "currencies": [
+              "JPY"
+            ],
+            "stages": [
+              {
+                "name": "auth",
+                "signals": [
+                  "http:POST /pay"
+                ]
+              },
+              {
+                "name": "capture",
+                "signals": [
+                  "queue:capture.q"
+                ]
+              }
+            ],
+            "value_stage": "capture",
+            "sla": {
+              "capture": {
+                "deadline_seconds": 1800,
+                "on_breach": "lost"
+              }
+            },
+            "estimator": {
+              "default_minor": 18750,
+              "exponent": 0,
+              "by_segment": {
+                "smb": 14200
+              }
+            },
+            "baseline": {
+              "seasonality": "hour_of_week",
+              "lookback_weeks": 8,
+              "holidays": "us"
+            },
+            "recovery": {
+              "model": "usage_loss_curve",
+              "recovered_fraction": 0.6,
+              "within_seconds": 7200
+            },
+            "reconcile": {
+              "source": "sql:ledger.payments",
+              "stage": "capture"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "reject": [
+    {
+      "name": "yaml_syntax",
+      "error": "yaml_syntax",
+      "reference_message": "parse: yaml: line 1: did not find expected ',' or ']'",
+      "yaml": "version: 1\nsegments: [smb, enterprise\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "unknown_field",
+      "note": "a typoed knob must fail, never silently default",
+      "error": "unknown_field",
+      "reference_message": "parse: yaml: unmarshal errors:\n  line 2: field bogus not found in type registry.registryDoc",
+      "yaml": "version: 1\nbogus: true\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "multi_document",
+      "note": "a second document after --- is a silently ignored typo",
+      "error": "multi_document",
+      "reference_message": "parse: registry must be a single YAML document (content found after ---)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n---\nversion: 1\n"
+    },
+    {
+      "name": "version_unsupported",
+      "error": "version_unsupported",
+      "reference_message": "version 2 is not supported (want 1)",
+      "yaml": "version: 2\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "no_segments",
+      "note": "the enumeration is the metric-cardinality fence (ADR-0004)",
+      "error": "no_segments",
+      "reference_message": "at least one segment must be declared — the enumeration is the metric-cardinality fence (ADR-0004)",
+      "yaml": "version: 1\nsegments: []\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "segment_token",
+      "error": "segment_token",
+      "reference_message": "segment \"SMB\": character 'S' not in [a-z0-9._-]",
+      "yaml": "version: 1\nsegments: [SMB]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "segment_duplicate",
+      "error": "segment_duplicate",
+      "reference_message": "segment \"smb\" declared twice",
+      "yaml": "version: 1\nsegments: [smb, smb]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "allow_host_pattern",
+      "note": "a malformed pattern must fail at load, not become near-allow-all at match time (ADR-0003)",
+      "error": "allow_host_pattern",
+      "reference_message": "propagation.allow_hosts[0] \"*.\" is not a bare lowercase DNS name or *.domain pattern",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "severity_sev_shape",
+      "error": "severity_sev_shape",
+      "reference_message": "severity[1].sev \"\" must be a non-empty word of at most 32 characters with no whitespace",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: \"\", min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "severity_duplicate",
+      "error": "severity_duplicate",
+      "reference_message": "severity[1]: sev \"SEV1\" declared twice",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV1, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "severity_min_per_minute",
+      "error": "severity_min_per_minute",
+      "reference_message": "severity[1] (SEV2): min_per_minute 0 must be positive minor units",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 0 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "severity_order",
+      "note": "thresholds are strictly decreasing, so \"highest sev cleared\" is unambiguous",
+      "error": "severity_order",
+      "reference_message": "severity[1] (SEV2): min_per_minute 100000 must be strictly less than the previous threshold 100000 (order most-severe first)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 100000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "no_flows",
+      "error": "no_flows",
+      "reference_message": "no flows declared",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows: {}\n"
+    },
+    {
+      "name": "flow_name_token",
+      "error": "flow_name_token",
+      "reference_message": "flow name \"Invoice.Pay\": character 'I' not in [a-z0-9._-]",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  Invoice.Pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "money_kind",
+      "error": "money_kind",
+      "reference_message": "flow invoice.pay: money.kind \"revenue\" is not one of gmv, net_revenue, fee, take_rate",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: revenue }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "no_stages",
+      "error": "no_stages",
+      "reference_message": "flow invoice.pay: at least one stage is required",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages: []\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "stage_token",
+      "error": "stage_token",
+      "reference_message": "flow invoice.pay: stages[0] name \"AUTH\": character 'A' not in [a-z0-9._-]",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: AUTH,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "stage_duplicate",
+      "error": "stage_duplicate",
+      "reference_message": "flow invoice.pay: stage \"auth\" declared twice",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: auth, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "stage_no_signals",
+      "error": "stage_no_signals",
+      "reference_message": "flow invoice.pay: stage \"capture\" declares no signals",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "stage_empty_signal",
+      "error": "stage_empty_signal",
+      "reference_message": "flow invoice.pay: stage \"capture\" signals[0] is empty",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"  \"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "currency_code",
+      "error": "currency_code",
+      "reference_message": "flow invoice.pay: currencies entry \"usd\" is not an ISO 4217 code",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [usd]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "currency_duplicate",
+      "error": "currency_duplicate",
+      "reference_message": "flow invoice.pay: currencies entry \"USD\" declared twice",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD, USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "sla_unknown_stage",
+      "error": "sla_unknown_stage",
+      "reference_message": "flow invoice.pay: sla names unknown stage \"settle\"",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      settle: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "sla_deadline",
+      "note": "durations are the ISO-8601 subset, never Go duration strings",
+      "error": "sla_deadline",
+      "reference_message": "flow invoice.pay: sla capture deadline: duration \"30m\" is not ISO-8601 (P[nD][T[nH][nM][nS]], positive, \u003c= 10 years)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: 30m, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "sla_on_breach",
+      "error": "sla_on_breach",
+      "reference_message": "flow invoice.pay: sla capture on_breach \"gone\" is not lost or at_risk",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: gone }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "estimator_default_minor",
+      "error": "estimator_default_minor",
+      "reference_message": "flow invoice.pay: estimator default_minor 0 must be positive minor units",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 0, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "estimator_segment_unknown",
+      "note": "an estimator may not invent a segment outside the enumeration",
+      "error": "estimator_segment_unknown",
+      "reference_message": "flow invoice.pay: estimator by_segment names \"vip\", which is outside the declared segment enumeration",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { vip: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "estimator_by_segment_value",
+      "error": "estimator_by_segment_value",
+      "reference_message": "flow invoice.pay: estimator by_segment[smb] 0 must be positive minor units",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 0 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "estimator_exponent_range",
+      "error": "estimator_exponent_range",
+      "reference_message": "flow invoice.pay: estimator exponent 9 outside [0, 4]",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 9, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "baseline_seasonality",
+      "error": "baseline_seasonality",
+      "reference_message": "flow invoice.pay: baseline seasonality \"day_of_week\" is not supported (hour_of_week)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: day_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "baseline_lookback",
+      "error": "baseline_lookback",
+      "reference_message": "flow invoice.pay: baseline lookback_weeks 0 must be \u003e= 1",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 0, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "recovery_model",
+      "error": "recovery_model",
+      "reference_message": "flow invoice.pay: recovery model \"linear\" is not supported (usage_loss_curve)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: linear, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "recovery_fraction",
+      "error": "recovery_fraction",
+      "reference_message": "flow invoice.pay: recovery recovered_fraction 1.5 outside [0, 1]",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 1.5, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "recovery_within_missing",
+      "error": "recovery_within_missing",
+      "reference_message": "flow invoice.pay: recovery recovered_fraction is set but within is missing",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6 }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "recovery_within_without_fraction",
+      "note": "the iff holds in both directions",
+      "error": "recovery_within_without_fraction",
+      "reference_message": "flow invoice.pay: recovery within \"PT2H\" is set but recovered_fraction is 0 — remove one or set both",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "reconcile_source_required",
+      "note": "coverage is how Finance comes to trust the numbers",
+      "error": "reconcile_source_required",
+      "reference_message": "flow invoice.pay: reconcile source is required — coverage is how Finance comes to trust the numbers",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"\", stage: capture }\n"
+    },
+    {
+      "name": "reconcile_source_scheme",
+      "error": "reconcile_source_scheme",
+      "reference_message": "flow invoice.pay: reconcile source \"mongo:ledger.payments\" must use a known scheme (sql: or stripe:)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"mongo:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "reconcile_stage_unknown",
+      "error": "reconcile_stage_unknown",
+      "reference_message": "flow invoice.pay: reconcile stage \"settle\" is not a declared stage",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: settle }\n"
+    }
+  ],
+  "host_allowlist": [
+    {
+      "name": "exact",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "api.example.com",
+      "allowed": true
+    },
+    {
+      "name": "wildcard_one_label",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "svc.internal.example.com",
+      "allowed": true
+    },
+    {
+      "name": "wildcard_deeper",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "a.b.internal.example.com",
+      "allowed": true
+    },
+    {
+      "name": "uppercase_is_normalized",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "API.EXAMPLE.COM",
+      "allowed": true
+    },
+    {
+      "name": "wildcard_excludes_the_apex",
+      "note": "*.domain never matches domain itself",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "internal.example.com",
+      "allowed": false
+    },
+    {
+      "name": "suffix_trick",
+      "note": "the label boundary is part of the match",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "evil-internal.example.com",
+      "allowed": false
+    },
+    {
+      "name": "unlisted_host",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "notapi.example.com",
+      "allowed": false
+    },
+    {
+      "name": "exact_entry_grants_no_subdomains",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "x.api.example.com",
+      "allowed": false
+    },
+    {
+      "name": "trailing_dot",
+      "note": "malformed hosts are denied, never cleaned",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "api.example.com.",
+      "allowed": false
+    },
+    {
+      "name": "port_included",
+      "note": "the input contract is a bare hostname",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "api.example.com:443",
+      "allowed": false
+    },
+    {
+      "name": "empty_host",
+      "allow_hosts": [
+        "*.internal.example.com",
+        "api.example.com"
+      ],
+      "host": "",
+      "allowed": false
+    },
+    {
+      "name": "empty_allowlist_denies_everything",
+      "note": "deny by default is the ADR-0003 mandate",
+      "allow_hosts": [],
+      "host": "api.example.com",
+      "allowed": false
+    }
+  ],
+  "duration": [
+    {
+      "name": "minutes",
+      "input": "PT30M",
+      "seconds": 1800
+    },
+    {
+      "name": "one_day",
+      "input": "P1D",
+      "seconds": 86400
+    },
+    {
+      "name": "hours_and_minutes",
+      "input": "PT1H30M",
+      "seconds": 5400
+    },
+    {
+      "name": "all_units",
+      "input": "P1DT2H3M4S",
+      "seconds": 93784
+    },
+    {
+      "name": "one_second",
+      "input": "PT1S",
+      "seconds": 1
+    },
+    {
+      "name": "ten_years_exactly",
+      "input": "P3650D",
+      "seconds": 315360000
+    }
+  ],
+  "duration_reject": [
+    {
+      "name": "empty",
+      "input": ""
+    },
+    {
+      "name": "designator_only",
+      "input": "P"
+    },
+    {
+      "name": "time_designator_empty",
+      "input": "P1DT"
+    },
+    {
+      "name": "go_duration",
+      "note": "the commonest wrong guess",
+      "input": "30m"
+    },
+    {
+      "name": "unit_missing",
+      "input": "PT30"
+    },
+    {
+      "name": "months",
+      "note": "a month's length depends on when you ask",
+      "input": "P1M"
+    },
+    {
+      "name": "years",
+      "input": "P1Y"
+    },
+    {
+      "name": "units_out_of_order",
+      "input": "PT1M1H"
+    },
+    {
+      "name": "past_ten_years",
+      "input": "P3651D"
+    },
+    {
+      "name": "zero",
+      "note": "durations are strictly positive",
+      "input": "PT0S"
+    },
+    {
+      "name": "negative",
+      "input": "PT-5M"
+    },
+    {
+      "name": "lowercase",
+      "input": "p1d"
+    }
+  ]
+}

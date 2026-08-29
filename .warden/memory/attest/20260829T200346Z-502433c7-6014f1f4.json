@@ -1,0 +1,155 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "502433c7a957a35ccb58c9965b9aa44aaf8a75c7",
+  "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T20:03:46+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; rule bodies verbatim, reviewer-half memory recall: no relevant history)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; findings only, no reviewer rationale; examiner-half memory recall: no relevant history) \u2014 sole arbiter per graph.yaml"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (round 2 scoped re-review: per-finding addressed/not-addressed verdicts over the fix diff)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (round 3 scoped re-review of the one finding still open)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T20:03:46+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "502433c7a957a35ccb58c9965b9aa44aaf8a75c7",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/vectors.go",
+      "line": 372,
+      "severity": "MEDIUM",
+      "finding": "RegistryFacts.Equal compared two rendering-error sentinels as if they were data. JSON() folded a marshal failure into a fixed string independent of the facts' content, so any two unrenderable fact sets compared equal \u2014 the comparator the whole registry drift fence rests on. Reachable through the shipped validator: registry.Parse accepts a non-finite recovered_fraction and encoding/json refuses NaN. Proven by execution in both review passes (Equal reported true for fact sets differing in Version and Segments).",
+      "evidence": "func (f RegistryFacts) Equal(other RegistryFacts) bool { return f.JSON() == other.JSON() } with JSON() returning fmt.Sprintf(\"<unmarshalable facts: %v>\", err) on failure.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "JSON() now returns (string, error); Equal fails closed when either side cannot render; String() carries the failure into messages only and is never on a comparison path. Named regression test TestRegistryFactsEqualFailsClosed, mutation-verified by the round-2 examiner: reverting Equal to the sentinel comparison fails two subcases. Verdicted addressed in round 2.",
+      "id": "a122e7e90b5725d1"
+    },
+    {
+      "ts": "2026-08-29T20:03:46+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "502433c7a957a35ccb58c9965b9aa44aaf8a75c7",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "misleading-comment"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/vectors.go",
+      "line": 369,
+      "severity": "MEDIUM",
+      "finding": "Equal's doc comment claimed the JSON rendering normalizes nil-vs-empty; it does not for the fields without omitempty. The round-1 fix then claimed the opposite blanket \u2014 that no fact field carries omitempty \u2014 which four fields (Severity, Currencies, SLA, BySegment) contradict. The same defect class in inverted form.",
+      "evidence": "Round 1 comment: 'map ordering and nil-vs-empty never masquerade as drift'. Round 2 comment: 'the fact fields carry no omitempty, so `null` and `[]` render differently and compare unequal'. Probes showed nil vs empty Severity/Currencies/SLA/BySegment all compare EQUAL.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Root cause named: the struct is mixed and was described as uniform. The comment now states both halves with the fields in each, plus the omitempty POINTER case (Estimator) that obeys neither. Rather than leave a claim that had been wrong twice as prose, TestRegistryFactsEqualNilVersusEmpty pins all ten fields; the segments subcase was mutation-proven load-bearing (adding omitempty to Segments fails it). Verdicted addressed in round 3.",
+      "id": "641fa6f56afcf5bd"
+    },
+    {
+      "ts": "2026-08-29T20:03:46+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "502433c7a957a35ccb58c9965b9aa44aaf8a75c7",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 234,
+      "severity": "MEDIUM",
+      "finding": "The codec grammar section said the vector `1|f|e|||0||0||0|0` has five empty fields; four of its eleven fields are empty (customer_id, segment, currency, kind). The same wrong count had been generated into the committed vector's note, so it shipped inside testkit/vectors/vc-codec.json as well. This is the one worked example a port uses to check it treats an empty field as present-and-empty rather than absent.",
+      "evidence": "'a well-formed encoding with five empty fields' vs the generator's own enumeration of four names.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Corrected at all three sites \u2014 the doc, the generator note, and the regenerated vector file \u2014 and reworded to name the four fields explicitly rather than relying on a count. Verdicted addressed in round 2.",
+      "id": "cddc136faad2b638"
+    },
+    {
+      "ts": "2026-08-29T20:03:46+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "502433c7a957a35ccb58c9965b9aa44aaf8a75c7",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 582,
+      "severity": "MEDIUM",
+      "finding": "Section 4.3 claimed every registry reject vector differs from the reference document in exactly one place, so that a vector isolates the one rule it is named for. The no_flows vector was a hand-written second document differing in four ways (segment list, allowlist length, severity ladder dropped, flows emptied), which would mislead a port debugging against it.",
+      "evidence": "noFlowsYAML was an independent constant, not a mutation of baseYAML; every other case goes through sub(), which enforces one substitution.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "baseYAML split at the flows boundary so noFlowsYAML is baseHeaderYAML + 'flows: {}' \u2014 the claim is now true by construction rather than by convention. The round-2 examiner verified all 38 reject vectors are a single contiguous edit from the reference (common-prefix/common-suffix cover, zero violations) and that no_flows still fails under its own class. The finding's secondary claim about multi_document was REFUTED by the cross-examiner and not acted on. Verdicted addressed in round 2.",
+      "id": "439669a6f10f674f"
+    },
+    {
+      "ts": "2026-08-29T20:03:46+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "502433c7a957a35ccb58c9965b9aa44aaf8a75c7",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/vectors_test.go",
+      "line": 397,
+      "severity": "MEDIUM",
+      "finding": "Round 2 finding. The 'segments' subcase of the new TestRegistryFactsEqualNilVersusEmpty compared nil against a populated one-element slice rather than against an empty one, so it would report unequal regardless of omitempty and would have kept passing if Segments gained the tag.",
+      "evidence": "The empty side was base(), whose Segments is []string{\"smb\"}.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Both sides now differ only in the nil-vs-empty of the field under test. Mutation-verified in this session: adding omitempty to Segments now fails the subcase (it did not before), and removing the mutation restores green.",
+      "id": "4c6d02c655d8cb30"
+    },
+    {
+      "ts": "2026-08-29T20:03:46+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "502433c7a957a35ccb58c9965b9aa44aaf8a75c7",
+      "base_sha": "ec281480c8f1bbd12feb17a89e4d7a80a8175c93",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "misleading-comment"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/vectors.go",
+      "line": 373,
+      "severity": "LOW",
+      "finding": "Round 2 finding. The comment's omitempty list reads as exhaustive but omits FlowFact.Estimator, which carries omitempty and is a pointer \u2014 so a nil one is omitted while a pointer to a zero EstimatorFact renders in full, obeying neither stated rule. It is exactly the trap the comment exists to warn a port about: a port deriving an empty estimator object for an estimator-less flow would mismatch.",
+      "evidence": "FlowFact.Estimator *EstimatorFact `json:\"estimator,omitempty\"`; probe showed nil vs &EstimatorFact{} compare unequal.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The comment now names the pointer case and why the asymmetry is deliberate (no estimator and an estimator of zero are different registries), and it has its own subcase in TestRegistryFactsEqualNilVersusEmpty.",
+      "id": "a188257a5ee5a5a3"
+    }
+  ]
+}
