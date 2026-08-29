@@ -2,7 +2,6 @@
 id: comment-hygiene
 severity: MEDIUM
 engine: declarative
-implements: [review-lens-comments]
 applies_to: ["**/*.go"]
 checks:
   - id: no-bead-ids-in-comments

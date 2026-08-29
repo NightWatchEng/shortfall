@@ -3,7 +3,7 @@ id: tests-required
 severity: MEDIUM
 engine: claude
 implements: [review-lens-tests]
-applies_to: ["biz/**", "registry/**", "emit/**", "propagate/**", "engine/**", "query/**", "testkit/**", "examples/**", "cmd/**"]
+applies_to: ["biz/**", "registry/**", "emit/**", "propagate/**", "engine/**", "query/**", "testkit/**", "examples/**", "cmd/**", "adapters/**", "test/**"]
 ---
 Definition of Done: new logic carries unit tests in the same diff; bugs found
 live or in review get a NAMED regression test; a changed hot path

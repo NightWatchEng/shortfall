@@ -6,7 +6,7 @@ implements: [security-misconfiguration]
 applies_to: ["**/*.go", "**/*.yml", "**/*.yaml"]
 checks:
   - id: tls-verification-off
-    pattern: 'InsecureSkipVerify:\s*true'
+    pattern: 'InsecureSkipVerify\s*[:=]\s*true'
     message: "TLS peer validation turned off — leave the default on (A02:2025)"
 ---
 Catalog entry A02:2025, adopted 2026-08-29 (workspace-a74) with the

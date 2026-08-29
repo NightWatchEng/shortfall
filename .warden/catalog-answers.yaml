@@ -109,9 +109,11 @@ answers:
     verdict: not-applicable
     reason: >-
       The catalog starter's patterns are Python idioms (bare except) with
-      no Go analog; the Go class (discarded error returns) is guarded by
-      go vet in CI plus the review charter's fail-open item, and silent
-      error swallowing has judged corpus findings under those lenses.
+      no Go analog. The Go class (discarded error returns) is guarded in
+      CI by errcheck via golangci-lint (v2 defaults, no config override —
+      scripts/ci-go.sh lint), with the review charter's fail-open item on
+      top; silent error swallowing has judged corpus findings under those
+      lenses.
     decided_in: workspace-a74
   - id: unbounded-resource-use
     verdict: not-applicable
@@ -138,8 +140,21 @@ answers:
   - id: weak-cryptography
     verdict: not-applicable
     reason: >-
-      No cryptographic surface: the library mints no tokens and stores no
-      passwords; in-tree hashing is non-security keying (xxhash) and
-      customer ids arrive pre-hashed by the consumer (the PII guard
-      requires it). Flips if any crypto-bearing feature lands.
+      The tree signs — SigV4 request signing hand-rolls stdlib
+      HMAC-SHA256 (cwinsights/sigv4.go) and Stripe webhook signatures are
+      verified via the official SDK — but the WEAK-crypto class has no
+      instance: strong stdlib primitives only, no MD5/SHA1, no minted
+      tokens, no stored passwords; customer ids arrive pre-hashed by the
+      consumer (the PII guard requires it). Flips if hashing or signing
+      ever lands outside stdlib HMAC-SHA256, or if tokens are minted.
+    decided_in: workspace-a74
+  - id: review-lens-comments
+    verdict: not-applicable
+    reason: >-
+      The harmful subset — a comment contradicted by the adjacent code —
+      is enforced by docs-accuracy's misleading-comment bullet, and bead
+      ids in comments by comment-hygiene. The remaining WHY-vs-WHAT craft
+      is ADR-0014 convention judged as general review craft; a dedicated
+      per-review WHY lens was declined (cost unmeasured, no judged local
+      finding in the class). Revisit if missing-WHY findings appear.
     decided_in: workspace-a74

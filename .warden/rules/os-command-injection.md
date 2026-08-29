@@ -6,7 +6,7 @@ implements: [os-command-injection]
 applies_to: ["**/*.go"]
 checks:
   - id: shell-dash-c
-    pattern: 'exec\.Command\(\s*"(sh|bash|/bin/sh|/bin/bash)"\s*,\s*"-c"'
+    pattern: 'exec\.Command(Context)?\(\s*(\w+\s*,\s*)?"(sh|bash|/bin/sh|/bin/bash)"\s*,\s*"-c"'
     message: "command string runs via a shell — pass an argv list to exec.Command instead (CWE-78)"
 ---
 Catalog entry CWE-78, adopted 2026-08-29 (workspace-a74) with the starter
