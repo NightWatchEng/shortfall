@@ -1,0 +1,14 @@
+{
+  "bead": "workspace-a74",
+  "head_sha": "f319c3d7d6d272ae5890c9f5905324bf3fbb9e07",
+  "base_sha": "f319c3d7d6d272ae5890c9f5905324bf3fbb9e07",
+  "rules_version": "9644664b802b",
+  "decided_at": "2026-08-29T15:06:58+00:00",
+  "decided": "Amends the triage decision after review round 1: the split is 3 adopted + 21 answered + 2 implements links (docs-accuracy -> review-lens-documentation, tests-required -> review-lens-tests), not the original 3 + 23. comment-hygiene's implements link was dropped as an overclaim (a bead-id regex does not enforce the comments-explain-WHY lens) and that row is answered instead; tests-required's applies_to widened to adapters/** and test/** so its implements claim is true repo-wide.",
+  "why": "Review confirmed eight findings: two implements overclaims, two factually wrong answers (go vet does not check discarded errors \u2014 errcheck does; the tree signs with HMAC-SHA256, so 'no cryptographic surface' was false), an absent named mechanism in a rule body, two regex coverage gaps (CommandContext, assignment-form InsecureSkipVerify), and this drift itself between the first shard's 23 and the delivered 20.",
+  "cost_if_wrong": "Same reversibility as the original: answers are records, links are one line, widened applies_to only adds review surface.",
+  "alternatives": [
+    "Adopt review-lens-comments as a claude rule \u2014 rejected again: cost unmeasured per review, no judged local finding in the WHY class"
+  ],
+  "scope": "Supersedes the 23-answer count in the first triage shard; final state: .warden/catalog-answers.yaml holds 21 answers, three adopted rules carry widened Go-adapted patterns, tests-required applies repo-wide over logic-bearing paths."
+}
