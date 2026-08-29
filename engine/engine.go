@@ -46,10 +46,12 @@ const (
 // Leg is a deterministic money total: native per-currency sums (ADR-0001
 // — no silent normalization), a transaction count, and its evidence label.
 type Leg struct {
-	Count      int64
-	ByCurrency map[string]int64 // minor units per ISO 4217 code
-	Evidence   Evidence
-	Caveats    []string // e.g. "metrics-only: upper bound, not de-duped"
+	Count       int64
+	ByCurrency  map[string]int64 // minor units per ISO 4217 code
+	Evidence    Evidence
+	Caveats     []string // e.g. "metrics-only: upper bound, not de-duped"
+	Unavailable bool     // the leg could not be grounded at all — a Caveat names why;
+	// renderers must not present its zero as a measured zero
 }
 
 // DeferredLeg is in-flight value at the window's snapshot instant, with
@@ -69,11 +71,13 @@ type DeferredLeg struct {
 // EstLeg is a counterfactual range: never a point, always [Low, High]
 // around Mid, in minor units per currency.
 type EstLeg struct {
-	LowMinor  map[string]int64
-	MidMinor  map[string]int64
-	HighMinor map[string]int64
-	Evidence  Evidence // always EvidenceEstimate; carried for renderers
-	Notes     []string // recovery assumption, retention gaps, attribution hints
+	LowMinor    map[string]int64
+	MidMinor    map[string]int64
+	HighMinor   map[string]int64
+	Evidence    Evidence // always EvidenceEstimate; carried for renderers
+	Notes       []string // recovery assumption, retention gaps, attribution hints
+	Unavailable bool     // the leg could not be grounded at all — a Note names why;
+	// renderers must not present its empty range as a measured zero
 }
 
 // CustomerImpact is one affected account for the top-N list.
@@ -143,9 +147,10 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 
 	if leg, err := RealizedLeg(ctx, reg, q, req); err != nil {
 		report.Realized = Leg{
-			Evidence:   EvidenceDeterministic,
-			ByCurrency: map[string]int64{},
-			Caveats:    []string{"unavailable: " + err.Error()},
+			Evidence:    EvidenceDeterministic,
+			ByCurrency:  map[string]int64{},
+			Caveats:     []string{"unavailable: " + err.Error()},
+			Unavailable: true,
 		}
 	} else {
 		report.Realized = leg
@@ -154,9 +159,10 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 	if leg, err := Deferred(ctx, reg, q, req); err != nil {
 		report.Deferred = DeferredLeg{
 			Leg: Leg{
-				Evidence:   EvidenceDeterministic,
-				ByCurrency: map[string]int64{},
-				Caveats:    []string{"unavailable: " + err.Error()},
+				Evidence:    EvidenceDeterministic,
+				ByCurrency:  map[string]int64{},
+				Caveats:     []string{"unavailable: " + err.Error()},
+				Unavailable: true,
 			},
 		}
 	} else {
@@ -171,11 +177,12 @@ func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req R
 
 	if leg, err := Unrealized(ctx, reg, q, req); err != nil {
 		report.Unrealized = EstLeg{
-			Evidence:  EvidenceEstimate,
-			LowMinor:  map[string]int64{},
-			MidMinor:  map[string]int64{},
-			HighMinor: map[string]int64{},
-			Notes:     []string{"unavailable: " + err.Error()},
+			Evidence:    EvidenceEstimate,
+			LowMinor:    map[string]int64{},
+			MidMinor:    map[string]int64{},
+			HighMinor:   map[string]int64{},
+			Notes:       []string{"unavailable: " + err.Error()},
+			Unavailable: true,
 		}
 	} else {
 		report.Unrealized = leg

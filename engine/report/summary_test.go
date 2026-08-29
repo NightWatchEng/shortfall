@@ -72,6 +72,53 @@ func TestSummaryDegradedLegs(t *testing.T) {
 	}
 }
 
+// TestSummaryUnavailableLegsSayNA pins the ungrounded-leg contract: a leg
+// Compute could not ground renders n/a in the vendor-field line, never a
+// plausible-looking zero (the caveat naming why rides the JSON report).
+func TestSummaryUnavailableLegsSayNA(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*engine.Report)
+		want    string
+		notWant string
+	}{
+		{
+			"realized",
+			func(r *engine.Report) {
+				r.Realized = engine.Leg{Evidence: engine.EvidenceDeterministic, Caveats: []string{"unavailable: no event source"}, Unavailable: true}
+			},
+			"realized n/a", "realized [deterministic]",
+		},
+		{
+			"deferred",
+			func(r *engine.Report) {
+				r.Deferred = engine.DeferredLeg{Leg: engine.Leg{Evidence: engine.EvidenceDeterministic, Caveats: []string{"unavailable: no metric source"}, Unavailable: true}}
+			},
+			"deferred n/a", "in-flight",
+		},
+		{
+			"unrealized",
+			func(r *engine.Report) {
+				r.Unrealized = engine.EstLeg{Evidence: engine.EvidenceEstimate, Notes: []string{"unavailable: no metric source"}, Unavailable: true}
+			},
+			"unrealized n/a", "unrealized [estimate]",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := summaryFixture()
+			c.mutate(&r)
+			got := Summary(r)
+			if !strings.Contains(got, c.want) {
+				t.Fatalf("summary missing %q: %q", c.want, got)
+			}
+			if strings.Contains(got, c.notWant) {
+				t.Fatalf("summary must not render %q for an unavailable leg: %q", c.notWant, got)
+			}
+		})
+	}
+}
+
 // TestMoneyRangeAsymmetricMaps pins the defensive rendering: Summary takes
 // any Report, so bounds present in only some of the three maps must never
 // render an inverted range, and a Mid-only leg is an estimate, not "none".

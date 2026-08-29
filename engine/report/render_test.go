@@ -170,6 +170,9 @@ func TestComputedEventsOnlyReportStatesDeferredGap(t *testing.T) {
 			t.Fatalf("%s render of an events-only report must state the deferred leg's missing metric source, got:\n%s", name, out)
 		}
 	}
+	if s := Summary(rep); !strings.Contains(s, "deferred n/a") {
+		t.Fatalf("summary of an events-only report must say the deferred leg is n/a, got: %q", s)
+	}
 }
 
 // TestUngroundedLegLabelsRendered is the honesty invariant for degraded
@@ -192,12 +195,22 @@ func TestUngroundedLegLabelsRendered(t *testing.T) {
 		"backend serves no events",
 		"no reconciliation has run",
 	}
-	for name, out := range map[string]string{"text": RenderText(r), "markdown": RenderMarkdown(r)} {
-		for _, label := range labels {
-			if !strings.Contains(out, label) {
-				t.Fatalf("%s render drops the ungrounded-leg label %q", name, label)
+	cases := []struct {
+		name   string
+		render func(engine.Report) string
+	}{
+		{"text", RenderText},
+		{"markdown", RenderMarkdown},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := c.render(r)
+			for _, label := range labels {
+				if !strings.Contains(out, label) {
+					t.Errorf("render drops the ungrounded-leg label %q", label)
+				}
 			}
-		}
+		})
 	}
 }
 
