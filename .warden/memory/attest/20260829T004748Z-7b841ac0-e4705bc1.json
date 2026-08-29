@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "7b841ac00ab0a5691d6776841fa52e20b9b25c47",
+  "base_sha": "83c0daf3d013ef951b3dda3cd8e3407a81d32e4e",
+  "rules_version": "b51f166ce220",
+  "reviewed_at": "2026-08-29T00:47:48+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (claude-fable-5) \u2014 combined pass; verified the reconcile verb, docs agreement, old-string sweep, and mutation-tested the regression test"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same combined pass; refuted 3 candidates (test-file import-boundary, vacuous-pass, ADR-0010 historical M8) with cited evidence"
+    }
+  ],
+  "records": []
+}
