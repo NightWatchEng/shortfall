@@ -13,9 +13,10 @@ import (
 	"github.com/NightWatchEng/shortfall/biz"
 )
 
-// line mirrors the exporters' field set. Source has two spellings on the
-// wire: Loki/EMF write "source", Splunk HEC writes "source_system" (HEC
-// reserves "source" for its own envelope).
+// line mirrors the exporter's field set. Source has two accepted
+// spellings on the wire: "source" (what the EMF exporter writes) and
+// "source_system" (kept for records ingested by since-removed exporters
+// whose envelope reserved "source").
 type line struct {
 	Flow        string          `json:"biz.flow"`
 	Stage       string          `json:"biz.stage"`

@@ -10,7 +10,7 @@ import (
 )
 
 // captureExporter is the smallest possible Exporter: real services use an
-// adapter (adapters/export/otlp, prometheus, statsd, ...) instead.
+// adapter (adapters/export/prometheus or cloudwatch) instead.
 type captureExporter struct {
 	events  int
 	metrics int

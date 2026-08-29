@@ -28,8 +28,8 @@ import (
 
 // Backend reads how many signals have actually reached a concrete
 // exporter's backend. A harness implements it over its own wire form
-// (OTLP metricdata, a Prometheus registry, StatsD lines) and reports
-// counts, so the suite stays blind to format.
+// (a Prometheus registry, CloudWatch EMF records) and reports counts,
+// so the suite stays blind to format.
 type Backend interface {
 	// MetricPoints is the number of metric data points delivered so far.
 	MetricPoints() int
@@ -58,8 +58,8 @@ var baseTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 // sampleMetrics builds a fixed batch of metric points, each on a distinct
 // series (a unique currency label per point), stamped with its own time.
 //
-// Distinct series is load-bearing: an aggregating backend (Prometheus,
-// StatsD) collapses points that share a label set into one series, which
+// Distinct series is load-bearing: an aggregating backend (Prometheus)
+// collapses points that share a label set into one series, which
 // would make "delivered == n" untestable. n distinct series in must mean n
 // series out, for preserving and aggregating exporters alike, so a dropped
 // point shows up as a missing series either way.

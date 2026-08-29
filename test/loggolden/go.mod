@@ -23,6 +23,5 @@ require (
 replace (
 	github.com/NightWatchEng/shortfall => ../..
 	github.com/NightWatchEng/shortfall/adapters/export/cloudwatch => ../../adapters/export/cloudwatch
-	github.com/NightWatchEng/shortfall/adapters/httpbatch => ../../adapters/httpbatch
 	github.com/NightWatchEng/shortfall/adapters/query/cwinsights => ../../adapters/query/cwinsights
 )

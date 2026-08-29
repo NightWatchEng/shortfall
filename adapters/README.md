@@ -2,10 +2,10 @@
 
 Every adapter lives in its own nested Go module (the otel-contrib pattern),
 so depending on one backend never pulls another backend's SDK into your
-build. Planned families:
+build. Families:
 
-- `export/` — otlp, prometheus, statsd, cloudwatch, splunkhec, datadog, loki
-- `query/` — promql, logql, cwinsights, spl, sql
+- `export/` — prometheus (metrics), cloudwatch (EMF: metrics + events)
+- `query/` — promql (metrics), cwinsights and sql (events)
 - `payment/` — stripe (webhook receiver, wrapped client, reconciler)
 - `incident/` — slack, incidentio, rootly, firehydrant, pagerduty
 

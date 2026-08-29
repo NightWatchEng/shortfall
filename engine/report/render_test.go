@@ -145,7 +145,7 @@ func TestEvidenceTagsPresent(t *testing.T) {
 }
 
 // TestComputedEventsOnlyReportStatesDeferredGap drives engine.Compute over
-// an events-only backend (the shape the sql/logql/cwinsights/spl queriers
+// an events-only backend (the shape the sql and cwinsights queriers
 // serve) and asserts the deferred leg's metrics-unavailable caveat survives
 // into both human renders — the exact plausible-looking zero this package
 // used to print.

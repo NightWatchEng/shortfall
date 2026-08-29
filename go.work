@@ -6,8 +6,6 @@ use ./adapters/export/prometheus
 
 use ./adapters/export/cloudwatch
 
-use ./adapters/httpbatch
-
 use ./adapters/query/promql
 
 use ./adapters/query/sql
