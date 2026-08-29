@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "88216d58bdd66eb1dfce871ada8fe48a6b8f168c",
+  "base_sha": "79a6c671f282ab42f88bb75cabbc70e1fd433e46",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-29T19:38:38+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass over main..HEAD, rule bodies quoted verbatim, reviewer-side pattern memory only"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context) \u2014 sole arbiter; received the findings list and the review package only, never the reviewer's rationale; examiner-side precedent memory only"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-29T19:38:38+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "88216d58bdd66eb1dfce871ada8fe48a6b8f168c",
+      "base_sha": "79a6c671f282ab42f88bb75cabbc70e1fd433e46",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/ISSUE_TEMPLATE",
+      "file": ".github/ISSUE_TEMPLATE/1-bug-report.yml",
+      "line": 37,
+      "severity": "MEDIUM",
+      "finding": "The bug-report preamble claimed unconditionally that 'shortfall impact applies both corrections' (per-entity de-dup and excluding entities that later succeeded). True only on the events path: engine.RealizedLeg dispatches on caps.Events first (engine/realized.go:30-38) and falls through to realizedFromMetrics whenever the backend serves no events; that path issues one failed biz_value_total sum with no success-exclusion query and no per-entity grouping, self-labelling the result 'metrics-only: upper bound, not de-duped by entity' (engine/realized.go:108-112). A --prometheus-only invocation reaches it (cmd/shortfall/impact.go:159-163; promql declares Caps{Metrics:true, Events:false}). The claim also contradicted the same file's own query-adapters description 45 lines below, and dropped the qualifier README.md:267 carries verbatim ('applies both corrections on the events path') \u2014 ADR-0008 clause 5 inside one file. Harm was the inverse of the promise: a Prometheus-only reporter was told to expect the report to disagree with their dashboard when the realized leg is essentially that same sum, manufacturing the round trip this form exists to prevent.",
+      "evidence": "\"`shortfall impact` applies both corrections, so it will legitimately disagree with a dashboard.\" \u2014 contradicted by engine/realized.go:108 Caveats: []string{\"metrics-only: upper bound, not de-duped by entity\"}",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Restored README's own qualifier and named the metrics-only case explicitly: 'applies both corrections on the events path ... A metrics-only backend cannot de-dup a time series: its realized leg is an upper bound and carries a caveat saying so.' Round-2 scoped re-review verdicted this addressed, verifying each half against engine/realized.go rather than against the new wording: the events path genuinely applies both corrections (succeeded-entity set at :67-104 plus EventAggMaxPerGroup at :89), the metrics path genuinely carries the caveat and genuinely renders it (engine/report/render.go:58-60 text, :158-161 markdown, engine/engine.go:54 JSON), and the direction is right because de-dup and recovery-exclusion only subtract. No remaining contradiction with the file's own query-adapters field, README.md:266-268, or docs/adapters.md:24,32.",
+      "id": "8d2316727270afcf"
+    }
+  ]
+}
