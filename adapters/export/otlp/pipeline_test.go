@@ -351,7 +351,7 @@ func TestEmitNeverExceedsQueueBetweenFlushes(t *testing.T) {
 // TestConcurrentEmitNeverExceedsQueue is the per-sink half of the same
 // guarantee: the queue is shared across calls, so overlapping ExportEvents
 // calls must not put more than its capacity in flight between drains. Why
-// overlap is reachable at all is on providerSink.mu.
+// overlap is reachable at all is on providerSink's slot.
 func TestConcurrentEmitNeverExceedsQueue(t *testing.T) {
 	const callers, per = 4, eventQueueSize
 	exp := &boundedExporter{}
@@ -585,7 +585,8 @@ func TestWithResourceMergesRatherThanOverrides(t *testing.T) {
 // Shutdown — the sink's own doc names that concurrency. If the sink is
 // stopped while such a call is in flight, sdklog discards the records and
 // answers ForceFlush with nil, and the caller is told a batch of outcome
-// events landed when none did. Deciding under mu is what orders the two.
+// events landed when none did. Marking stopped before the wait, and reading
+// it after taking the slot, is what orders the two.
 func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
 	const iters = 2000
 	const batch = 3
@@ -607,9 +608,11 @@ func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
 		}()
 		wg.Wait()
 
-		// Reported success while delivering fewer than it was handed. Partial
-		// is the commoner mode — a provider stopped mid-batch — and a check
-		// for zero delivered would miss it entirely.
+		// Reported success while delivering fewer than it was handed. This
+		// batch is one chunk, so in practice the drops seen here are total;
+		// the assertion is written against the batch rather than zero because
+		// a multi-chunk emit stopped between chunks loses part, and a check
+		// for zero would call that a pass.
 		if exportErr == nil && len(logExp.all()) != batch {
 			silent++
 		}
@@ -621,9 +624,16 @@ func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
 
 // slowLogExporter holds the sink's slot for a fixed time, standing in for a
 // real OTLP HTTP export with its own timeout and retries.
-type slowLogExporter struct{ d time.Duration }
+type slowLogExporter struct {
+	d       time.Duration
+	entered chan struct{}
+}
 
 func (s *slowLogExporter) Export(context.Context, []sdklog.Record) error {
+	if s.entered != nil {
+		close(s.entered)
+		s.entered = nil
+	}
 	time.Sleep(s.d)
 	return nil
 }
@@ -637,13 +647,14 @@ func (s *slowLogExporter) ForceFlush(context.Context) error { return nil }
 // export's own timeout and retries, well past any shutdown budget. The sink
 // serialises on a channel for exactly this reason.
 func TestShutdownHonorsItsDeadline(t *testing.T) {
-	sink := newProviderSink(&slowLogExporter{d: 300 * time.Millisecond}, defaultResource())
+	entered := make(chan struct{})
+	sink := newProviderSink(&slowLogExporter{d: 300 * time.Millisecond, entered: entered}, defaultResource())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		_ = sink.emit(context.Background(), outcomes(3))
 	}()
-	time.Sleep(20 * time.Millisecond) // let emit take the slot
+	<-entered // the emit holds the slot; no sleep to lose a race against
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
@@ -658,4 +669,68 @@ func TestShutdownHonorsItsDeadline(t *testing.T) {
 	if err == nil {
 		t.Error("Shutdown that abandoned its wait returned nil — the caller must learn the drain did not finish")
 	}
+}
+
+// TestShutdownDeadlineNeverLosesEventsSilently guards the seam between the
+// two things Shutdown owes its caller: finish by the deadline, and never lose
+// events without saying so. When those conflict, durability wins.
+//
+// sdklog latches its stopped flag BEFORE honouring ctx, after which it
+// discards records and answers ForceFlush with nil. So a Shutdown that
+// stopped the provider on its way out of an expired wait would turn an
+// in-flight emit's remaining chunks into silent loss — and the latch makes a
+// later retry a no-op, so nothing recovers them. Leaving the provider
+// running instead costs a Shutdown that reports it did not finish.
+//
+// The batch spans two chunks deliberately: one chunk cannot show partial
+// loss, and partial is the shape this path produces.
+func TestShutdownDeadlineNeverLosesEventsSilently(t *testing.T) {
+	entered := make(chan struct{})
+	logExp := &countingSlowExporter{d: 150 * time.Millisecond, entered: entered}
+	e := newWith(&fakeMetric{}, newProviderSink(logExp, defaultResource()))
+
+	const n = eventQueueSize + 5 // two chunks
+	var exportErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		exportErr = e.ExportEvents(context.Background(), outcomes(n))
+	}()
+	<-entered
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	shutErr := e.Shutdown(ctx)
+	<-done
+
+	t.Logf("Shutdown=%v ExportEvents=%v delivered=%d of %d", shutErr, exportErr, logExp.count(), n)
+	if exportErr == nil && logExp.count() != n {
+		t.Errorf("SILENT: ExportEvents returned nil having delivered %d of %d", logExp.count(), n)
+	}
+}
+
+type countingSlowExporter struct {
+	d       time.Duration
+	entered chan struct{}
+	mu      sync.Mutex
+	n       int
+}
+
+func (c *countingSlowExporter) Export(_ context.Context, recs []sdklog.Record) error {
+	if c.entered != nil {
+		close(c.entered)
+		c.entered = nil
+	}
+	time.Sleep(c.d)
+	c.mu.Lock()
+	c.n += len(recs)
+	c.mu.Unlock()
+	return nil
+}
+func (c *countingSlowExporter) Shutdown(context.Context) error   { return nil }
+func (c *countingSlowExporter) ForceFlush(context.Context) error { return nil }
+func (c *countingSlowExporter) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.n
 }

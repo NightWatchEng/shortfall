@@ -87,7 +87,9 @@ type providerSink struct {
 	// provider — and a stopped provider discards the record and answers
 	// ForceFlush with nil, so emit would report success for a batch nobody
 	// received. An emit holding sem checked stopped before Shutdown set it,
-	// and Shutdown cannot stop the provider until that emit releases.
+	// and Shutdown does not stop the provider until that emit releases — if
+	// it cannot wait that long it leaves the provider alone rather than
+	// pulling it out from under a batch in flight.
 	stopped atomic.Bool
 }
 
@@ -129,7 +131,7 @@ func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink 
 // flushing each chunk before the next. On overflow the queue overwrites its
 // oldest record and reports it through no channel the caller can reach: Emit
 // returns nothing and ForceFlush surfaces only export failures. Chunking
-// under a lock is what keeps it from overflowing, which ADR-0002 requires —
+// while holding the sink's one slot is what keeps it from overflowing, which ADR-0002 requires —
 // a dropped outcome must be counted, never silent.
 func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
 	if err := s.acquire(ctx); err != nil {
@@ -170,28 +172,29 @@ func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error
 }
 
 // Shutdown marks the sink stopped, waits for any emit already in flight to
-// finish delivering, and stops the provider while still holding the sink.
+// finish delivering, and only then stops the provider.
 //
-// The slot is held across provider.Shutdown deliberately. Marking stopped
-// first already turns away any emit that has not started, but an emit that
-// takes the slot while the provider is being stopped would run against a
-// half-stopped provider — which discards records and answers ForceFlush with
-// nil. Holding the slot means the two never overlap: an emit either had it
-// first and delivered in full, or takes it afterwards and finds stopped set.
-// The cost falls only on emit callers who are about to get ErrShutdown.
+// Marking first is what orders the two: stopped is set before the wait
+// begins and read by emit immediately after it takes the slot, so any emit
+// arriving from then on returns ErrShutdown without touching the provider.
+// The one already holding the slot checked stopped before this call set it,
+// so it delivers in full while Shutdown waits.
 //
-// If ctx expires before the in-flight emit finishes, the provider is stopped
-// anyway and the ctx error is joined: the caller asked to be done by a
-// deadline, and an exporter left half-shut would leak the batch processor's
-// goroutine. That in-flight emit may then cut short, which it reports as its
-// own export error — it is never silent.
+// The provider is NOT stopped when the wait is abandoned. sdklog latches its
+// stopped flag before honouring ctx, after which it discards records and
+// answers ForceFlush with nil — so stopping it out from under a live emit
+// turns that emit's remaining chunks into exactly the silent loss ADR-0002
+// forbids, and the latch makes a later retry a no-op. Leaving the provider
+// running lets the in-flight batch land, and lets the caller retry Shutdown
+// with a ctx that can actually finish. The ctx error is returned so the
+// caller knows the exporter is not shut down yet.
 func (s *providerSink) Shutdown(ctx context.Context) error {
 	s.stopped.Store(true)
-	waitErr := s.acquire(ctx)
-	if waitErr == nil {
-		defer s.release()
+	if err := s.acquire(ctx); err != nil {
+		return err
 	}
-	return errors.Join(waitErr, s.provider.Shutdown(ctx))
+	defer s.release()
+	return s.provider.Shutdown(ctx)
 }
 
 // ErrShutdown is returned by ExportMetrics and ExportEvents once Shutdown
