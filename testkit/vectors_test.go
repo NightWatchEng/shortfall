@@ -328,7 +328,7 @@ func TestPortabilityDocMatchesVectors(t *testing.T) {
 // to prevent.
 //
 // The input is constructed directly rather than parsed: registry.Parse
-// now rejects a non-finite recovered_fraction outright (workspace-hmt), so
+// now rejects a non-finite recovered_fraction outright, so
 // no document can produce these facts. That is the point — the comparator
 // fails closed against a hole nothing currently opens, rather than one
 // live in the validator, and a non-finite float remains what JSON refuses
