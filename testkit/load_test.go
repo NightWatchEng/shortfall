@@ -338,8 +338,12 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 
 	// Unbounded-growth assertions over the run's second half. Heap is
 	// GC-sawtoothed, so halves compare by median; goroutines and series
-	// must be flat outright.
-	if n := len(report.samples); n >= 8 {
+	// must be flat outright. Too few samples is itself a problem — a
+	// silently skipped flatness check would leave the run green while
+	// verifying nothing this harness advertises.
+	if n := len(report.samples); n < 8 {
+		report.problemf("only %d runtime samples collected (want >= 8); the flatness assertions could not run", n)
+	} else {
 		half := report.samples[n/2:]
 		firstHalf := report.samples[:n/2]
 		medHeap := func(ss []loadSample) uint64 {

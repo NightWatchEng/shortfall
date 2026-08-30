@@ -50,9 +50,11 @@ const trackerShards = 32
 type trackerShard struct {
 	mu    sync.Mutex
 	items map[inflightKey]inflightItem
-	// Pad to a cache line: unpadded, four shards share one line and
-	// neighbors' lock traffic ping-pongs it, which is the very cost
-	// sharding exists to remove.
+	// Pad each shard out to a cache line's width: unpadded, four shards
+	// share one line and neighbors' lock traffic ping-pongs it. Go only
+	// guarantees 8-byte alignment for the array, so this bounds the
+	// sharing (at most a tail can straddle into the next head) rather
+	// than eliminating it.
 	_ [64 - (8+8)%64]byte
 }
 

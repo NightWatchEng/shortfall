@@ -287,9 +287,9 @@ func trackerItemCount(tr *InFlightTracker) int {
 	return n
 }
 
-// BenchmarkTrackerPublishScale is how long the tracker holds its mutex on a
-// publish, as the tracked set grows. Publish snapshots every item under
-// t.mu, so this duration is also the worst-case stall a consumer goroutine
+// BenchmarkTrackerPublishScale is how long the tracker holds its locks on a
+// publish, as the tracked set grows. Publish snapshots every item holding
+// all shard locks, so this duration is also the worst-case stall a consumer goroutine
 // eats on Track or Done when a publish lands — the number to compare
 // against the publish cadence you configure.
 //
