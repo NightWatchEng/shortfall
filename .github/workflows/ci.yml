@@ -232,7 +232,51 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
-          fetch-depth: 0   # review diffs base...head; a shallow clone has no merge-base
+          # review diffs base...head, and the base-ref pin and attest check
+          # below both resolve origin/$BASE_REF — none of which a shallow
+          # clone can do.
+          fetch-depth: 0
+      # The gate must never execute PR-controlled gate code: a PR could swap
+      # the shim for `exit 0` (vacuous pass) or read the deploy key. Restore
+      # the executable gate surface from the BASE ref before the key exists
+      # on disk and before anything under .warden/bin runs. Policy changes
+      # therefore take effect only after they merge — a gate-surface PR is
+      # judged under the policy it is trying to change, which is the safe
+      # direction. (.warden/memory is NOT restored: the PR's committed
+      # attest shards are exactly what `attest check` verifies.)
+      #
+      # scripts/ is in the list because repo.yaml's verify.core names
+      # ./scripts/ci-go.sh: pinning repo.yaml pins the command STRING while
+      # the file it resolves to stayed the PR's, so `warden verify` below ran
+      # PR-controlled code six times with the deploy key already on disk.
+      #
+      # What this restores and what it does not: `git checkout <ref> -- path`
+      # overwrites what the base ref has and deletes nothing, so a file the
+      # PR ADDS under these paths survives. Nothing invokes a script by an
+      # unknown name, so that is acceptable — but it is why this says "the
+      # executable gate surface" and not "the entire" one. .github/ is not
+      # pinnable at all: GitHub runs the PR's own workflow file.
+      #
+      # Each path is checked before restoring, as the pr-title job does: a
+      # pathspec absent from the base ref makes `git checkout` fail the step,
+      # which would turn the PR that first adds a gate path into a hard error.
+      - name: pin gate surface to the base ref
+        run: |
+          # Resolve the base ref FIRST. The per-path guard below cannot tell
+          # "this path is new on the base ref" from "the base ref did not
+          # resolve" — cat-file exits 128 either way — so without this an
+          # unresolvable BASE_REF would print six reassuring bootstrap lines
+          # and leave the PR's entire gate surface in place, with the deploy
+          # key landing three steps later. Fail loudly instead.
+          git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null
+          for p in .warden/bin .warden/rules .warden/skills-policy.md repo.yaml graph.yaml scripts; do
+            if git cat-file -e "origin/${BASE_REF}:${p}" 2>/dev/null; then
+              git checkout "origin/${BASE_REF}" -- "$p"
+            else
+              echo "${p} absent on base ref (bootstrap PR): using this PR's copy"
+            fi
+          done
+          git status --short
       # This job runs `warden verify --scope core` below, and that scope
       # includes `ci-go.sh lint` — so this runner needs the linter for the
       # same reason the core job does. Without it, ci-go.sh would fall back
@@ -240,28 +284,17 @@ jobs:
       # network-fragile path this file rejected for the core job, silently
       # acquired by a second required check (workspace-dfd).
       #
-      # Placed BEFORE the base-ref pin so it runs before the deploy key is
-      # written to disk. That ordering is not what decides WHICH copy runs:
-      # the pin below restores five paths and none is under scripts/, so
-      # this job executes the PR's installer wherever the step sits — one
-      # of the PR-controlled executions that pin does not cover, alongside
-      # the ci-go.sh that `warden verify` invokes further down (tracked in
-      # workspace-8v0). The committed script only fetches a release tarball
-      # and installs it if it matches a hardcoded checksum.
+      # Placed AFTER the pin and BEFORE the deploy key. After the pin, so the
+      # base ref's installer runs against the base ref's ci-go.sh: the two are
+      # coupled — the installer reads the wanted version out of
+      # `ci-go.sh lint-version`, and ci-go.sh rejects any binary that is not
+      # exactly that version. Installing from the PR and then pinning
+      # ci-go.sh back would leave a version the pinned script refuses, and it
+      # would refuse it silently by falling back to `go run` — the slow path
+      # this step exists to avoid. Before the key, because the installer is
+      # gate surface that runs as shell.
       - name: install golangci-lint (pinned release binary, checksum-verified)
         run: ./scripts/install-golangci-lint.sh
-      # The gate must never execute PR-controlled gate code: a PR could swap
-      # the shim for `exit 0` (vacuous pass) or read the deploy key. Restore
-      # the entire executable gate surface from the BASE ref before the key
-      # exists on disk and before anything under .warden/bin runs. Policy
-      # changes therefore take effect only after they merge — a gate-surface
-      # PR is judged under the policy it is trying to change, which is the
-      # safe direction. (.warden/memory is NOT restored: the PR's committed
-      # attest shards are exactly what `attest check` verifies.)
-      - name: pin gate surface to the base ref
-        run: |
-          git checkout "origin/${BASE_REF}" -- .warden/bin .warden/rules .warden/skills-policy.md repo.yaml graph.yaml
-          git status --short
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5.4.2
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:

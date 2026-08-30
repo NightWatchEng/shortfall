@@ -170,9 +170,10 @@ body:
         Adapters are kept SDK-free where it is reasonable, so that
         instrumenting a service does not drag a cloud SDK into everyone's build:
         the CloudWatch Logs Insights querier signs its own SigV4 requests with
-        the standard library, and the GCP exporter takes an authenticated
-        client from the caller rather than importing the Google SDK. A vendor
-        SDK is not disqualifying — it is a cost we would want to name up front.
+        the standard library, and the GCP exporter writes Cloud Logging entries
+        to an io.Writer the caller supplies, importing no Google SDK at all. A
+        vendor SDK is not disqualifying — it is a cost we would want to name up
+        front.
       options:
         - "Yes — plain HTTP plus a caller-supplied *http.Client"
         - "It needs a vendor SDK"

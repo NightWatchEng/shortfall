@@ -470,11 +470,14 @@ are single-goroutine only.
 without the detector in CI. It was run under `-race` by hand, including its
 discrimination check, but nothing enforces that on every PR.
 
-**The tagged benchmarks are not compiled by CI.** Nothing in the core
-verify scope or the benchmark job builds a `benchload`-tagged file, so a
-refactor of `engine.Compute`, `memq`, or the emitter can break them and
-nobody will learn until someone reruns the commands above. That is the
-price of keeping them out of the gate, and it is a real one.
+**The tagged benchmarks are compiled but not run.** `ci-go.sh vet`
+type-checks every module with `-tags "benchload integration"`, so a refactor
+of `engine.Compute`, `memq`, or the emitter that breaks a tagged file fails
+the gate. What CI does not do is *run* them — that is still the price of
+keeping them out of the gate, and a change that makes one slower, or wrong
+in a way that still compiles, is invisible until someone reruns the commands
+above. `go build -tags` would not have bought even the compile: every tagged
+file here is a `_test.go`, and `go build` only compiles non-test files.
 
 **Nothing here was optimised.** ADR-0015 orders correctness, then
 readability, then the benchstat comparison, and says the benchmark lands

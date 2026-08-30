@@ -11,6 +11,30 @@
 # `warden verify --scope core` and CI agree on the step list as well as on
 # the module list. Adding a mode to one caller and not the other is the
 # drift that cost a CI round trip on PR #90 (workspace-dfd).
+# BUILD_TAGS is why `vet` is the step that keeps tagged files honest.
+# engine/compute_load_bench_test.go and emit/concurrency_load_bench_test.go
+# sit behind //go:build benchload, and the three adapter integration_test.go
+# files behind //go:build integration — so nothing compiled them: not vet,
+# not build, not test, and not the benchmark job, whose `go test -list` never
+# discovers them either. A refactor could break them and nobody would learn
+# until someone ran the commands in docs/performance.md by hand.
+#
+# vet rather than build: `go build` only compiles GoFiles, and every tagged
+# file here is a _test.go, so `go build -tags` would pass without compiling
+# any of them — a check that asserts nothing. vet type-checks test files, and
+# costs ~3s across the tree against ~11s for `go test -run ^$`, which links
+# and runs a test binary for each of the 35 packages that have tests, to
+# catch the same errors.
+#
+# Folded into vet rather than added as a seventh mode because no file in this
+# tree carries a NEGATED constraint (no //go:build !benchload anywhere), so a
+# tagged vet is a strict superset of an untagged one — it can only compile
+# more. A seventh mode would mean editing the "six steps" claim in repo.yaml,
+# ci.yml, the PR template, CONTRIBUTING and the skills policy to keep them
+# from disagreeing, for no extra coverage. If a negated tag ever lands here,
+# that reasoning breaks and this must become its own mode.
+BUILD_TAGS="benchload integration"
+
 set -eu
 set -f                          # no glob expansion of the module list
 nl='
@@ -124,7 +148,7 @@ for modfile in $modules; do
         echo "gofmt needed:"; echo "$out"; fail=1
       fi
       ;;
-    vet)   (cd "$dir" && go vet ./...) || fail=1 ;;
+    vet)   (cd "$dir" && go vet -tags "$BUILD_TAGS" ./...) || fail=1 ;;
     build) (cd "$dir" && go build ./...) || fail=1 ;;
     test)  (cd "$dir" && go test ./...) || fail=1 ;;
     vuln)  (cd "$dir" && go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...) || fail=1 ;;

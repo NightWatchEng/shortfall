@@ -65,9 +65,10 @@ body:
       description: How the `biz_*` signals leave your services. Pick every one that applies.
       multiple: true
       options:
+        - "adapters/export/otlp — metrics + events (the vendor-neutral path)"
         - "adapters/export/prometheus — metrics"
         - "adapters/export/cloudwatch — metrics + events (EMF)"
-        - "adapters/export/gcp — Cloud Monitoring metrics + Cloud Logging events"
+        - "adapters/export/gcp — Cloud Logging events (metrics ship over OTLP)"
         - "An exporter I wrote myself"
         - "None / not sure"
     validations:
@@ -88,6 +89,7 @@ body:
         - "adapters/query/promql — metrics"
         - "adapters/query/sql — events"
         - "adapters/query/cwinsights — events"
+        - "adapters/query/gcplogging — events"
         - "query/memq — the in-memory reference"
         - "A querier I wrote myself"
         - "None / not sure"
