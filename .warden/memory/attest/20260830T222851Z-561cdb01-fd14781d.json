@@ -1,0 +1,325 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+  "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T22:28:51+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent, sole pass \u2014 it verified the no-wire-change claim by diffing serialized exporter output at main against the branch across four Outcomes, and established the checker detects anything at all by mutating three exporters by hand"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 880,
+      "severity": "HIGH",
+      "finding": "Section 7.1, the document that specifically recorded this three-way disagreement, was untouched: it still said 'not settled, do not treat any single spelling as canonical' with a table giving the semconv column this diff corrected, and still described the settlement as 'deliberately not resolved here' \u2014 in the repo's port-facing contract document.",
+      "evidence": "portability.md:880 and its table at 887-890; line 897 'What would settle it: one ADR amendment naming one spelling for each fact, plus a conformance vector file' \u2014 exactly what this PR delivered.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "7.1 rewritten as settled, carrying the history it replaced and naming what now holds it. 5.5's pointer and the frozen-shapes table row corrected too.",
+      "id": "a92cf6e68d92375c"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "comment-hygiene",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "biz",
+      "file": "biz/semconv.go",
+      "line": 49,
+      "severity": "MEDIUM",
+      "finding": "Five bead ids introduced into code comments; the base tree had zero. The declarative rule's own regex fires on every one.",
+      "evidence": "Rule regex over both trees: base 0 matches, head 5. biz/semconv.go:49,63; gcp/logging.go:47; gcplogging.go:103; eventline.go:20.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "All five reworded. Sweep confirms zero matches. This is the second time in one session I have committed this violation after fixing an instance of it.",
+      "id": "f36407295048fd98"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/semconv.md",
+      "line": 77,
+      "severity": "MEDIUM",
+      "finding": "The corrected file contradicted itself: its new amendment note names biz.estimated a wrong spelling, and the Design-invariants section eleven lines later uses it as the live attribute name.",
+      "evidence": "semconv.md:38 vs :77 '- Estimated amounts ride the event (biz.estimated=true)'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Corrected to biz.amount.est.",
+      "id": "f783ff82e7a4fd77"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 770,
+      "severity": "MEDIUM",
+      "finding": "Section 5.5's closing sentence routed a port implementer to 7.1 and repeated the 'not yet settled' claim this diff falsifies.",
+      "evidence": "portability.md:769-771.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Points at 7.1 and the vector as the thing to implement against.",
+      "id": "950840dd516f6baa"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 42,
+      "severity": "MEDIUM",
+      "finding": "A third vector file landed and the port-facing Conformance vectors section was not updated: wrong count, missing table row, and a stated CI replay mechanism that does not cover it.",
+      "evidence": "portability.md:42 'Two language-neutral JSON files'; table at 47-48 lists two; testkit/vectors_test.go never calls LoadOutcomeEventVectors.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Counts three, lists the file, and describes the actual replay path \u2014 each event-capable exporter's contract test, which the new enforcement test requires it to have.",
+      "id": "7fee0089e47e75ec"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "biz",
+      "file": "biz/semconv.go",
+      "line": 60,
+      "severity": "MEDIUM",
+      "finding": "OutcomeEventAttrs was exported, referenced by nothing, and its doc made two false claims: that a conformance test walks it, and that its order is the vector's.",
+      "evidence": "grep finds only its own declaration; CheckOutcomeEvent walks the vector's Attrs; the vector serializes attrs as a JSON object, so alphabetical.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Removed. The vector is the contract; a second unused list of the same names was another thing to drift.",
+      "id": "a36965ad926d2927"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/vectors.go",
+      "line": 582,
+      "severity": "MEDIUM",
+      "finding": "OutcomeEventVectors.Names() claimed to serve a uniqueness guard that did not exist for this type; duplicate case names were unguarded.",
+      "evidence": "assertUniqueNames called on VC and registry vectors only; no testkit test loaded outcome-event.json.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "TestOutcomeEventVectorNamesAreUnique added, so the comment is now true.",
+      "id": "934768798f080fb0"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0002-outcome-event-transport.md",
+      "line": 58,
+      "severity": "MEDIUM",
+      "finding": "The ADR replaced one unenforced claim with another: it stated CheckOutcomeEvent drives every exporter, but nothing held a future one to it, and the repo already had the enforcement pattern for exactly this.",
+      "evidence": "enforcement_test.go scans every export module for conformance.RunExporter; CheckOutcomeEvent appeared only in three hand-written files.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "TestEveryExporterChecksTheEventContract added on the same pattern, skipping metrics-only exporters rather than demanding a check they could only satisfy vacuously. Enforced across 3 modules.",
+      "id": "fecc87bd15bdff75"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/events.go",
+      "line": 12,
+      "severity": "MEDIUM",
+      "finding": "The OTLP event NAME was bound to biz.AttrOutcome, the result attribute, rather than biz.EventOutcome. They share a value today, so renaming either would have silently split the transports \u2014 the drift class this PR exists to close, reintroduced in it.",
+      "evidence": "events.go:12 const eventName = biz.AttrOutcome, against gcp/logging.go:22 and gcplogging.go:73 which both use biz.EventOutcome. Both otlp tests compare the constant against itself.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Bound to biz.EventOutcome, with a comment saying why the distinction matters.",
+      "id": "95421efbd23328e4"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/outcomeevent.go",
+      "line": 28,
+      "severity": "MEDIUM",
+      "finding": "The checker the whole guarantee rests on shipped with no test of its own; its failure paths were asserted nowhere, and the three adapter tests exercise only the happy path.",
+      "evidence": "No testkit/outcomeevent_test.go; LoadOutcomeEventVectors' version branch and OutcomeEventInput.Outcome's parse-error branch never exercised. The reviewer had to mutate three exporters by hand to establish the checker detects anything.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Six non-conformant extractors, each asserting the specific complaint, plus a conformant control and an extractor-error case. Derived from the vector so the test cannot drift from the contract.",
+      "id": "3bfa8016db525e6d"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/outcomeevent.go",
+      "line": 86,
+      "severity": "MEDIUM",
+      "finding": "sameWireValue masked a real wire type change for booleans: non-numbers fell through to rendered-form comparison, so biz.amount.est serialized as the string \"false\" passed as conformant.",
+      "evidence": "Reviewer's mutation: CloudWatch emitting fmt.Sprintf(\"%v\", Estimated) left the contract test green.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "A value the contract says is a bool must arrive as a bool. Mutation now fails, and the message names both types \u2014 'false (string), contract says false (bool)' \u2014 since rendered alone they are identical.",
+      "id": "4dc23f4243b15434"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "testkit/vectors",
+      "file": "testkit/vectors/outcome-event.json",
+      "line": 42,
+      "severity": "MEDIUM",
+      "finding": "trace.id was named in the contract but required by no vector case on any transport, and the extra-field sweep covers only the biz. prefix, so CloudWatch and GCP could stop emitting it and stay green.",
+      "evidence": "Reviewer's mutation disabling the trace.id branch in CloudWatch left the test green; the same mutation on source failed.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "attrs_if_carried: required of transports carrying the fact as an attribute, waived for OTLP which uses span context. The waiver is explicit at the call site rather than implied by omission.",
+      "id": "86201faa8c85b62e"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "eventline",
+      "file": "eventline/eventline.go",
+      "line": 1,
+      "severity": "LOW",
+      "finding": "Making CloudWatch emit biz.sla.deadline meant a round trip through eventline \u2014 the declared read half of that line \u2014 dropped it, silently, because the value simply arrives zero. The new tag test could not flag it: it walks struct field to contract, never contract to struct field.",
+      "evidence": "eventline's line struct had no deadline field; contract_test.go's want map omitted biz.AttrSLADeadline.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Field added, parsed as RFC-3339, with a round-trip test covering both a line that carries one and a line that does not.",
+      "id": "0a08bba96bbee61f"
+    },
+    {
+      "ts": "2026-08-30T22:28:51+00:00",
+      "seq": 13,
+      "source": "attest",
+      "sha": "561cdb01e95eb32be6bd3967812496aaad417cdc",
+      "base_sha": "69aa8b04abeb6622c94c7c4aa34508039e9276b7",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/query",
+      "file": "adapters/query/gcplogging/gcplogging.go",
+      "line": 87,
+      "severity": "LOW",
+      "finding": "Two residues: the payloadPaths comment still said the SQL identifiers are constants 'of this package' when they now come from biz, and the event key was the one selector left as a bare literal, so a rename of biz.EventKey would move the exporters' key while the querier kept matching the old one.",
+      "evidence": "gcplogging.go:86-88 and :292. Generated SQL was byte-identical to main, so latent rather than live.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cnz",
+      "reason": "Both corrected, and the SQL verified still byte-identical \u2014 my first attempt at the selector broke it, which the module's own conformance tests caught immediately.",
+      "id": "699a9e670d945be2"
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "vectors": "biz.outcome",
+  "vectors_version": 1,
+  "note": "The field names an outcome event carries, for every transport. ADR-0002 requires that the same Outcome produce the same fields on each; absent lists what must NOT appear, because an optional field nobody checked is how biz.sla.deadline came to ship on OTLP alone.",
+  "cases": [
+    {
+      "name": "fully_populated",
+      "note": "every optional fact present: segment, deadline, source, error, trace id",
+      "input": {
+        "flow": "invoice.pay",
+        "stage": "capture",
+        "result": "failed",
+        "entity_id": "inv_000042",
+        "customer_id": "h:c0ffee",
+        "segment": "smb",
+        "amount_minor": 14900,
+        "currency": "USD",
+        "exponent": 2,
+        "kind": "fee",
+        "estimated": false,
+        "deadline": "2026-01-02T03:34:05Z",
+        "source": "stripe:webhook",
+        "err": "card_declined",
+        "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      },
+      "attrs": {
+        "biz.amount.est": false,
+        "biz.amount_minor": 14900,
+        "biz.currency": "USD",
+        "biz.customer.id": "h:c0ffee",
+        "biz.entity.id": "inv_000042",
+        "biz.exponent": 2,
+        "biz.flow": "invoice.pay",
+        "biz.outcome": "failed",
+        "biz.segment": "smb",
+        "biz.sla.deadline": "2026-01-02T03:34:05Z",
+        "biz.stage": "capture",
+        "biz.value.kind": "fee",
+        "error": "card_declined",
+        "source": "stripe:webhook"
+      },
+      "attrs_if_carried": {
+        "trace.id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      }
+    },
+    {
+      "name": "required_only",
+      "note": "no segment, no deadline, no source, no error, no trace — each must be absent, not empty",
+      "input": {
+        "flow": "invoice.pay",
+        "stage": "auth",
+        "result": "success",
+        "entity_id": "inv_000043",
+        "customer_id": "h:decaf",
+        "amount_minor": 1,
+        "currency": "EUR",
+        "exponent": 2,
+        "kind": "gmv",
+        "estimated": true
+      },
+      "attrs": {
+        "biz.amount.est": true,
+        "biz.amount_minor": 1,
+        "biz.currency": "EUR",
+        "biz.customer.id": "h:decaf",
+        "biz.entity.id": "inv_000043",
+        "biz.exponent": 2,
+        "biz.flow": "invoice.pay",
+        "biz.outcome": "success",
+        "biz.stage": "auth",
+        "biz.value.kind": "gmv"
+      },
+      "absent": [
+        "biz.segment",
+        "biz.sla.deadline",
+        "source",
+        "error",
+        "trace.id"
+      ]
+    }
+  ]
+}

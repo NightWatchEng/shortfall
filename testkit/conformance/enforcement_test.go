@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -63,6 +64,13 @@ func TestEveryExporterRunsTheSuite(t *testing.T) {
 // the selector expression in the AST, so a mention in a comment or a string
 // literal does not count — only a genuine reference in the source does.
 func moduleRefsSuite(t *testing.T, modDir string) bool {
+	return moduleRefs(t, modDir, conformancePath, "conformance", "RunExporter")
+}
+
+// moduleRefs is moduleRefsSuite generalized over the package and symbol, so
+// a second contract can be enforced the same way without a second copy of
+// the AST walk.
+func moduleRefs(t *testing.T, modDir, importPath, defaultName, symbol string) bool {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(modDir, "*_test.go"))
 	if err != nil {
@@ -76,7 +84,7 @@ func moduleRefsSuite(t *testing.T, modDir string) bool {
 		if err != nil {
 			t.Fatalf("parsing %s: %v", f, err)
 		}
-		if fileRefsSuite(file) {
+		if fileRefs(file, importPath, defaultName, symbol) {
 			return true
 		}
 	}
@@ -87,8 +95,8 @@ func moduleRefsSuite(t *testing.T, modDir string) bool {
 // expression of the form <ident>.RunExporter where the ident resolves to
 // the conformance package's import name (default "conformance", or a rename
 // in the import spec). A string/comment mention is invisible to the AST.
-func fileRefsSuite(file *ast.File) bool {
-	name := conformanceImportName(file)
+func fileRefs(file *ast.File, importPath, defaultName, symbol string) bool {
+	name := importNameFor(file, importPath, defaultName)
 	if name == "" {
 		return false // module doesn't import the suite at all
 	}
@@ -98,7 +106,7 @@ func fileRefsSuite(file *ast.File) bool {
 			return false
 		}
 		sel, ok := n.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "RunExporter" {
+		if !ok || sel.Sel.Name != symbol {
 			return true
 		}
 		if id, ok := sel.X.(*ast.Ident); ok && id.Name == name {
@@ -113,8 +121,7 @@ func fileRefsSuite(file *ast.File) bool {
 // conformanceImportName returns the local name the file imports the
 // testkit/conformance package under (its rename if aliased, else the
 // package's own name "conformance"), or "" if the file does not import it.
-func conformanceImportName(file *ast.File) string {
-	const path = "github.com/NightWatchEng/shortfall/testkit/conformance"
+func importNameFor(file *ast.File, path, defaultName string) string {
 	for _, imp := range file.Imports {
 		if imp.Path == nil {
 			continue
@@ -126,9 +133,83 @@ func conformanceImportName(file *ast.File) string {
 		if imp.Name != nil {
 			return imp.Name.Name // aliased import
 		}
-		return "conformance"
+		return defaultName
 	}
 	return ""
+}
+
+const (
+	conformancePath = "github.com/NightWatchEng/shortfall/testkit/conformance"
+	testkitPath     = "github.com/NightWatchEng/shortfall/testkit"
+)
+
+// TestEveryExporterChecksTheEventContract is the same enforcement for the
+// outcome event's wire contract. ADR-0002 says every transport produces the
+// same fields from the same Outcome; testkit.CheckOutcomeEvent is what
+// proves it, and without this a fourth exporter could merge emitting
+// whatever it liked — which is how biz.sla.deadline came to ship on one
+// transport alone.
+func TestEveryExporterChecksTheEventContract(t *testing.T) {
+	root := repoRoot(t)
+	exportDir := filepath.Join(root, "adapters", "export")
+	entries, err := os.ReadDir(exportDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skip("no adapters/export directory yet — nothing to enforce")
+		}
+		t.Fatalf("reading %s: %v", exportDir, err)
+	}
+	var offenders []string
+	var checked int
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		modDir := filepath.Join(exportDir, e.Name())
+		if _, err := os.Stat(filepath.Join(modDir, "go.mod")); err != nil {
+			continue
+		}
+		// An exporter that declares Events=false has no event to check.
+		if !moduleDeclaresEvents(t, modDir) {
+			continue
+		}
+		checked++
+		if !moduleRefs(t, modDir, testkitPath, "testkit", "CheckOutcomeEvent") {
+			offenders = append(offenders, e.Name())
+		}
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("event-capable exporter module(s) %v do not reference testkit.CheckOutcomeEvent in any *_test.go — every transport must be held to the outcome event's field set (ADR-0002)", offenders)
+	}
+	if checked == 0 {
+		t.Skip("no event-capable exporter modules found — nothing to enforce yet")
+	}
+	t.Logf("event contract enforced across %d exporter module(s)", checked)
+}
+
+// moduleDeclaresEvents reports whether the module's source says
+// Events: true. A metrics-only exporter (prometheus) has no outcome event to
+// hold to the contract, and requiring one of it would be a check that could
+// only be satisfied vacuously.
+func moduleDeclaresEvents(t *testing.T, modDir string) bool {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(modDir, "*.go"))
+	if err != nil {
+		t.Fatalf("globbing %s: %v", modDir, err)
+	}
+	for _, f := range matches {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("reading %s: %v", f, err)
+		}
+		if strings.Contains(string(b), "Events:            true") || strings.Contains(string(b), "Events: true") {
+			return true
+		}
+	}
+	return false
 }
 
 // repoRoot resolves the repository root from this test file's own location
