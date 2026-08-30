@@ -99,7 +99,8 @@ type Caps struct {
 // series before a final scrape). What no implementation may do is accept
 // a post-Shutdown batch and silently absorb it — that is the invisible
 // outcome-data loss this library exists to prevent, and the conformance
-// suite enforces the distinction.
+// suite enforces the distinction. A repeat Shutdown after a successful
+// one returns nil: the no-op has no work left to fail at.
 type Exporter interface {
 	ExportMetrics(ctx context.Context, batch []MetricPoint) error
 	ExportEvents(ctx context.Context, batch []biz.Outcome) error

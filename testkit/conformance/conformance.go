@@ -20,6 +20,10 @@
 //     demonstrably delivers (a pull-collected exporter whose Shutdown is a
 //     no-op). Accepting a batch that no flush will ever move again is the
 //     silent-loss class this suite previously had no invariant for.
+//   - A repeat Shutdown after a successful one returns nil: the no-op has
+//     no work left to fail at, and a dependency's shutdown sentinel must
+//     not leak out of it. After a FAILED Shutdown the repeat behavior is
+//     unspecified — an adapter may retry the flush or no-op.
 package conformance
 
 import (
@@ -247,7 +251,23 @@ func Check(h Harness) []Result {
 	results = append(results, postShutdownMetrics(h, caps, n))
 	results = append(results, postShutdownEvents(h, caps, n))
 
+	// A repeat Shutdown after a successful one returns nil.
+	results = append(results, repeatShutdown(h))
+
 	return results
+}
+
+func repeatShutdown(h Harness) Result {
+	r := Result{Name: "a repeat shutdown after a successful one returns nil"}
+	exp, _ := h.New()
+	if err := exp.Shutdown(context.Background()); err != nil {
+		r.Err = fmt.Sprintf("shutdown errored: %v", err)
+		return r
+	}
+	if err := exp.Shutdown(context.Background()); err != nil {
+		r.Err = fmt.Sprintf("repeat shutdown after a successful one errored: %v — the no-op has no work left to fail at", err)
+	}
+	return r
 }
 
 // postShutdown adjudicates one signal's post-Shutdown answer against the

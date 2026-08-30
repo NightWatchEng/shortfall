@@ -377,8 +377,16 @@ func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error 
 // on one leg must not skip the other — and both errors are joined, since a
 // log-leg flush failure can mean dropped outcome data and must not be
 // masked by a metric-leg error.
+//
+// Idempotent: a repeat call is a no-op returning nil. Without the early
+// return, the metric sdk's shutdown sentinel would leak out of the second
+// call ("HTTP exporter is shutdown") while the log leg reports nil — a
+// manufactured error for work that no longer exists. A first-call leg
+// failure is not retried by calling again; it was already surfaced.
 func (e *Exporter) Shutdown(ctx context.Context) error {
-	e.shutdown.Store(true)
+	if e.shutdown.Swap(true) {
+		return nil
+	}
 	mErr := e.metrics.Shutdown(ctx)
 	lErr := e.logs.Shutdown(ctx)
 	return errors.Join(mErr, lErr)

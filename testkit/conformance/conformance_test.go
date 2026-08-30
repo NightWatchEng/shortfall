@@ -31,6 +31,7 @@ type fakeCfg struct {
 	// implementation can break the disjunction instead.
 	absorbAfterShutdown bool // accept post-Shutdown exports and lose them silently
 	refuseButDeliver    bool // error on post-Shutdown exports yet deliver them anyway
+	errOnRepeatShutdown bool // error on a second Shutdown (the sdk-sentinel leak)
 }
 
 type fakeExporter struct {
@@ -102,6 +103,9 @@ func (f *fakeExporter) ExportEvents(_ context.Context, b []biz.Outcome) error {
 }
 
 func (f *fakeExporter) Shutdown(context.Context) error {
+	if f.closed && f.cfg.errOnRepeatShutdown {
+		return errors.New("exporter is shutdown")
+	}
 	if f.cfg.buffer && !f.cfg.dropOnShutdown {
 		f.be.metrics += f.bufM
 		f.be.events += f.bufE
@@ -210,6 +214,13 @@ func TestSuiteVerdicts(t *testing.T) {
 				"post-shutdown metric export is refused or delivered",
 				"post-shutdown event export is refused or delivered",
 			},
+		},
+		{
+			// A dependency's shutdown sentinel leaking out of a repeat call:
+			// the no-op has no work left to fail at.
+			name:     "errors on a repeat shutdown",
+			cfg:      fakeCfg{caps: both, errOnRepeatShutdown: true},
+			wantFail: []string{"a repeat shutdown after a successful one returns nil"},
 		},
 	}
 

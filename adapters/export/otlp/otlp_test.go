@@ -30,7 +30,16 @@ func (f *fakeMetric) Export(_ context.Context, rm *metricdata.ResourceMetrics) e
 	f.got = rm
 	return nil
 }
-func (f *fakeMetric) Shutdown(context.Context) error { f.shutdown = true; return f.shutErr }
+// Shutdown mimics otlpmetrichttp: a second call returns the sdk's shutdown
+// sentinel, which is exactly the behavior the adapter must shield callers
+// from.
+func (f *fakeMetric) Shutdown(context.Context) error {
+	if f.shutdown {
+		return errors.New("HTTP exporter is shutdown")
+	}
+	f.shutdown = true
+	return f.shutErr
+}
 
 type fakeLog struct {
 	got      []biz.Outcome
@@ -193,6 +202,31 @@ func TestExporterSurfacesFailuresAndShutdown(t *testing.T) {
 	}
 	if !fm.shutdown || !fl.shutdown {
 		t.Fatal("Shutdown must close both exporters")
+	}
+}
+
+// A second Shutdown is a nil-returning no-op: the terminal flag is already
+// set and both legs are already closed, so a defensive re-shutdown must not
+// manufacture an error out of the metric sdk's shutdown sentinel. Pinned
+// for a clean first shutdown and a failed one alike — the repeat call has
+// no work left either way.
+func TestShutdownIsIdempotent(t *testing.T) {
+	cases := []struct {
+		name string
+		fm   *fakeMetric
+		fl   *fakeLog
+	}{
+		{"after clean shutdown", &fakeMetric{}, &fakeLog{}},
+		{"after failed shutdown", &fakeMetric{shutErr: errors.New("metric backend down")}, &fakeLog{}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newWith(c.fm, c.fl)
+			_ = e.Shutdown(context.Background())
+			if err := e.Shutdown(context.Background()); err != nil {
+				t.Fatalf("second Shutdown err = %v, want nil", err)
+			}
+		})
 	}
 }
 
