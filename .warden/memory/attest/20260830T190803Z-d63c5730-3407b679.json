@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "d63c5730db301cbf59d46674fee46e9955c3a063",
+  "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T19:08:03+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent, sole pass \u2014 proportionate to a CI-config and template change; it verified the install-step reorder against both scripts, the cat-file guard against real refs, and the -tags fold by breaking one file of each tag"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T19:08:03+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "d63c5730db301cbf59d46674fee46e9955c3a063",
+      "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "fail-open"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 265,
+      "severity": "MEDIUM",
+      "finding": "The new per-path git cat-file -e guard converted an unresolvable origin/$BASE_REF from a hard step failure into a green pass that leaves the PR's entire gate surface in place, mislabelled as a bootstrap PR. cat-file exits 128 for both 'path is new' and 'ref did not resolve', and 2>/dev/null swallows the difference. The deploy key lands three steps later and .warden/bin/warden runs three after that.",
+      "evidence": "Reviewer ran the new loop with BASE_REF=nope-nope: six 'absent on base ref (bootstrap PR)' lines, rc=0. The single-command form it replaced: 'fatal: invalid reference: origin/nope-nope', rc=128.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-8v0",
+      "reason": "git rev-parse --verify \"origin/${BASE_REF}^{commit}\" runs before the loop. Verified: rc=128 on an unresolvable ref, rc=0 on a real one. Not reachable by a PR author today given fetch-depth: 0 and a base_ref that must exist \u2014 a regression closed rather than a live hole, and one this PR introduced into the control it was hardening.",
+      "id": "8be4395eb77eab05"
+    },
+    {
+      "ts": "2026-08-30T19:08:03+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "d63c5730db301cbf59d46674fee46e9955c3a063",
+      "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "scripts",
+      "file": "scripts/ci-go.sh",
+      "line": 26,
+      "severity": "LOW",
+      "finding": "The rationale comment said `go test -run ^$` 'links and runs 19 binaries'. 19 is the module count; the tree has 35 packages with test files, so the rejected alternative links 35 binaries.",
+      "evidence": "19 go.mod files; summing packages with TestGoFiles or XTestGoFiles across them gives 35, and counting ^ok lines from a tagged test run gives 35.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-8v0",
+      "reason": "Corrected to name test-bearing packages rather than modules. The measured timings either side were independently reproduced by the reviewer (~2.9s vs ~9.0s) and stand.",
+      "id": "c3eaea54e1ccb04a"
+    }
+  ]
+}
