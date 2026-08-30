@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "2a1d40973519973c492564f486c1b3e5c99ae72f",
+  "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T19:12:26+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent, sole pass \u2014 proportionate to a test-and-docs change with no production code; it mutation-tested three variants of the re-credit branch and independently re-measured both published rows"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T19:12:26+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "2a1d40973519973c492564f486c1b3e5c99ae72f",
+      "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter_test.go",
+      "line": 995,
+      "severity": "MEDIUM",
+      "finding": "The negative half of the re-credit test did not discriminate the branch's family guard. Asserting only the invalid sum kills a mutation that re-queues the metrics slice, but not the one that matters: deleting the `if p.Name == \"biz_dropped_events_total\"` guard folds every failed point's value into dropCounts and the test stayed green.",
+      "evidence": "Reviewer's mutation C left the suite green while minting biz_dropped_events_total{reason=\"\"} = 14901 \u2014 a transaction count plus a money amount \u2014 on the next flush.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-z7g",
+      "reason": "The test asserts the whole drop-point set against {invalid:1, export:1}. Mutation C now fails with map[:14901 export:1 invalid:1], and mutations A and B still fail. I had reported this as proved on both sides after testing two mutations; the third was the one worth proving.",
+      "id": "8991df6cc8a9a52f"
+    },
+    {
+      "ts": "2026-08-30T19:12:26+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "2a1d40973519973c492564f486c1b3e5c99ae72f",
+      "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+      "rule_id": "tests-required",
+      "tags": [
+        "benchmark-measures-itself"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter_test.go",
+      "line": 711,
+      "severity": "LOW",
+      "finding": "The de-dup reset reallocated a ~1 MB twoGenSet every block. The allocation was outside the timed region but its GC work was not, in a benchmark whose stated purpose is to price only the accept path. ADR-0015 asks for clear() over reallocation in loops.",
+      "evidence": "Reviewer measured 1388.5 ns and 154 MB peak RSS as written against 1335.5 ns and 130 MB with clear(), identical B/op and allocs/op \u2014 about 3.8% of the published figure was the benchmark's own bookkeeping.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-z7g",
+      "reason": "clear(em.dedup.cur) replaces the reallocation; cur holds one block's 4096 keys against a 65536 capacity so it never rotates and prev stays nil. Numbers re-measured after the change.",
+      "id": "795ce3b51256b549"
+    },
+    {
+      "ts": "2026-08-30T19:12:26+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "2a1d40973519973c492564f486c1b3e5c99ae72f",
+      "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/performance.md",
+      "line": 169,
+      "severity": "LOW",
+      "finding": "The note quoted 'delivered 49152 outcomes for 187820 Record calls' as what the conservation assertion reports, but b.N is host- and timing-dependent and will not reproduce.",
+      "evidence": "Reviewer's run of the same reverted code produced 'delivered 49152 outcomes for 541564 Record calls'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-z7g",
+      "reason": "Quotes only the invariant half \u2014 49152 is the pool size and is exact \u2014 and says the call count is whatever the run reached.",
+      "id": "33f81c5851ebf6c5"
+    },
+    {
+      "ts": "2026-08-30T19:12:26+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "2a1d40973519973c492564f486c1b3e5c99ae72f",
+      "base_sha": "5aea723a8b6849b9fe11045467d0127f9fc7aff2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/performance.md",
+      "line": 497,
+      "severity": "LOW",
+      "finding": "The diff published a second unreconciled 'accepted, one core' figure: README says 2.3 microseconds from BenchmarkRecordParallel at -cpu 1, the new row says 1,525 ns for the same wording, and the branch had deleted the sentence that reconciled them.",
+      "evidence": "README.md:305 against docs/performance.md:497, with 'The honest accept figures are the BenchmarkRecordParallel table above' removed by this diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-z7g",
+      "reason": "A paragraph now names the difference: BenchmarkRecordParallel runs a live flusher so each call carries its amortised export share, while this benchmark uses WithFlushInterval(0) and drains with the timer stopped. Two questions, two numbers.",
+      "id": "45935e9840ee9716"
+    }
+  ]
+}
