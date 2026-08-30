@@ -1,0 +1,18 @@
+{
+  "bead": "workspace-06c",
+  "head_sha": "9c65ec2a95b171b9e33398de3260b9c8d30de027",
+  "base_sha": "9c65ec2a95b171b9e33398de3260b9c8d30de027",
+  "rules_version": "665bf6d03117",
+  "decided_at": "2026-08-30T23:22:08+00:00",
+  "decided": "Shard InFlightTracker's items map by message-id hash (fixed 32 shards, per-shard mutex); Publish acquires every shard lock in index order and aggregates under all of them, so value and count still come from one consistent snapshot (ADR-0012); the currency-exponent pin moves to a sync.Map with LoadOrStore first-sight semantics; overflow/rejected/item-count become atomics, with the maxItems bound kept EXACT via add-then-rollback on the shared count. emit.Std.Record's buffer is deliberately NOT sharded in this change.",
+  "why": "The bead's own framing: no adopter load is near the knee (3.4M pairs/s worst case), but negative scaling means consumer fan-out \u2014 the library's target deployment shape \u2014 pays 5x per-op cost at 18 cores and the 1-core figure is the ceiling. The fix is contained to one file, preserves every documented semantic (oldest-enqueue retention, exact bound, loud rejects, single-snapshot publish, zero-then-retire), and the contended structure (a keyed map) shards naturally. Hashing only the id is sufficient: ids carry the cardinality; a same-id pathological load degrades to one shard, which is exactly today's behavior, not worse. Record is left alone because its contended structure is an append buffer whose flush ordering and drop accounting do not shard along any natural key, its ~1M/s ceiling also clears target loads, and bundling that surgery here would double the blast radius of this PR \u2014 it is parked as its own item.",
+  "cost_if_wrong": "The in-flight gauges are the pager signal for money at risk. A cross-shard snapshot torn between value and count violates ADR-0012 and desynchronizes the two gauges Finance-facing legs read; a bound made approximate could exceed the documented worst-case resident footprint; a botched exponent-pin race could flap one gauge series between incomparable sums.",
+  "alternatives": [
+    "Leave as-is and document sizing (rejected: the negative-scaling shape makes 1-core throughput the global ceiling under fan-out; the bead was accepted P2 as fix-worthy and the fix is contained)",
+    "sync.Map for the items map (rejected: Track's read-modify-write \u2014 keep-oldest enqueuedAt, last-write money \u2014 needs per-key atomicity sync.Map cannot give without per-key locks, and a consistent full-map snapshot for Publish is lost)",
+    "Per-shard maxItems bounds (rejected: a hot shard would reject Tracks while global capacity remains \u2014 changes the documented overflow semantics)",
+    "GOMAXPROCS-derived shard count (rejected for a const 32: readability (ADR-0014) and determinism beat a marginal fit to core count; 32 uncontended mutexes are free on small machines)",
+    "Shard Record's buffer in the same change (rejected: different structure, different invariants, own decision \u2014 parked as a separate tracked item)"
+  ],
+  "scope": "emit/inflight.go and its tests/benchmarks; no exported API change; no metric shape change; Record untouched"
+}
