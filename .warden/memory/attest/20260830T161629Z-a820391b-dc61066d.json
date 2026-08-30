@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "a820391b57fb5f6bed5ba64bddaeb6e8edc12b27",
+  "base_sha": "02f7ce428d9b54f0fe7a9391b9220bfb666233b9",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T16:16:29+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; engine:claude rule bodies + review charter + reviewer-side memory recall)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; findings list only, no reviewer rationale; settled the arithmetic by writing its own enumeration)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T16:16:29+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "a820391b57fb5f6bed5ba64bddaeb6e8edc12b27",
+      "base_sha": "02f7ce428d9b54f0fe7a9391b9220bfb666233b9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit/conformance",
+      "file": "testkit/conformance/conformance.go",
+      "line": 59,
+      "severity": "MEDIUM",
+      "finding": "The diff falsified sampleMetrics' own header, which gives the distinctness mechanism as 'a unique currency label per point'. Four of the twelve points the diff produces \u2014 biz_provider_calls_total at i=3,9 and biz_dropped_events_total at i=4,10 \u2014 carry no currency label at all.",
+      "evidence": "conformance.go:58-59 header vs the diff's own inline comment 30 lines below: 'biz_provider_calls_total and biz_dropped_events_total have no currency label, so each supplies its own varying label'. At base 02f7ce4 all three seeded families set currency, so the header was true before this diff and false after.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-crg",
+      "reason": "Header rewritten to state both mechanisms: a unique currency for most points, a label of their own for the two families without one.",
+      "id": "93df558ec7a41a48"
+    },
+    {
+      "ts": "2026-08-30T16:16:29+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "a820391b57fb5f6bed5ba64bddaeb6e8edc12b27",
+      "base_sha": "02f7ce428d9b54f0fe7a9391b9220bfb666233b9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit/conformance",
+      "file": "testkit/conformance/conformance.go",
+      "line": 70,
+      "severity": "MEDIUM",
+      "finding": "The new comment named the wrong binding constraint and cross-referenced a guard that implements a different one. It called biz_dropped_events_total's four-value reason enum 'the tightest limit on how far n can be raised (see the guard below)', but the guard below is a currency guard, and currency binds 16 indices earlier.",
+      "evidence": "Examiner's enumeration of the i%6 interleave, reproduced independently: first duplicate per family is biz_inflight_count i=12 (first colliding n=13), inflight_value i=13, txn_total i=14, value_total i=17, dropped_events i=28 (first colliding n=29); biz_provider_calls_total never collides through i=199 because op embeds i. Guard threshold n>len(currencies) panics at n=13, which is numerically correct.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-crg",
+      "reason": "Comment now says the reason enum is a ceiling but not the binding one, gives both numbers (n=13 vs n=29), and states why the guard is a currency guard. The threshold itself was already right, so this was a rationale defect, not a live bug. Numbers re-derived by my own enumeration before rewriting.",
+      "id": "fd7c40b06c119431"
+    },
+    {
+      "ts": "2026-08-30T16:16:29+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "a820391b57fb5f6bed5ba64bddaeb6e8edc12b27",
+      "base_sha": "02f7ce428d9b54f0fe7a9391b9220bfb666233b9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0018-provider-call-writer.md",
+      "line": 98,
+      "severity": "MEDIUM",
+      "finding": "This diff closes a gap that ADR-0018 states in the present tense is still open: 'The exporter conformance suite still never seeds this family (testkit/conformance); that gap is tracked separately and is not closed here.'",
+      "evidence": "docs/adr/0018-provider-call-writer.md:98-100 vs conformance.go case 3 seeding biz_provider_calls_total. The examiner confirmed the line sits in Consequences (line 78+), not Context, so docs-accuracy's 'ADR Context sections describing history' exemption does not reach it, and applies_to covers **/*.md.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-crg",
+      "reason": "PARKED on workspace-v42, with the full quote and the precedent to follow \u2014 not a silent discard. Ruled out of this PR on the examiner's own reading of the policy: CONTRIBUTING.md:120-123 says 'ADR amendments are their own PRs', with a carve-out only for a reconciliation an incoming ADR mandates, and this PR ships no ADR. Editing ADR-0018 here would violate the same contribution rule the finding is enforcing. CONTRIBUTING.md:118-120 is why it cannot simply be left, which is what the bead carries.",
+      "id": "53fc736ad64bc4e1"
+    },
+    {
+      "ts": "2026-08-30T16:16:29+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "a820391b57fb5f6bed5ba64bddaeb6e8edc12b27",
+      "base_sha": "02f7ce428d9b54f0fe7a9391b9220bfb666233b9",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "testkit/conformance",
+      "file": "testkit/conformance/conformance.go",
+      "line": 72,
+      "severity": "MEDIUM",
+      "finding": "The diff adds a panic guard and a new distinctness scheme to testkit/** with no test change, so neither the guard nor the distinct-series invariant it protects is asserted, and correctness at n=12 rests on reviewer arithmetic.",
+      "evidence": "git show --stat 069a291 is one file, no test file; grep finds no sampleMetrics reference in testkit/conformance/*_test.go.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-crg",
+      "reason": "REFUTED by the cross-examiner, by mutation. Its load-bearing claim is false: replacing op with a constant so i=3 and i=9 collapse into one series makes the repo-wide gate fail with 'delivered 11 of 12 metric points after shutdown' from adapters/export/prometheus, whose promBackend sums len(mf.Metric) \u2014 a series count. So the invariant IS asserted, just by the exporter conformance runs rather than a testkit-local test (testkit's own memBackend counts points, which is why its package tests stay green). What remains is the panic guard alone, unreachable while const n = 12 is the only caller \u2014 a test for that is preference, not a defect under this rule.",
+      "id": "1a52b97c01a055f1"
+    }
+  ]
+}
