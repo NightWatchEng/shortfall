@@ -925,3 +925,56 @@ func TestRecordProviderCallLogsWithTheLockReleased(t *testing.T) {
 	// The rejection path logs too, and must also run unlocked.
 	em.RecordProviderCall("stripe", "", ProviderCallSuccess)
 }
+
+// TestDroppedEventsCountSurvivesAMetricExportFailure covers both sides of the
+// one exception in Flush's failed-metric-batch policy.
+//
+// A failed metric batch is logged and dropped without counting — re-queuing
+// deltas risks double-count on a partial write. The exception is
+// biz_dropped_events_total: those points are the record of the library's own
+// damage and never left the process, so they are re-credited rather than
+// lost. Neither side of that had a test: the only failure-injection test in
+// the package fails a batch that carries no drop point at all.
+func TestDroppedEventsCountSurvivesAMetricExportFailure(t *testing.T) {
+	exp := &captureExporter{}
+	em := newTestEmitter(t, exp)
+
+	// Mint a drop the emitter itself owns, so dropCounts is non-empty and
+	// the next flush carries a biz_dropped_events_total point.
+	em.SetInFlight("invoice.pay", "capture", "not-a-bucket", biz.Money{Amount: 1, Currency: "USD", Exponent: 2}, 1)
+	// And an ordinary metric alongside it, to pin the other half of the
+	// policy: this one must NOT come back.
+	em.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed)
+
+	exp.mu.Lock()
+	exp.failAll = true
+	exp.mu.Unlock()
+	if err := em.Flush(context.Background()); err == nil {
+		t.Fatal("failing export must surface through Flush")
+	}
+
+	exp.mu.Lock()
+	exp.failAll = false
+	exp.mu.Unlock()
+	metrics, _ := flushAndSnapshot(t, em, exp)
+	byName := metricsByName(metrics)
+
+	var invalid int64
+	for _, p := range byName["biz_dropped_events_total"] {
+		if p.Labels["reason"] == "invalid" {
+			invalid += p.Value
+		}
+	}
+	if invalid != 1 {
+		t.Errorf("biz_dropped_events_total{reason=invalid} = %d after a failed export, want 1 — "+
+			"a backend outage must not destroy the record of the library's own damage", invalid)
+	}
+	// The transaction families are NOT re-credited: re-queuing them past a
+	// partial write is how a counter double-counts.
+	if pts := byName["biz_txn_total"]; len(pts) != 0 {
+		t.Errorf("biz_txn_total came back after a failed export (%d points) — only the drop counters are re-credited", len(pts))
+	}
+	if pts := byName["biz_value_total"]; len(pts) != 0 {
+		t.Errorf("biz_value_total came back after a failed export (%d points)", len(pts))
+	}
+}
