@@ -14,6 +14,16 @@
 //     deliver every event; one that says Events=false must deliver none
 //     (it is honest about not doing events, not silently dropping them).
 //   - Empty batches are a no-op: nil in, nothing out, no error.
+//   - Post-Shutdown exports are refused or delivered, never absorbed: after
+//     Shutdown, an Export on a capable signal either returns an error and
+//     delivers nothing (a terminal push exporter) or returns nil and
+//     demonstrably delivers (a pull-collected exporter whose Shutdown is a
+//     no-op). Accepting a batch that no flush will ever move again is the
+//     silent-loss class this suite previously had no invariant for.
+//   - A repeat Shutdown after a successful one returns nil: the no-op has
+//     no work left to fail at, and a dependency's shutdown sentinel must
+//     not leak out of it. After a FAILED Shutdown the repeat behavior is
+//     unspecified — an adapter may retry the flush or no-op.
 package conformance
 
 import (
@@ -237,7 +247,71 @@ func Check(h Harness) []Result {
 	// Empty batches are a no-op.
 	results = append(results, emptyNoop(h))
 
+	// Post-Shutdown exports are refused or delivered, never absorbed.
+	results = append(results, postShutdownMetrics(h, caps, n))
+	results = append(results, postShutdownEvents(h, caps, n))
+
+	// A repeat Shutdown after a successful one returns nil.
+	results = append(results, repeatShutdown(h))
+
 	return results
+}
+
+func repeatShutdown(h Harness) Result {
+	r := Result{Name: "a repeat shutdown after a successful one returns nil"}
+	exp, _ := h.New()
+	if err := exp.Shutdown(context.Background()); err != nil {
+		r.Err = fmt.Sprintf("shutdown errored: %v", err)
+		return r
+	}
+	if err := exp.Shutdown(context.Background()); err != nil {
+		r.Err = fmt.Sprintf("repeat shutdown after a successful one errored: %v — the no-op has no work left to fail at", err)
+	}
+	return r
+}
+
+// postShutdown adjudicates one signal's post-Shutdown answer against the
+// contract's disjunction. delivered reads the backend count for the signal
+// under test; export feeds it n fresh points/outcomes and reports the first
+// error.
+func postShutdown(r Result, exp emit.Exporter, n int, export func() error, delivered func() int) Result {
+	if err := exp.Shutdown(context.Background()); err != nil {
+		r.Err = fmt.Sprintf("shutdown errored: %v", err)
+		return r
+	}
+	err := export()
+	got := delivered()
+	switch {
+	case err != nil && got != 0:
+		r.Err = fmt.Sprintf("post-shutdown export errored yet delivered %d — a refusal must deliver nothing", got)
+	case err == nil && got != n:
+		r.Err = fmt.Sprintf("post-shutdown export returned nil but delivered %d of %d — silently absorbed; it must refuse with an error or stay genuinely functional", got, n)
+	}
+	return r
+}
+
+func postShutdownMetrics(h Harness, caps emit.Caps, n int) Result {
+	r := Result{Name: "post-shutdown metric export is refused or delivered"}
+	if !caps.Metrics {
+		r.Skipped = true
+		return r
+	}
+	exp, be := h.New()
+	return postShutdown(r, exp, n,
+		func() error { _, err := batchesOfMetrics(exp, n); return err },
+		be.MetricPoints)
+}
+
+func postShutdownEvents(h Harness, caps emit.Caps, n int) Result {
+	r := Result{Name: "post-shutdown event export is refused or delivered"}
+	if !caps.Events {
+		r.Skipped = true
+		return r
+	}
+	exp, be := h.New()
+	return postShutdown(r, exp, n,
+		func() error { _, err := batchesOfEvents(exp, n); return err },
+		be.Events)
 }
 
 func metricNoLoss(h Harness, caps emit.Caps, n int) Result {

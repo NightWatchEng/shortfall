@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "e2e6d2543a7f0e4cad10c12caf9ae04f9b0e2174",
+  "base_sha": "844cd9753f0c93c0ba130e0f2a2ab811e544c644",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T22:58:08+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude-fable-5 (deliver fork, sequential pass \u2014 platform forbade subagent spawn; round is a loop, not a gauntlet, per graph.yaml's declared subagent topology)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude-fable-5 (same context, adversarial second pass over findings only)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T22:58:08+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "e2e6d2543a7f0e4cad10c12caf9ae04f9b0e2174",
+      "base_sha": "844cd9753f0c93c0ba130e0f2a2ab811e544c644",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emit.go",
+      "line": 91,
+      "severity": "MEDIUM",
+      "finding": "The new post-Shutdown contract sentence omitted the capable-signal qualifier: gcp's incapable ExportMetrics returns nil and delivers nothing after Shutdown, which the sentence as written forbade, while testkit/conformance correctly scopes the invariant to capable signals \u2014 two wordings of one standard disagreeing at the incapable-signal margin.",
+      "evidence": "emit/emit.go: 'after it returns an Export call must either be refused \u2014 a non-nil error, nothing delivered \u2014 or keep genuinely working' vs conformance.go: 'an Export on a capable signal either returns an error and delivers nothing...'; gcp/gcp.go ExportMetrics: 'return nil' (Metrics:false).",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Wording scoped to capable signals in commit 94a1ee8; incapable no-op explicitly stays a no-op.",
+      "id": "b8e166afb5d768ee"
+    },
+    {
+      "ts": "2026-08-30T22:58:08+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "e2e6d2543a7f0e4cad10c12caf9ae04f9b0e2174",
+      "base_sha": "844cd9753f0c93c0ba130e0f2a2ab811e544c644",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-structure"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/cloudwatch/cloudwatch_test.go",
+      "line": 317,
+      "severity": "MEDIUM",
+      "finding": "TestPostShutdownExportRefused exercises both signals and both metric paths in one function without table-driven t.Run subtests (ADR-0007).",
+      "evidence": "One linear function body covering writer-path metrics, events, second Shutdown, empty batch, and the PutMetricData path.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner: the test is a sequential lifecycle scenario \u2014 each assertion depends on state the prior step created (shutdown, then refusal, then idempotent re-shutdown, then the flushed-bytes check) \u2014 not a multi-case matrix with a uniform assertion body, which is the shape ADR-0007's table mandate addresses; scenario tests are a declared exception.",
+      "id": "98ceffbab2a57c65"
+    },
+    {
+      "ts": "2026-08-30T22:58:08+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "e2e6d2543a7f0e4cad10c12caf9ae04f9b0e2174",
+      "base_sha": "844cd9753f0c93c0ba130e0f2a2ab811e544c644",
+      "rule_id": "comment-hygiene",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit/conformance",
+      "file": "testkit/conformance/conformance.go",
+      "line": 22,
+      "severity": "MEDIUM",
+      "finding": "Deterministic gate: tracked-item ids (workspace-0cd, workspace-9h1) appeared in code comments across four changed files; ids belong in commit headers and PR bodies (CONTRIBUTING, ADR-0014).",
+      "evidence": "warden review --base origin/main flagged conformance.go:22, conformance_test.go:194, cloudwatch_test.go:326, gcp_test.go:334.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "All five occurrences rephrased to describe the defect class without ids in commit e2e6d25.",
+      "id": "6dc15afdcc1052bb"
+    }
+  ]
+}

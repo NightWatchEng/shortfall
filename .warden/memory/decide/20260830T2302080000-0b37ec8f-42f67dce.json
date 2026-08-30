@@ -1,0 +1,16 @@
+{
+  "bead": "workspace-shl",
+  "head_sha": "0b37ec8fa089012782c4d6df35f6b2f1396b840d",
+  "base_sha": "0b37ec8fa089012782c4d6df35f6b2f1396b840d",
+  "rules_version": "665bf6d03117",
+  "decided_at": "2026-08-30T23:02:08+00:00",
+  "decided": "Amendment to the post-Shutdown contract ruling: a repeat Shutdown after a successful one returns nil \u2014 the no-op has no work left to fail at, and a dependency's shutdown sentinel must not leak out of it. Enforced by a new conformance invariant (fresh exporter, Shutdown twice, second must be nil). Repeat behavior after a FAILED Shutdown is deliberately unspecified: an adapter may retry the flush (cloudwatch/gcp, whose bufio retains unflushed data on error) or no-op (otlp, whose legs are not retryable once the sdk marks itself shut down).",
+  "why": "The sibling ruling legislated post-Shutdown Export; this closes the same contract gap seen from the Shutdown side. All four adapters already satisfy it after the one-line otlp fix (Swap-guarded early return), so the sentence costs nothing to enforce today and prevents the class where a defensive re-shutdown, or an explicit Shutdown racing emit.Std.Close, reports a non-nil error for a no-op. Stating it without a conformance invariant would be an unenforced claim, the artifact this repo's docs-accuracy rule exists to forbid.",
+  "cost_if_wrong": "If wrong (some future push exporter genuinely must fail a repeat call), the invariant blocks that adapter at conformance time and forces the contract conversation then \u2014 a visible, cheap failure. The asymmetric risk of NOT deciding is callers treating any Shutdown error as dropped outcome data and alarming on a no-op.",
+  "alternatives": [
+    "Leave repeat-Shutdown behavior unspecified entirely: rejected \u2014 the observed divergence (otlp errored, the other three returned nil) is exactly the one-contract-three-answers shape the parent bead exists to close.",
+    "Require repeat Shutdown to return the FIRST call's error (sticky): rejected \u2014 turns a completed no-op into a repeated alarm, and cloudwatch/gcp's retry-on-failed-flush is more useful than a sticky replay.",
+    "Specify repeat-after-FAILED-Shutdown too: rejected \u2014 retry (buffered writers) and no-op (sdk-backed legs) are both defensible; mandating either would break a legitimate design."
+  ],
+  "scope": "emit.Exporter doc contract (one sentence); testkit/conformance (repeatShutdown invariant + self-test); adapters/export/otlp Shutdown (Swap-guarded early return). cloudwatch, gcp, prometheus already conform, unchanged."
+}

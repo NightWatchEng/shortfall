@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -324,5 +325,31 @@ func TestWithProjectDrivesTraceCorrelation(t *testing.T) {
 				t.Errorf("logging.googleapis.com/trace = %#v, want %#v", got["logging.googleapis.com/trace"], c.want)
 			}
 		})
+	}
+}
+
+// TestPostShutdownExportRefused pins the terminal branch of emit.Exporter's
+// post-Shutdown contract: a later ExportEvents returns ErrShutdown and
+// writes nothing — the writer's flush has already happened, so accepting
+// the batch would absorb it silently.
+func TestPostShutdownExportRefused(t *testing.T) {
+	var buf bytes.Buffer
+	e := New(WithWriter(&buf))
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	flushed := buf.Len()
+	if err := e.ExportEvents(context.Background(), []biz.Outcome{sampleOutcome()}); !errors.Is(err, ErrShutdown) {
+		t.Fatalf("post-shutdown ExportEvents err = %v, want ErrShutdown", err)
+	}
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("second shutdown: %v", err)
+	}
+	if buf.Len() != flushed {
+		t.Fatalf("post-shutdown export reached the writer: %d bytes appeared", buf.Len()-flushed)
+	}
+	// Empty batches stay a no-op even after Shutdown: nothing to refuse.
+	if err := e.ExportEvents(context.Background(), nil); err != nil {
+		t.Fatalf("post-shutdown empty batch errored: %v", err)
 	}
 }
