@@ -323,7 +323,7 @@ func equalInts(a, b []int) bool {
 
 // TestPostShutdownExportRefused pins the terminal branch of emit.Exporter's
 // post-Shutdown contract for both signals and both metric paths: a later
-// export returns ErrShutdown and delivers nothing (workspace-0cd).
+// export returns ErrShutdown and delivers nothing.
 func TestPostShutdownExportRefused(t *testing.T) {
 	var buf bytes.Buffer
 	e := New(WithWriter(&buf))

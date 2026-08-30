@@ -331,7 +331,7 @@ func TestWithProjectDrivesTraceCorrelation(t *testing.T) {
 // TestPostShutdownExportRefused pins the terminal branch of emit.Exporter's
 // post-Shutdown contract: a later ExportEvents returns ErrShutdown and
 // writes nothing — the writer's flush has already happened, so accepting
-// the batch would absorb it silently (workspace-0cd).
+// the batch would absorb it silently.
 func TestPostShutdownExportRefused(t *testing.T) {
 	var buf bytes.Buffer
 	e := New(WithWriter(&buf))

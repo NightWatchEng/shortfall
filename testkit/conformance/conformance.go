@@ -19,7 +19,7 @@
 //     delivers nothing (a terminal push exporter) or returns nil and
 //     demonstrably delivers (a pull-collected exporter whose Shutdown is a
 //     no-op). Accepting a batch that no flush will ever move again is the
-//     silent-loss class workspace-9h1 fell through.
+//     silent-loss class this suite previously had no invariant for.
 package conformance
 
 import (

@@ -29,7 +29,7 @@ type fakeCfg struct {
 	// terminal push-exporter shape) and an eager fake keeps delivering (the
 	// pull-collected shape) — both conformant. These dial in the two ways an
 	// implementation can break the disjunction instead.
-	absorbAfterShutdown bool // accept post-Shutdown exports and lose them (the workspace-9h1 class)
+	absorbAfterShutdown bool // accept post-Shutdown exports and lose them silently
 	refuseButDeliver    bool // error on post-Shutdown exports yet deliver them anyway
 }
 
@@ -191,9 +191,9 @@ func TestSuiteVerdicts(t *testing.T) {
 			wantFail: []string{"declares at least one signal"},
 		},
 		{
-			// The workspace-9h1 class: post-Shutdown exports accepted into a
-			// buffer nothing will ever flush again. Neither refused nor
-			// delivered — the one behavior the contract forbids.
+			// Post-Shutdown exports accepted into a buffer nothing will
+			// ever flush again. Neither refused nor delivered — the one
+			// behavior the contract forbids.
 			name: "silently absorbs post-shutdown exports",
 			cfg:  fakeCfg{caps: both, buffer: true, absorbAfterShutdown: true},
 			wantFail: []string{
