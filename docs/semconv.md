@@ -51,7 +51,15 @@ Fixed families with fixed, bounded label sets (ADR-0004/0005/0012):
 
 `age_bucket` is the fixed 5-value set of ADR-0005 (`lt1m`, `1m-5m`, `5m-30m`,
 `30m-2h`, `gt2h`). `outcome` is one of `success`, `failed`, `deferred`,
-`abandoned`, `unknown` — the bounded result enumeration.
+`abandoned`, `unknown` — the bounded result enumeration — on the transaction
+families. On `biz_provider_calls_total` it is the narrower provider-health
+pair `success`, `failed`: the provider either returned a definitive answer or
+it did not, and a declined card is the provider answering correctly.
+
+`provider` and `op` are adapter-supplied constants. A producer MUST bound
+them rather than trust that: `emit` admits a fixed number of distinct
+(`provider`, `op`) pairs per emitter and collapses the rest to `other`, so a
+caller that passes request data inflates one series instead of the family.
 
 ## Design invariants a conforming producer MUST keep
 

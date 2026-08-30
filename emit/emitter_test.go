@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -751,4 +755,173 @@ func TestEstimatedOutcomeStaysOutOfValueMetric(t *testing.T) {
 	if len(events) != 1 || !events[0].VC.Estimated {
 		t.Fatalf("estimated outcome must still ride the event: %+v", events)
 	}
+}
+
+func TestRecordProviderCallEmitsCounter(t *testing.T) {
+	exp := &captureExporter{}
+	em := newTestEmitter(t, exp)
+	em.RecordProviderCall("stripe", "capture", ProviderCallFailed)
+	metrics, _ := flushAndSnapshot(t, em, exp)
+	pts := metricsByName(metrics)["biz_provider_calls_total"]
+	if len(pts) != 1 {
+		t.Fatalf("provider-call points: %v", metrics)
+	}
+	want := map[string]string{"provider": "stripe", "op": "capture", "outcome": ProviderCallFailed}
+	for k, v := range want {
+		if pts[0].Labels[k] != v {
+			t.Fatalf("label %s = %q, want %q", k, pts[0].Labels[k], v)
+		}
+	}
+	if len(pts[0].Labels) != len(want) {
+		t.Fatalf("label set %v, want exactly the ADR-0004 set %v", pts[0].Labels, want)
+	}
+	if pts[0].Value != 1 {
+		t.Fatalf("counter delta %d, want 1", pts[0].Value)
+	}
+	if !pts[0].At.Equal(testClock) {
+		t.Fatalf("At = %v, want the emitter clock %v", pts[0].At, testClock)
+	}
+}
+
+func TestRecordProviderCallRejectsUnboundedLabels(t *testing.T) {
+	cases := []struct {
+		name         string
+		provider, op string
+		outcome      string
+	}{
+		{"empty provider", "", "capture", ProviderCallSuccess},
+		{"empty op", "stripe", "", ProviderCallSuccess},
+		{"blank provider", "   ", "capture", ProviderCallSuccess},
+		{"outcome outside the enum", "stripe", "capture", "deferred"},
+		{"empty outcome", "stripe", "capture", ""},
+		{"over-long op", "stripe", strings.Repeat("x", 65), ProviderCallSuccess},
+		{"control character", "stripe", "cap\nture", ProviderCallSuccess},
+		// Invalid UTF-8 must never reach a label: the OTLP exporter
+		// marshals label values as protobuf strings, which fails the
+		// WHOLE batch on a bad byte, and Flush drops a failed metric
+		// batch entire — one bad op would take other families with it.
+		{"invalid utf-8", "stripe", "cap\xffture", ProviderCallSuccess},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			exp := &captureExporter{}
+			em := newTestEmitter(t, exp)
+			em.RecordProviderCall(c.provider, c.op, c.outcome)
+			metrics, _ := flushAndSnapshot(t, em, exp)
+			if pts := metricsByName(metrics)["biz_provider_calls_total"]; len(pts) != 0 {
+				t.Fatalf("a rejected call minted a series: %v", pts)
+			}
+			drops := metricsByName(metrics)["biz_dropped_events_total"]
+			if len(drops) != 1 || drops[0].Labels["reason"] != "invalid" {
+				t.Fatalf("rejection must be loud on biz_dropped_events_total{reason=invalid}, got %v", drops)
+			}
+		})
+	}
+}
+
+func TestRecordProviderCallCapsDistinctPairs(t *testing.T) {
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp,
+		WithClock(func() time.Time { return testClock }),
+		WithProviderPairCap(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+
+	// Two distinct pairs fit under the cap and keep their own labels.
+	em.RecordProviderCall("stripe", "capture", ProviderCallSuccess)
+	em.RecordProviderCall("stripe", "refund", ProviderCallSuccess)
+	// A third distinct pair is past the cap: it still counts, but it may not
+	// mint a third series — ADR-0004 cardinality is the library's guarantee,
+	// not the caller's discipline.
+	em.RecordProviderCall("stripe", "unbounded-per-request-op", ProviderCallFailed)
+
+	metrics, _ := flushAndSnapshot(t, em, exp)
+	pts := metricsByName(metrics)["biz_provider_calls_total"]
+	if len(pts) != 3 {
+		t.Fatalf("every call must still be counted: %v", pts)
+	}
+	seen := map[string]int{}
+	for _, p := range pts {
+		seen[p.Labels["provider"]+"/"+p.Labels["op"]]++
+	}
+	if seen["stripe/capture"] != 1 || seen["stripe/refund"] != 1 {
+		t.Fatalf("pairs under the cap must keep their labels: %v", seen)
+	}
+	if seen[ProviderOther+"/"+ProviderOther] != 1 {
+		t.Fatalf("a pair past the cap must collapse to the %q sentinel, got %v", ProviderOther, seen)
+	}
+	if seen["stripe/unbounded-per-request-op"] != 0 {
+		t.Fatalf("a pair past the cap minted a series: %v", seen)
+	}
+
+	// The sentinel is itself a stable series, and an already-admitted pair
+	// still passes after the cap is reached.
+	em.RecordProviderCall("stripe", "another-new-op", ProviderCallFailed)
+	em.RecordProviderCall("stripe", "capture", ProviderCallSuccess)
+	metrics2, _ := flushAndSnapshot(t, em, exp)
+	after := map[string]int{}
+	for _, p := range metricsByName(metrics2)["biz_provider_calls_total"] {
+		after[p.Labels["provider"]+"/"+p.Labels["op"]]++
+	}
+	if after[ProviderOther+"/"+ProviderOther] != 2 || after["stripe/capture"] != 2 {
+		t.Fatalf("sentinel must be stable and admitted pairs must survive the cap: %v", after)
+	}
+}
+
+func TestRecordProviderCallIsOnTheEmitterInterface(t *testing.T) {
+	// The engine reads biz_provider_calls_total{outcome=failed}; the interface
+	// is what makes that readable counter writable by any Emitter, not just Std.
+	var em Emitter = newTestEmitter(t, &captureExporter{})
+	em.RecordProviderCall("stripe", "capture", ProviderCallFailed)
+}
+
+// lockProbeHandler asserts, from inside the log handler, that the emitter's
+// mutex is NOT held while it runs. A handler write under s.mu blocks Record
+// on the request path — the one thing Record promises not to do.
+type lockProbeHandler struct {
+	slog.Handler
+	em     *Std
+	t      *testing.T
+	probed atomic.Bool
+}
+
+func (h *lockProbeHandler) Handle(ctx context.Context, r slog.Record) error {
+	h.probed.Store(true)
+	if !h.em.mu.TryLock() {
+		h.t.Errorf("emit: %q logged while holding the emitter mutex — that blocks Record on the request path", r.Message)
+	} else {
+		h.em.mu.Unlock()
+	}
+	return nil
+}
+
+func TestRecordProviderCallLogsWithTheLockReleased(t *testing.T) {
+	// The probe needs the *Std it will interrogate, and the emitter needs
+	// the probe as its logger, so the probe is built first and its target
+	// filled in after New. WithFlushInterval(0) keeps that safe: no
+	// background flusher exists to read s.logger, so nothing can log
+	// before this goroutine sets em.
+	probe := &lockProbeHandler{Handler: slog.NewTextHandler(io.Discard, nil), t: t}
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp,
+		WithClock(func() time.Time { return testClock }),
+		WithFlushInterval(0),
+		WithLogger(slog.New(probe)),
+		WithProviderPairCap(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+	probe.em = em
+
+	em.RecordProviderCall("stripe", "capture", ProviderCallSuccess) // admitted, no log
+	em.RecordProviderCall("stripe", "past-the-cap", ProviderCallFailed)
+	if !probe.probed.Load() {
+		t.Fatal("the over-cap branch never logged, so the lock was never probed")
+	}
+
+	// The rejection path logs too, and must also run unlocked.
+	em.RecordProviderCall("stripe", "", ProviderCallSuccess)
 }

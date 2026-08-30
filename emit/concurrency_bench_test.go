@@ -166,14 +166,19 @@ func pendingDrops(s *Std) int64 {
 // older BenchmarkTrackerPublish10k measures the pair together; keeping them
 // separate is why the scaling series is readable.
 type countingEmitter struct {
-	records  atomic.Int64
-	inflight atomic.Int64
+	records       atomic.Int64
+	inflight      atomic.Int64
+	providerCalls atomic.Int64
 }
 
 var _ Emitter = (*countingEmitter)(nil)
 
 func (c *countingEmitter) Record(context.Context, string, biz.Result, ...Option) {
 	c.records.Add(1)
+}
+
+func (c *countingEmitter) RecordProviderCall(string, string, string) {
+	c.providerCalls.Add(1)
 }
 
 func (c *countingEmitter) SetInFlight(string, string, string, biz.Money, int64) {

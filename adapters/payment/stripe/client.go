@@ -44,8 +44,15 @@ type Backend struct {
 // BackendOption configures WrapBackend.
 type BackendOption func(*Backend)
 
-// WithProviderMetric registers a callback for every call — wire it to record
-// biz_provider_calls_total{provider,op,outcome}.
+// WithProviderMetric registers a callback for every call. Hand it to the
+// emitter and the call lands on biz_provider_calls_total{provider,op,outcome}
+// — inside the buffer, the label fence and the drop counter:
+//
+//	WithProviderMetric(func(p ProviderCall) {
+//		em.RecordProviderCall("stripe", p.Op, p.Outcome)
+//	})
+//
+// ProviderCall.Outcome already uses emit's success/failed spelling.
 func WithProviderMetric(f func(ProviderCall)) BackendOption {
 	return func(b *Backend) { b.onCall = f }
 }

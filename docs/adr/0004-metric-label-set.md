@@ -35,6 +35,12 @@ no family ever gains a label, and no family exists beyond these five:
 - `provider` and `op` on `biz_provider_calls_total` are bounded by
   construction (a handful of payment providers, each with a small API
   surface); they are adapter-supplied constants, never request data.
+  **Amended 2026-08-30 by [ADR-0018](0018-provider-call-writer.md)**: this
+  bullet previously ended there, resting the bound on caller discipline at a
+  time when the library had no writer for the family at all. `emit` now owns
+  the writer and enforces the bound — a distinct-pair cap per emitter, with
+  pairs past it collapsing to the fixed value `other` — so the family meets
+  this ADR's own "structurally impossible rather than discouraged" standard.
 - `biz.entity.id` and `biz.customer.id` are events-only attributes; any
   exporter or code path that would place them on a metric is a defect
   (review charter item 4), and the emit layer's label construction makes it

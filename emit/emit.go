@@ -1,6 +1,8 @@
 // Package emit turns stage transitions into the two normalized signals:
 // bounded metrics (sums and counts with the fixed ADR-0004 label set) and
-// unsampled per-transaction outcome events. It never touches a backend
+// unsampled per-transaction outcome events. It also counts observed
+// downstream provider calls, the one metric family that describes the
+// provider rather than a transaction. It never touches a backend
 // directly; exporters do.
 //
 // The types and interfaces here are the frozen v0.1.0 contract adapters
@@ -26,6 +28,29 @@ const (
 
 // AgeBuckets lists the five buckets in ascending order.
 var AgeBuckets = []string{AgeLt1m, Age1mTo5m, Age5mTo30m, Age30mTo2h, AgeGt2h}
+
+// The provider-call outcomes (ADR-0004's `outcome` label on
+// biz_provider_calls_total). This is the provider-health view and it is
+// deliberately narrower than biz.Result: "success" means the provider
+// returned a definitive answer — the API was reachable — and "failed"
+// means it did not (transport error, timeout, 5xx, 429). A business
+// decline is the provider answering correctly, so it is a success here
+// and a failed *outcome event* on the stage, never both on this family.
+// Exported so no caller spells one by hand.
+const (
+	ProviderCallSuccess = "success"
+	ProviderCallFailed  = "failed"
+)
+
+// ProviderCallOutcomes lists the two accepted provider-call outcomes.
+var ProviderCallOutcomes = []string{ProviderCallSuccess, ProviderCallFailed}
+
+// ProviderOther is the fixed value a (provider, op) pair collapses to once
+// an emitter has already minted DefaultProviderPairCap distinct pairs. The
+// call is still counted — sums stay complete — but it cannot mint a new
+// series. ADR-0004 calls provider and op "bounded by construction"; this
+// is what makes that a library guarantee rather than a caller promise.
+const ProviderOther = "other"
 
 // MetricPoint is one bounded-label metric observation. Name is one of the
 // fixed ADR-0004 families; Labels never exceed the family's declared set
@@ -88,7 +113,8 @@ type RecordConfig struct {
 }
 
 // Emitter is the application-facing surface: one call per stage
-// transition, one gauge update path for in-flight value.
+// transition, one gauge update path for in-flight value, and one counter
+// path for observed downstream provider calls.
 //
 // Record never blocks the request path and returns no error — invalid or
 // overflowing outcomes are dropped and counted on
@@ -101,4 +127,11 @@ type Emitter interface {
 	// (flow, stage, age_bucket, currency): biz_inflight_value (money) and
 	// biz_inflight_count (count) together (ADR-0012).
 	SetInFlight(flow, stage, ageBucket string, money biz.Money, count int64)
+	// RecordProviderCall counts one observed downstream provider call on
+	// biz_provider_calls_total{provider, op, outcome} (ADR-0004). It is
+	// the write side of the counter engine.Compute reads to tell an
+	// upstream provider failure from internal suppression; outcome must
+	// be one of ProviderCallOutcomes, and provider/op are adapter-supplied
+	// constants held inside a cardinality fence.
+	RecordProviderCall(provider, op, outcome string)
 }

@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/trace"
 
@@ -16,7 +19,8 @@ import (
 
 // Std is the standard Emitter implementation: non-blocking Record with a
 // bounded event buffer and a bounded metric buffer, in-process
-// de-duplication, ADR-0004 label enforcement, and loud drops
+// de-duplication, ADR-0004 label enforcement on all three write paths
+// (Record, SetInFlight, RecordProviderCall), and loud drops
 // (biz_dropped_events_total{reason}) — never silent ones.
 //
 // Ordering: batches may reach the exporter out of order when flushes
@@ -29,9 +33,10 @@ type Std struct {
 	clock  func() time.Time
 	logger *slog.Logger
 
-	bufSize    int
-	metricsCap int
-	interval   time.Duration
+	bufSize         int
+	metricsCap      int
+	interval        time.Duration
+	providerPairCap int
 
 	mu             sync.Mutex
 	events         []biz.Outcome
@@ -39,6 +44,7 @@ type Std struct {
 	dropCounts     map[string]int64 // reason -> delta since last flush
 	metricOverflow int64            // dropped points since last flush (logged, not a money counter)
 	dedup          *twoGenSet
+	providerPairs  map[string]struct{} // distinct (provider, op) admitted so far
 
 	loopCtx    context.Context
 	loopCancel context.CancelFunc
@@ -69,6 +75,11 @@ func WithLogger(l *slog.Logger) EmitterOption { return func(s *Std) { s.logger =
 // obligation to call it, since buffers are bounded and overflow drops).
 func WithFlushInterval(d time.Duration) EmitterOption { return func(s *Std) { s.interval = d } }
 
+// WithProviderPairCap bounds how many distinct (provider, op) pairs one
+// emitter will mint series for; pairs past the cap collapse to
+// ProviderOther. Default DefaultProviderPairCap.
+func WithProviderPairCap(n int) EmitterOption { return func(s *Std) { s.providerPairCap = n } }
+
 // Record option helpers.
 
 // WithSource sets the outcome's Source field.
@@ -87,21 +98,26 @@ func New(reg *registry.Registry, exp Exporter, opts ...EmitterOption) (*Std, err
 		return nil, fmt.Errorf("emit: registry and exporter are required")
 	}
 	s := &Std{
-		reg:        reg,
-		exp:        exp,
-		clock:      time.Now,
-		logger:     slog.Default(),
-		bufSize:    10000,
-		interval:   time.Second,
-		dropCounts: map[string]int64{},
-		dedup:      newTwoGenSet(1 << 16),
-		stop:       make(chan struct{}),
+		reg:             reg,
+		exp:             exp,
+		clock:           time.Now,
+		logger:          slog.Default(),
+		bufSize:         10000,
+		interval:        time.Second,
+		dropCounts:      map[string]int64{},
+		dedup:           newTwoGenSet(1 << 16),
+		providerPairs:   map[string]struct{}{},
+		providerPairCap: DefaultProviderPairCap,
+		stop:            make(chan struct{}),
 	}
 	for _, o := range opts {
 		o(s)
 	}
 	if s.bufSize < 1 {
 		return nil, fmt.Errorf("emit: buffer size %d < 1", s.bufSize)
+	}
+	if s.providerPairCap < 1 {
+		return nil, fmt.Errorf("emit: provider pair cap %d < 1", s.providerPairCap)
 	}
 	s.metricsCap = 8 * s.bufSize
 	s.loopCtx, s.loopCancel = context.WithCancel(context.Background())
@@ -249,6 +265,103 @@ func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money, count 
 	)
 }
 
+// DefaultProviderPairCap is how many distinct (provider, op) pairs one
+// emitter mints series for before collapsing the rest to ProviderOther.
+// ADR-0004 expects a handful of providers each with a small API surface;
+// this is that "handful" made enforceable.
+const DefaultProviderPairCap = 64
+
+// maxProviderLabelLen bounds one adapter-supplied constant. A label longer
+// than this is not a constant, it is request data.
+const maxProviderLabelLen = 64
+
+// RecordProviderCall implements Emitter: one counted downstream provider
+// call on biz_provider_calls_total{provider, op, outcome} (ADR-0004).
+//
+// Every label crosses a fence before it reaches a series. outcome must be
+// one of ProviderCallOutcomes; provider and op must look like the
+// adapter-supplied constants ADR-0004 assumes they are. Anything else is
+// dropped and counted on biz_dropped_events_total{reason=invalid} — never
+// silently. Past the distinct-pair cap the call is still counted, under
+// ProviderOther, so a caller that hands us request data inflates one
+// series instead of the whole family.
+func (s *Std) RecordProviderCall(provider, op, outcome string) {
+	if !validProviderOutcome(outcome) || !boundedProviderLabel(provider) || !boundedProviderLabel(op) {
+		s.dropInvalid(
+			"provider call rejected",
+			fmt.Errorf("provider %q / op %q / outcome %q", provider, op, outcome),
+		)
+		return
+	}
+	providerLabel, opLabel, capped := s.providerPairLabels(provider, op)
+	if capped {
+		// Logged after the lock is released: this branch fires on every
+		// over-cap call, and a handler write under s.mu would block
+		// Record on the request path — the one thing Record promises not
+		// to do — in exactly the abuse case the cap exists to survive.
+		s.logger.Warn("emit: provider pair cap reached; labels collapsed",
+			"provider", provider, "op", op, "cap", s.providerPairCap)
+	}
+	s.appendMetrics(MetricPoint{
+		Name:   "biz_provider_calls_total",
+		Labels: map[string]string{"provider": providerLabel, "op": opLabel, "outcome": outcome},
+		Value:  1,
+		At:     s.clock(),
+	})
+}
+
+// validProviderOutcome keeps the outcome label a closed two-value enum.
+func validProviderOutcome(outcome string) bool {
+	for _, o := range ProviderCallOutcomes {
+		if outcome == o {
+			return true
+		}
+	}
+	return false
+}
+
+// boundedProviderLabel rejects what an adapter constant is not: empty or
+// blank, longer than maxProviderLabelLen bytes, not valid UTF-8, or
+// carrying a control character.
+//
+// provider and op are the only metric labels built from a raw caller
+// string — flow, stage and segment fall back to registry-validated names
+// and currency is validated by biz.Money — so this is where invalid UTF-8
+// would first reach a label. It must not: the OTLP exporter marshals label
+// values as protobuf string fields, which fails the whole batch on an
+// invalid byte, and Flush drops a failed metric batch entire. One bad op
+// string would take unrelated families' points down with it.
+func boundedProviderLabel(v string) bool {
+	if strings.TrimSpace(v) == "" || len(v) > maxProviderLabelLen || !utf8.ValidString(v) {
+		return false
+	}
+	for _, r := range v {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// providerPairLabels admits a (provider, op) pair until the cap is
+// reached, then collapses every unseen pair to ProviderOther. Admitted
+// pairs keep working after the cap — the fence bounds new series, it does
+// not degrade the ones already earned. capped reports the collapse so the
+// caller can log it with the lock released.
+func (s *Std) providerPairLabels(provider, op string) (labelProvider, labelOp string, capped bool) {
+	key := provider + "\x00" + op
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.providerPairs[key]; ok {
+		return provider, op, false
+	}
+	if len(s.providerPairs) >= s.providerPairCap {
+		return ProviderOther, ProviderOther, true
+	}
+	s.providerPairs[key] = struct{}{}
+	return provider, op, false
+}
+
 // Flush exports everything pending and returns the first export error.
 // Failed event batches are dropped and counted (reason export). Failed
 // metric batches are logged and dropped without counting — re-queuing
@@ -351,8 +464,9 @@ func (s *Std) dropInvalid(msg string, err error) {
 	s.mu.Unlock()
 }
 
-// flowStageLabels applies the ADR-0004 fence shared by Record and
-// SetInFlight: names outside the registry emit as the fixed value
+// flowStageLabels applies the ADR-0004 registry fence, the one Record and
+// SetInFlight share (RecordProviderCall has its own, since provider and op
+// are adapter constants rather than registry names): names outside the registry emit as the fixed value
 // "unregistered" — sums stay complete, cardinality stays bounded, the
 // misconfiguration is visible on a dashboard.
 func (s *Std) flowStageLabels(flow, stage string) (flowLabel, stageLabel string) {

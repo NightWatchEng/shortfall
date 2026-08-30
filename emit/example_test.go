@@ -71,3 +71,51 @@ flows:
 	fmt.Printf("events: %d, metric points: %d\n", exp.events, exp.metrics)
 	// Output: events: 1, metric points: 2
 }
+
+// Wire a payment adapter's per-call observation to the provider-health
+// counter. adapters/payment/stripe hands every observed API call to a
+// WithProviderMetric callback; this is the one line that turns those into
+// biz_provider_calls_total{provider, op, outcome}, the counter
+// engine.Compute reads to tell an upstream provider failure from internal
+// suppression. Going through the emitter (rather than building a
+// MetricPoint by hand) is what keeps the call inside the buffer, the
+// ADR-0004 label fence and the drop counter.
+func ExampleEmitter_RecordProviderCall() {
+	reg, err := registry.Parse([]byte(`
+version: 1
+segments: [smb]
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: auth,    signals: ["http:POST /pay"] }
+      - { name: capture, signals: ["queue:capture.q"] }
+    baseline:  { seasonality: hour_of_week, lookback_weeks: 4 }
+    recovery:  { model: usage_loss_curve, recovered_fraction: 0.0 }
+    reconcile: { source: "sql:ledger.payments" }
+`))
+	if err != nil {
+		panic(err)
+	}
+
+	exp := &captureExporter{}
+	em, err := emit.New(&reg, exp, emit.WithFlushInterval(0))
+	if err != nil {
+		panic(err)
+	}
+
+	// In a real service this is the callback body:
+	//
+	//	stripe.WrapBackend(b, stripe.WithProviderMetric(func(p stripe.ProviderCall) {
+	//		em.RecordProviderCall("stripe", p.Op, p.Outcome)
+	//	}))
+	//
+	// Op and Outcome are adapter-supplied constants, never request data.
+	em.RecordProviderCall("stripe", "capture", emit.ProviderCallSuccess)
+	em.RecordProviderCall("stripe", "capture", emit.ProviderCallFailed)
+
+	_ = em.Close(context.Background())
+	fmt.Printf("events: %d, metric points: %d\n", exp.events, exp.metrics)
+	// Output: events: 0, metric points: 2
+}

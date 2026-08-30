@@ -660,7 +660,9 @@ Twelve `host_allowlist` vectors pin these, including both verdicts.
 Governing ADRs: [ADR-0004](adr/0004-metric-label-set.md) (label sets),
 [ADR-0002](adr/0002-outcome-event-transport.md) (event transport and
 shape), [ADR-0005](adr/0005-inflight-age-buckets.md) (age buckets),
-[ADR-0012](adr/0012-inflight-count-gauge.md) (the in-flight count gauge).
+[ADR-0012](adr/0012-inflight-count-gauge.md) (the in-flight count gauge),
+[ADR-0018](adr/0018-provider-call-writer.md) (the provider-call writer and
+its cardinality fence).
 Draft convention write-up: [semconv.md](semconv.md).
 
 ### 5.1 What is frozen and what is not
@@ -704,13 +706,20 @@ prefix, and no family may gain a label.
 
 Bounded value enumerations:
 
-- `outcome` ∈ `success`, `failed`, `deferred`, `abandoned`, `unknown`
+- `outcome` ∈ `success`, `failed`, `deferred`, `abandoned`, `unknown` on the
+  transaction families; on `biz_provider_calls_total` it is the narrower
+  provider-health pair `success`, `failed`
 - `age_bucket` ∈ `lt1m`, `1m-5m`, `5m-30m`, `30m-2h`, `gt2h`
 - `reason` ∈ `invalid`, `overflow`, `encode`, `export`
 
 `currency` is the one data-driven label axis, bounded in practice by ISO
 4217 and boundable per flow by declaring `currencies` in the registry.
-`provider` and `op` are adapter-supplied constants, never request data.
+`provider` and `op` are adapter-supplied constants, never request data — and
+a conforming producer MUST enforce that rather than assume it. The reference
+implementation admits a fixed number of distinct (`provider`, `op`) pairs per
+emitter (64) and collapses every pair past it to the fixed value `other`; the
+call is still counted, so sums stay complete while the series count stays
+bounded. A port MAY choose a different cap, but MUST have one.
 
 A metric point's value is an **integer**: a counter point is a *delta*
 observed at its own timestamp, never a cumulative total; a gauge point is
@@ -727,8 +736,9 @@ never silently blown:
 |---|---|---|
 | `flow` or `stage` not in the registry | the fixed literal `unregistered` | keeps the raw names, for diagnosis |
 | `segment` outside the enumeration | the empty string, with a logged warning | keeps the raw value |
+| a (`provider`, `op`) pair past the emitter's cap (5.2) | both labels become the fixed literal `other`, with a logged warning | no event — this family is provider health, not a transaction |
 
-Both fallbacks are part of the contract: sums stay complete, the series
+All three fallbacks are part of the contract: sums stay complete, the series
 count stays bounded, and the misconfiguration is visible on a dashboard.
 
 ### 5.4 Ids never become labels
