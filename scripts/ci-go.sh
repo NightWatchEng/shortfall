@@ -23,7 +23,8 @@
 # file here is a _test.go, so `go build -tags` would pass without compiling
 # any of them — a check that asserts nothing. vet type-checks test files, and
 # costs ~3s across the tree against ~11s for `go test -run ^$`, which links
-# and runs 19 binaries to catch the same errors.
+# and runs a test binary for each of the 35 packages that have tests, to
+# catch the same errors.
 #
 # Folded into vet rather than added as a seventh mode because no file in this
 # tree carries a NEGATED constraint (no //go:build !benchload anywhere), so a

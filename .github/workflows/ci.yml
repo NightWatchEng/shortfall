@@ -262,6 +262,13 @@ jobs:
       # which would turn the PR that first adds a gate path into a hard error.
       - name: pin gate surface to the base ref
         run: |
+          # Resolve the base ref FIRST. The per-path guard below cannot tell
+          # "this path is new on the base ref" from "the base ref did not
+          # resolve" — cat-file exits 128 either way — so without this an
+          # unresolvable BASE_REF would print six reassuring bootstrap lines
+          # and leave the PR's entire gate surface in place, with the deploy
+          # key landing three steps later. Fail loudly instead.
+          git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null
           for p in .warden/bin .warden/rules .warden/skills-policy.md repo.yaml graph.yaml scripts; do
             if git cat-file -e "origin/${BASE_REF}:${p}" 2>/dev/null; then
               git checkout "origin/${BASE_REF}" -- "$p"
