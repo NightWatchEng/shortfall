@@ -693,25 +693,48 @@ func BenchmarkRecordAccept(b *testing.B) {
 	}
 	stages := [...]string{"auth", "capture", "settle"}
 	results := [...]biz.Result{biz.ResultFailed, biz.ResultSuccess, biz.ResultDeferred, biz.ResultUnknown}
+	// delivered totals what actually reached the sink, so the conservation
+	// check below can prove every call took the accept path.
+	delivered := 0
+	drain := func() {
+		_ = em.Flush(context.Background())
+		exp.mu.Lock()
+		delivered += len(exp.events)
+		exp.events, exp.metrics = nil, nil
+		exp.mu.Unlock()
+		// Forget every key seen so far. The entity pool is far smaller than
+		// twoGenSet's 1<<16 capacity, so without this the set never rotates,
+		// every key stays remembered, and all but the first pass through the
+		// pool is suppressed — which is what this benchmark used to price
+		// while calling itself Accept.
+		em.mu.Lock()
+		em.dedup = newTwoGenSet(1 << 16)
+		em.mu.Unlock()
+	}
+
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Rotate stage/result/entity over 4096*3*4 = 49152 distinct keys.
-		// That pool is smaller than twoGenSet's 1<<16 capacity, so cur never
-		// rotates and every key stays remembered: only the first 49152
-		// iterations take the accept path and the rest are suppressed. This
-		// benchmark therefore prices the suppression path, not acceptance —
-		// see docs/performance.md. Correcting that is workspace-z7g; it moves
-		// a gate baseline, so it does not ride along with the doc.
+		// One block is one pass over the entity pool at a fixed stage and
+		// result, so every key inside a block is distinct; the drain between
+		// blocks makes the next block distinct from this one.
 		em.Record(ctxs[i%len(ctxs)], stages[(i/len(ctxs))%len(stages)], results[(i/(len(ctxs)*len(stages)))%len(results)])
 		if i%len(ctxs) == len(ctxs)-1 {
 			b.StopTimer()
-			_ = em.Flush(context.Background())
-			exp.mu.Lock()
-			exp.events, exp.metrics = nil, nil
-			exp.mu.Unlock()
+			drain()
 			b.StartTimer()
 		}
+	}
+	b.StopTimer()
+	drain()
+
+	// Conservation, borrowed from BenchmarkRecordParallel: if any call had
+	// been suppressed or dropped this count would fall short, and the ns/op
+	// would describe a path nobody asked about. A benchmark that cannot tell
+	// which path it measured is how the published accept figure came to
+	// describe de-dup hits.
+	if delivered != b.N {
+		b.Fatalf("delivered %d outcomes for %d Record calls — the benchmark stopped measuring the accept path", delivered, b.N)
 	}
 }
 
