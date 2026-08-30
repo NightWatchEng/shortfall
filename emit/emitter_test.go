@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -707,8 +708,13 @@ func BenchmarkRecordAccept(b *testing.B) {
 		// every key stays remembered, and all but the first pass through the
 		// pool is suppressed — which is what this benchmark used to price
 		// while calling itself Accept.
+		// clear() rather than a fresh set: reallocating ~1 MB every block
+		// leaves its GC work inside the timed region, and this benchmark's
+		// whole point is to price nothing but the accept path (ADR-0015
+		// asks for the same). cur holds one block's 4096 keys against a
+		// 65536 capacity, so it never rotates and prev stays nil.
 		em.mu.Lock()
-		em.dedup = newTwoGenSet(1 << 16)
+		clear(em.dedup.cur)
 		em.mu.Unlock()
 	}
 
@@ -982,15 +988,21 @@ func TestDroppedEventsCountSurvivesAMetricExportFailure(t *testing.T) {
 	metrics, _ := flushAndSnapshot(t, em, exp)
 	byName := metricsByName(metrics)
 
-	var invalid int64
+	// The WHOLE drop-point set, not just the invalid sum. Asserting one
+	// reason cannot see the mutation that matters most: drop the branch's
+	// family guard and every failed point's value folds into dropCounts,
+	// minting biz_dropped_events_total{reason=""} out of a transaction
+	// count and a money amount — the counter corruption this branch's
+	// comment says re-crediting avoids.
+	got := map[string]int64{}
 	for _, p := range byName["biz_dropped_events_total"] {
-		if p.Labels["reason"] == "invalid" {
-			invalid += p.Value
-		}
+		got[p.Labels["reason"]] += p.Value
 	}
-	if invalid != 1 {
-		t.Errorf("biz_dropped_events_total{reason=invalid} = %d after a failed export, want 1 — "+
-			"a backend outage must not destroy the record of the library's own damage", invalid)
+	want := map[string]int64{"invalid": 1, "export": 1}
+	if !maps.Equal(got, want) {
+		t.Errorf("biz_dropped_events_total after a failed export = %v, want %v — "+
+			"a backend outage must not destroy the record of the library's own damage, "+
+			"and nothing but that record may be re-credited", got, want)
 	}
 	// The transaction families are NOT re-credited: re-queuing them past a
 	// partial write is how a counter double-counts.

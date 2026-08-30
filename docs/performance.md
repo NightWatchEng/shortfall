@@ -165,8 +165,10 @@ calls at 17.
 
 It now forgets the de-dup set between passes over the pool, so every call is
 accepted, and it **asserts conservation**: `delivered == b.N`, the same check
-`BenchmarkRecordParallel` carries. Run against the old behaviour that
-assertion reports `delivered 49152 outcomes for 187820 Record calls`. The
+`BenchmarkRecordParallel` carries. Run against the old
+behaviour it reports `delivered 49152 outcomes` for a `b.N` in the hundreds
+of thousands — the 49152 is exact and is the pool size, the call count is
+whatever the run reached. The
 reason it is an assertion rather than a comment is that this benchmark
 drifted into measuring the wrong path precisely because nothing checked
 which path it took — a benchmark that cannot tell is one that will lie again.
@@ -496,8 +498,8 @@ the costs of the small pieces, not of the paths that contain them.
 
 | Path | ns/op | spread | B/op | allocs/op |
 |---|---:|---:|---:|---:|
-| `emit.Record`, de-duplicated retry (`BenchmarkRecordSuppressed`) † | 429 | ±2% | 288 | 3 |
-| `emit.Record`, accepted (`BenchmarkRecordAccept`) † | 1,428 | ±2% | 3,265 | 17 |
+| `emit.Record`, de-duplicated retry (`BenchmarkRecordSuppressed`) † | 453 | ±1% | 288 | 3 |
+| `emit.Record`, accepted (`BenchmarkRecordAccept`) † | 1,525 | ±2% | 3,265 | 17 |
 | `emit.AgeBucketFor` | 0.24 | ±11% | 0 | 0 |
 | `emit.InFlightTracker.Publish`, 10k items (`BenchmarkTrackerPublish10k`) | 354,100 | ±4% | 11,780 | 78 |
 | `biz` ValueContext encode (`BenchmarkEncodeVC`) | 133 | ±3% | 112 | 3 |
@@ -510,12 +512,25 @@ the costs of the small pieces, not of the paths that contain them.
 row read 716 ns / 381 B / 3 allocs and was labelled "mixed accept/suppress",
 which is what it honestly measured.
 
-**They are not comparable to the rest of this table.** The re-measurement ran
-on a busier host than the idle-laptop conditions the methodology above
-specifies, and it is not the same machine the other rows came from.
-`BenchmarkRecordSuppressed` is re-stated here from the same run as the
-calibration point: unchanged code, previously published at 515 ns, measured
-at 429 ns. Read the pair against each other — an accepted call costs roughly
-3.3× a de-duplicated one and allocates 17 against 3 — and not against the
-rows above them. The allocation counts are the part that transfers: those are
-deterministic and host-independent.
+**They are not comparable to the rest of this table**, and the honest reason
+is worth stating rather than burying. The re-measurement ran under concurrent
+load, not the idle laptop the methodology above specifies, and not on the
+machine the other rows came from. `BenchmarkRecordSuppressed` is re-stated
+from the same run as a calibration point: unchanged code, previously
+published at 515 ns, measured here at 453.
+
+So read two things from this pair and nothing else. **The ratio**: an
+accepted call costs about 3.4× a de-duplicated one, which held at 3.3× on a
+quieter run of the same code, so it is the figure that survives the host.
+**The allocation columns**: 17 against 3, and 3,265 B against 288, identical
+across every run because they are deterministic. The absolute nanoseconds are
+this host on this afternoon; do not compare them to the rows above, and do
+not compare them to yours.
+
+They also do not contradict the README's "2.3 µs on one core" for an accepted
+outcome, which comes from `BenchmarkRecordParallel` at `-cpu 1`. That
+benchmark runs a live background flusher, so each call carries its amortised
+share of the export; `BenchmarkRecordAccept` uses `WithFlushInterval(0)` and
+drains with the timer stopped, so it prices `Record` itself. Two questions,
+two numbers: what one call costs the caller, and what one call costs the
+process.
