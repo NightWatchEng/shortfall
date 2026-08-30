@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "f2926af99598d226c1de584d577c9ef228ddae97",
+  "base_sha": "c5d4dd0b3f7e18c602fee789285ff9555f9f4822",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T15:46:07+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; engine:claude rule bodies + review charter + reviewer-side memory recall, which carried the previous PR's docs findings as priors)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; findings list only, no reviewer rationale)"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "general-purpose subagent (repair round d9340bc..HEAD; per-finding verdicts plus an instructed exhaustive sweep for a third missed site)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T15:46:07+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "f2926af99598d226c1de584d577c9ef228ddae97",
+      "base_sha": "c5d4dd0b3f7e18c602fee789285ff9555f9f4822",
+      "rule_id": "unmapped:generated-file-hand-edited",
+      "tags": [
+        "generated-file-hand-edited"
+      ],
+      "dir_prefix": "testkit/cmd",
+      "file": "testkit/cmd/genvectors/main.go",
+      "line": 428,
+      "severity": "HIGH",
+      "finding": "The recovery_fraction_nan conformance vector was hand-edited into testkit/vectors/registry.json, which is produced by testkit/cmd/genvectors. Running the documented regeneration deleted it and nothing failed: the coverage check is per error class, not per vector, and the surviving 1.5 vector already occupied recovery_fraction. No CI step regenerates or diffs the vectors.",
+      "evidence": "$ go run ./testkit/cmd/genvectors && git diff --stat testkit/vectors/  ->  registry.json | 7 -------   (whole vector deleted; go test ./... still green). docs/portability.md:999-1001 'it needs the vectors regenerated in the same pull request (go run ./testkit/cmd/genvectors)'; testkit/vectors.go:7-8 'Every expected value in those files is produced by running the reference implementation'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-hmt",
+      "reason": "The case now lives in the generator's rejectCases table beside recovery_fraction and the committed file is its output. Re-review confirmed regeneration is now a no-op (git status empty afterwards), sub() would have failed loudly on a missed substitution target, the class is declared in RegistryErrorClasses, and the reference_message matches registry.Parse byte-for-byte.",
+      "id": "cc3db17ecb6adbeb"
+    },
+    {
+      "ts": "2026-08-30T15:46:07+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "f2926af99598d226c1de584d577c9ef228ddae97",
+      "base_sha": "c5d4dd0b3f7e18c602fee789285ff9555f9f4822",
+      "rule_id": "unmapped:non-finite-float-bound",
+      "tags": [
+        "non-finite-float-bound"
+      ],
+      "dir_prefix": "examples/checkout",
+      "file": "examples/checkout/checkout.go",
+      "line": 158,
+      "severity": "HIGH",
+      "finding": "A site with the same defect shape was missed eight lines above the fix in the same function: the curve validation loop's 'r < 0 || r > maxRatePerMinute'. NaN passes both halves. The consequence is a non-terminating run rather than a wrong number: poisson()'s 'lambda <= 0' guard is false for NaN, exp(-NaN) is NaN, and the sampler's 'p <= l' can never become true. Curve is an exported field of the exported Config.",
+      "evidence": "examples/checkout/checkout.go:157-161 'for i, r := range c.Curve { if r < 0 || r > maxRatePerMinute {'; poisson at :473-486. Reviewer reproduced with a 3s-deadline scratch test: 'HUNG: NaN curve rate passed validation and poisson() spins forever'. Examiner independently reproduced at 5s and confirmed +Inf/-Inf ARE caught, so only NaN escapes.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-hmt",
+      "reason": "Finiteness guard added before the range check, with a 'curve rate is NaN' case in the existing TestConfigValidation bounds table. Mutation-proved: neutering the guard fails the case in 0.00s (it does not hang, because the test window is Monday hour 0 and index 10 is never sampled) \u2014 the test comment was rewritten to state that accurately.",
+      "id": "13b50a9d7399fa58"
+    },
+    {
+      "ts": "2026-08-30T15:46:07+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "f2926af99598d226c1de584d577c9ef228ddae97",
+      "base_sha": "c5d4dd0b3f7e18c602fee789285ff9555f9f4822",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/vectors_test.go",
+      "line": 331,
+      "severity": "MEDIUM",
+      "finding": "This diff made an existing doc comment false. TestRegistryFactsEqualFailsClosed justified its own reachability with 'the reference validator accepts a non-finite recovery fraction' \u2014 precisely the defect this branch closes.",
+      "evidence": "testkit/vectors_test.go:330-332 'The input is reachable, not hypothetical: the reference validator / accepts a non-finite recovery fraction, and a non-finite float is what / JSON refuses to render.' vs registry/registry.go:577-579 added here.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-hmt",
+      "reason": "Reworded: the facts are constructed directly rather than parsed, and the comparator fails closed against a hole nothing currently opens. Re-review confirmed FactsOf is the only RegistryFacts producer and Registry cannot be built outside the registry package, so no parsed document can reach it.",
+      "id": "a4db289ddb7ee8fa"
+    },
+    {
+      "ts": "2026-08-30T15:46:07+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "f2926af99598d226c1de584d577c9ef228ddae97",
+      "base_sha": "c5d4dd0b3f7e18c602fee789285ff9555f9f4822",
+      "rule_id": "unmapped:non-discriminating-regression-test",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "examples/checkout",
+      "file": "examples/checkout/checkout_test.go",
+      "line": 192,
+      "severity": "LOW",
+      "finding": "Two of the new examples/checkout rows pin nothing new: the infinities were already rejected by the range comparisons, so math.IsInf is unreachable as a rejection and the tables never inspect the message.",
+      "evidence": "Mutation to pre-fix code: the three NaN rows FAIL while 'fraction is +Inf' and 'inf recovered fraction' PASS. Assertions are 'if recover() == nil { t.Errorf(...) }' with no message check.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-hmt",
+      "reason": "REFUTED by the cross-examiner. The mechanical half is true, but 'pin nothing new' is false: before this branch no test anywhere asserted the FaultSpec.RecoveredFraction bound at all, so 'inf recovered fraction' is its only guard \u2014 delete both the finiteness check and the range comparison and it is the sole row that goes red. Same precedent as the preceding PR: a row that does not exercise the immediate change is not a defect when it is the only guard on a real behaviour. No contract pins examples/checkout's panic text, unlike registry's reference_message.",
+      "id": "a25d3f586b585df0"
+    },
+    {
+      "ts": "2026-08-30T15:46:07+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "f2926af99598d226c1de584d577c9ef228ddae97",
+      "base_sha": "c5d4dd0b3f7e18c602fee789285ff9555f9f4822",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "registry",
+      "file": "registry/registry_test.go",
+      "line": 178,
+      "severity": "LOW",
+      "finding": "Raised by the scoped re-review against the repair round: a comment introduced by this branch said 'NaN and the infinities fail BOTH halves of a < 0 || > 1 bound', which is false for the infinities (+Inf > 1 and -Inf < 0 are both true) and contradicts registry.go's own comment three lines away. A weaker instance sat in faults_test.go over a block whose third row is an Inf case.",
+      "evidence": "registry/registry_test.go:178-180 vs registry/registry.go:571-576 'The infinities are caught by the bound as well, but they are named here so the reason given is the true one.'",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-hmt",
+      "reason": "Both comments rewritten to say NaN is what the bound misses and the infinities are pinned for the reason they are rejected for. The claim was re-checked by evaluation before rewriting.",
+      "id": "93e3cf63fad765d5"
+    },
+    {
+      "ts": "2026-08-30T15:46:07+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "f2926af99598d226c1de584d577c9ef228ddae97",
+      "base_sha": "c5d4dd0b3f7e18c602fee789285ff9555f9f4822",
+      "rule_id": "unmapped:non-finite-float-bound",
+      "tags": [
+        "non-finite-float-bound"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized.go",
+      "line": 331,
+      "severity": "LOW",
+      "finding": "Raised by the scoped re-review, which was instructed to assume a third missed site existed. clampFraction is a [0,1] clamp written as two comparisons, so clampFraction(NaN) = NaN, and its doc comment claims it bounds a fraction to [0,1] and that a misconfigured recovery cannot inflate or erase loss \u2014 false for NaN. A NaN would reach int64(math.Round(low)), whose result for NaN is architecture-dependent (0 on arm64, MinInt64 on amd64).",
+      "evidence": "engine/unrealized.go:329-336; both call sites (:137, :155) read flow.Recovery.RecoveredFraction. Examiner's sweep across every module in go.work found every other paired-comparison bound is over integer types, and registry.go, checkout.go and faults.go now all check finiteness first.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-hmt",
+      "reason": "PARKED on workspace-e36, which carries the full reproduction \u2014 not a silent discard. Ruled out of this branch on two grounds: it is unreachable today (both call sites read flow.Recovery.RecoveredFraction, which registry.Parse now guarantees finite, and Registry's maps are unexported so Parse is the only way to build one), and engine/** is HIGH tier, so fixing it here would pull a decision record and a HIGH-tier review into a branch scoped to the registry bound. The false doc comment predates this branch and was not made false by it. The examiner's sweep confirms it is the LAST paired-comparison float bound in the tree.",
+      "id": "1b7fb74aca78021d"
+    }
+  ]
+}
