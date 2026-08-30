@@ -1,0 +1,16 @@
+{
+  "bead": "workspace-e36",
+  "head_sha": "a644ab83d9013d156b6180143e9e67d42781602a",
+  "base_sha": "a644ab83d9013d156b6180143e9e67d42781602a",
+  "rules_version": "665bf6d03117",
+  "decided_at": "2026-08-30T22:46:45+00:00",
+  "decided": "clampFraction maps NaN to 0 (no recovery assumed) via an explicit math.IsNaN guard; +/-Inf already resolve through the existing comparisons (-Inf < 0 -> 0, +Inf > 1 -> 1). The doc comment is corrected to state the NaN rule. No signature change, no error return.",
+  "why": "clampFraction is the last money-path bound that lets NaN through (workspace-hmt swept the rest). Recovery scales loss by (1-recovery), so the conservative failure mode for a garbage fraction is 'assume nothing recovers' \u2014 report the full loss \u2014 which is 0, the same end of the range a negative misconfiguration maps to. Returning an error instead would change the signature for a case registry.Parse already rejects (non-finite fractions cannot reach these call sites today); this is defence-in-depth, and defence-in-depth should not tax every caller.",
+  "cost_if_wrong": "If NaN->0 is the wrong choice, an unrealized-loss figure computed from a hypothetically NaN recovery is overstated by the recovery fraction rather than corrupted. The alternative cost we are eliminating: int64(NaN) is architecture-dependent (0 on arm64, math.MinInt64 on amd64) \u2014 silent, platform-divergent money corruption in a repo whose goldens depend on cross-arch determinism.",
+  "alternatives": [
+    "NaN -> 1: erases the loss entirely (reports zero unrealized value) \u2014 the exact outcome the comment promises cannot happen; rejected.",
+    "Return an error / panic: forces both call sites and future callers to handle an unreachable case; registry.Parse (workspace-hmt) already owns input validation; rejected as the wrong layer.",
+    "Do nothing (unreachable today): leaves a false doc comment on a HIGH-tier money path and an arch-dependent int64(NaN) conversion one refactor away; rejected per the bead."
+  ],
+  "scope": "engine/unrealized.go clampFraction only; no call-site or signature changes."
+}

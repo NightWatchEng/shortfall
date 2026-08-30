@@ -327,8 +327,15 @@ func hourMap(samples []baseline.Sample) map[int64]float64 {
 func hourKey(t time.Time) int64 { return t.Truncate(time.Hour).Unix() }
 
 // clampFraction bounds a fraction to [0, 1]; a misconfigured recovery cannot
-// inflate loss (negative) or erase it beyond 100%.
+// inflate loss (negative) or erase it beyond 100%. NaN maps to 0 — no
+// recovery assumed, the full loss reported — because NaN fails both ordered
+// comparisons and would otherwise pass through into money arithmetic, where
+// int64(NaN) is architecture-dependent. ±Inf resolve through the ordered
+// comparisons like any other out-of-range value.
 func clampFraction(f float64) float64 {
+	if math.IsNaN(f) {
+		return 0
+	}
 	if f < 0 {
 		return 0
 	}

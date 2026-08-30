@@ -474,3 +474,28 @@ func TestAOVMinorStageFiltered(t *testing.T) {
 		t.Fatalf("aov = %d, want 100 (value-stage anchored, entries excluded)", aov)
 	}
 }
+
+func TestClampFractionNonFinite(t *testing.T) {
+	cases := []struct {
+		name string
+		in   float64
+		want float64
+	}{
+		{"nan maps to zero recovery", math.NaN(), 0},
+		{"negative infinity", math.Inf(-1), 0},
+		{"positive infinity", math.Inf(1), 1},
+		{"negative", -0.25, 0},
+		{"above one", 1.5, 1},
+		{"in range", 0.4, 0.4},
+		{"zero", 0, 0},
+		{"one", 1, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := clampFraction(tc.in)
+			if got != tc.want {
+				t.Fatalf("clampFraction(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}

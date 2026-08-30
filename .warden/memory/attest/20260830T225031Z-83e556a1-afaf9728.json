@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "83e556a1d3b6932730c800032c1889102eb8eef1",
+  "base_sha": "a644ab83d9013d156b6180143e9e67d42781602a",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T22:50:31+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude-fable-5 (deliver fork, inline pass \u2014 fork cannot spawn subagents; reviewer-memory priors only)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude-fable-5 (deliver fork, inline sequential pass \u2014 deviation from graph.yaml's independent-judge topology, disclosed here; examiner-memory precedents only, empty findings list in)"
+    }
+  ],
+  "records": []
+}
