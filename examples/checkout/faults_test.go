@@ -1,6 +1,7 @@
 package checkout
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,6 +172,13 @@ func TestFaultValidation(t *testing.T) {
 		{"missing within", FaultSpec{Kind: FaultBlackout, RecoveredFraction: 0.5, From: mon, To: mon.Add(time.Minute)}},
 		{"unknown kind", FaultSpec{Kind: "gremlins", From: mon, To: mon.Add(time.Minute)}},
 		{"inverted window", FaultSpec{Kind: FaultAPI5xx, Rate: 0.5, From: mon.Add(time.Minute), To: mon}},
+		// A range written as a pair of comparisons admits NaN, which fails
+		// both halves — that is what the first two pin. +Inf is caught by
+		// the bound either way; its row is the only test in the tree
+		// asserting the blackout fraction bound at all, so it stays.
+		{"nan rate", FaultSpec{Kind: FaultAPI5xx, Rate: math.NaN(), From: mon, To: mon.Add(time.Minute)}},
+		{"nan recovered fraction", FaultSpec{Kind: FaultBlackout, RecoveredFraction: math.NaN(), From: mon, To: mon.Add(time.Minute)}},
+		{"inf recovered fraction", FaultSpec{Kind: FaultBlackout, RecoveredFraction: math.Inf(1), From: mon, To: mon.Add(time.Minute)}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

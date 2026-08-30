@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -566,6 +567,15 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 
 	if fd.Recovery.Model != "usage_loss_curve" {
 		return fail("recovery model %q is not supported (usage_loss_curve)", fd.Recovery.Model)
+	}
+	// Finiteness is checked before the bound, not folded into it: NaN fails
+	// BOTH halves of a < 0 || > 1 pair, so a bound expressed only as two
+	// comparisons admits it — and NaN then fails the > 0 test below too, so
+	// it would not even be asked for a within window. The infinities are
+	// caught by the bound as well, but they are named here so the reason
+	// given is the true one.
+	if math.IsNaN(fd.Recovery.RecoveredFraction) || math.IsInf(fd.Recovery.RecoveredFraction, 0) {
+		return fail("recovery recovered_fraction %v is not a finite number", fd.Recovery.RecoveredFraction)
 	}
 	if fd.Recovery.RecoveredFraction < 0 || fd.Recovery.RecoveredFraction > 1 {
 		return fail("recovery recovered_fraction %v outside [0, 1]", fd.Recovery.RecoveredFraction)

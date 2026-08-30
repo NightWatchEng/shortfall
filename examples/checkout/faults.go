@@ -2,6 +2,7 @@ package checkout
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -66,6 +67,9 @@ func (f FaultSpec) Validate() error {
 	}
 	switch f.Kind {
 	case FaultAPI5xx, FaultAPILatency:
+		if math.IsNaN(f.Rate) || math.IsInf(f.Rate, 0) {
+			return fmt.Errorf("fault %s: rate %v is not a finite number", f.Kind, f.Rate)
+		}
 		if f.Rate <= 0 || f.Rate > 1 {
 			return fmt.Errorf("fault %s: rate %v outside (0, 1]", f.Kind, f.Rate)
 		}
@@ -74,6 +78,13 @@ func (f FaultSpec) Validate() error {
 			return fmt.Errorf("fault %s: queue %q must be capture or settle", f.Kind, f.Queue)
 		}
 	case FaultBlackout:
+		// Finiteness before the bound, for the reason registry.Parse gives:
+		// NaN fails both halves of a range written as two comparisons, and
+		// then fails the > 0 test below as well, so it would slip through
+		// unvalidated into the ground-truth ledger.
+		if math.IsNaN(f.RecoveredFraction) || math.IsInf(f.RecoveredFraction, 0) {
+			return fmt.Errorf("fault %s: recovered_fraction %v is not a finite number", f.Kind, f.RecoveredFraction)
+		}
 		if f.RecoveredFraction < 0 || f.RecoveredFraction > 1 {
 			return fmt.Errorf("fault %s: recovered_fraction %v outside [0, 1]", f.Kind, f.RecoveredFraction)
 		}

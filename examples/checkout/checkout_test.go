@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 )
@@ -185,11 +186,35 @@ func TestConfigValidation(t *testing.T) {
 	badFrac.EnterpriseFraction = 1.5
 	mustPanic("fraction > 1", badFrac)
 
+	// NaN fails == 0, == NoEnterprise AND both halves of the range test, so
+	// before the explicit finiteness check it fell through the whole switch
+	// and ran the scenario with a not-a-number segment split.
+	nanFrac := base
+	nanFrac.EnterpriseFraction = math.NaN()
+	mustPanic("fraction is NaN", nanFrac)
+
+	infFrac := base
+	infFrac.EnterpriseFraction = math.Inf(1)
+	mustPanic("fraction is +Inf", infFrac)
+
 	hot := base
 	curve := DefaultCurve()
 	curve[10] = 1000 // would silently underflow the Knuth sampler
 	hot.Curve = &curve
 	mustPanic("curve rate beyond the sampler's honest range", hot)
+
+	// A NaN rate is worse than an out-of-range one: it passes a bound
+	// written as two comparisons, and if such an hour is ever sampled
+	// poisson() spins forever — its lambda <= 0 guard is false for NaN and
+	// its p <= l test can never become true. Validation is the only thing
+	// standing between an exported Config field and a non-terminating run,
+	// which is why this is asserted at applyDefaults and not left to a
+	// scenario that happens to reach hour 10.
+	nanCurve := DefaultCurve()
+	nanCurve[10] = math.NaN()
+	nanHot := base
+	nanHot.Curve = &nanCurve
+	mustPanic("curve rate is NaN", nanHot)
 
 	// Sentinels express literal zeros instead of being coerced to defaults.
 	zero := base

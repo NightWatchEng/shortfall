@@ -327,9 +327,12 @@ func TestPortabilityDocMatchesVectors(t *testing.T) {
 // "both broken means the same" is the exact shape the drift fence exists
 // to prevent.
 //
-// The input is reachable, not hypothetical: the reference validator
-// accepts a non-finite recovery fraction, and a non-finite float is what
-// JSON refuses to render.
+// The input is constructed directly rather than parsed: registry.Parse
+// now rejects a non-finite recovered_fraction outright, so
+// no document can produce these facts. That is the point — the comparator
+// fails closed against a hole nothing currently opens, rather than one
+// live in the validator, and a non-finite float remains what JSON refuses
+// to render.
 func TestRegistryFactsEqualFailsClosed(t *testing.T) {
 	unrenderable := func(version int, segment string) RegistryFacts {
 		return RegistryFacts{

@@ -401,6 +401,13 @@
       "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 1.5, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
     },
     {
+      "name": "recovery_fraction_nan",
+      "note": "NaN fails both halves of a `\u003c 0 || \u003e 1` bound, so a range written as a pair of comparisons admits it",
+      "error": "recovery_fraction",
+      "reference_message": "flow invoice.pay: recovery recovered_fraction NaN is not a finite number",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: .nan }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
       "name": "recovery_within_missing",
       "error": "recovery_within_missing",
       "reference_message": "flow invoice.pay: recovery recovered_fraction is set but within is missing",

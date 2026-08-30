@@ -155,6 +155,15 @@ func (c *Config) applyDefaults() {
 		c.Curve = &curve
 	}
 	for i, r := range c.Curve {
+		// Finiteness first, and here it is not merely a matter of the right
+		// message: NaN passes a bound written as two comparisons, and
+		// poisson() then never terminates — its lambda <= 0 guard is false
+		// for NaN, exp(-NaN) is NaN, and the sampler's p <= l test can never
+		// become true. An unvalidated NaN rate hangs the run rather than
+		// producing a wrong number.
+		if math.IsNaN(r) || math.IsInf(r, 0) {
+			panic(fmt.Sprintf("checkout: curve[%d] = %v is not a finite number — scenario config error", i, r))
+		}
 		if r < 0 || r > maxRatePerMinute {
 			panic(fmt.Sprintf("checkout: curve[%d] = %v outside [0, %v] — scenario config error", i, r, maxRatePerMinute))
 		}
@@ -164,6 +173,8 @@ func (c *Config) applyDefaults() {
 		c.EnterpriseFraction = 0.1
 	case c.EnterpriseFraction == NoEnterprise:
 		c.EnterpriseFraction = 0
+	case math.IsNaN(c.EnterpriseFraction) || math.IsInf(c.EnterpriseFraction, 0):
+		panic(fmt.Sprintf("checkout: EnterpriseFraction %v is not a finite number — scenario config error", c.EnterpriseFraction))
 	case c.EnterpriseFraction < 0 || c.EnterpriseFraction > 1:
 		panic(fmt.Sprintf("checkout: EnterpriseFraction %v invalid — scenario config error", c.EnterpriseFraction))
 	}

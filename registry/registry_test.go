@@ -175,6 +175,20 @@ func TestNegativeFixtures(t *testing.T) {
 		{"estimator segment outside enumeration", mutate("by_segment: { smb: 14200", "by_segment: { gov: 14200"), "gov"},
 		{"non-positive estimator", mutate("default_minor: 18750", "default_minor: 0"), "default_minor"},
 		{"bad recovered_fraction", mutate("recovered_fraction: 0.6", "recovered_fraction: 1.5"), "recovered_fraction"},
+		// NaN is what a `< 0 || > 1` bound misses: it fails BOTH halves, and
+		// it fails the subsequent `> 0` test too, so such a flow was never
+		// even asked for its within window. The infinities ARE caught by the
+		// bound; they are here because the finiteness check changes the
+		// reason they are rejected for, and a reason is what these pin.
+		// Each pins the REASON, not just the rejection: before the finiteness
+		// check, ".nan with a window" was already rejected — but as
+		// "within is set but recovered_fraction is 0", the right verdict for
+		// the wrong reason, which a substring match on the field name would
+		// have happily accepted.
+		{"nan recovered_fraction", mutate("recovered_fraction: 0.6, within: PT2H", "recovered_fraction: .nan"), "not a finite number"},
+		{"nan recovered_fraction with a window", mutate("recovered_fraction: 0.6", "recovered_fraction: .nan"), "not a finite number"},
+		{"positive infinity recovered_fraction", mutate("recovered_fraction: 0.6", "recovered_fraction: .inf"), "not a finite number"},
+		{"negative infinity recovered_fraction", mutate("recovered_fraction: 0.6", "recovered_fraction: -.inf"), "not a finite number"},
 		{"zero lookback", mutate("lookback_weeks: 8", "lookback_weeks: 0"), "lookback"},
 		{"bad currency", mutate("[USD, EUR]", "[USD, euros]"), "curren"},
 		{"bad segment name", mutate("[smb, enterprise]", "[smb, Enterprise!]"), "segment"},
