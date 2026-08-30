@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "94a1ee860bfd6331995788eabe655ef4ea05e5dd",
+  "base_sha": "a644ab83d9013d156b6180143e9e67d42781602a",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T22:56:04+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude-fable-5 (deliver fork, sequential pass \u2014 platform forbade subagent spawn; round is a loop, not a gauntlet, per graph.yaml's declared subagent topology)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude-fable-5 (same context, adversarial second pass over findings only)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T22:56:04+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "94a1ee860bfd6331995788eabe655ef4ea05e5dd",
+      "base_sha": "a644ab83d9013d156b6180143e9e67d42781602a",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emit.go",
+      "line": 91,
+      "severity": "MEDIUM",
+      "finding": "The new post-Shutdown contract sentence omitted the capable-signal qualifier: gcp's incapable ExportMetrics returns nil and delivers nothing after Shutdown, which the sentence as written forbade, while testkit/conformance correctly scopes the invariant to capable signals \u2014 two wordings of one standard disagreeing at the incapable-signal margin.",
+      "evidence": "emit/emit.go: 'after it returns an Export call must either be refused \u2014 a non-nil error, nothing delivered \u2014 or keep genuinely working' vs conformance.go: 'an Export on a capable signal either returns an error and delivers nothing...'; gcp/gcp.go ExportMetrics: 'return nil' (Metrics:false).",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Wording scoped to capable signals in commit 94a1ee8; incapable no-op explicitly stays a no-op.",
+      "id": "d7160ef4b344653e"
+    },
+    {
+      "ts": "2026-08-30T22:56:04+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "94a1ee860bfd6331995788eabe655ef4ea05e5dd",
+      "base_sha": "a644ab83d9013d156b6180143e9e67d42781602a",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-structure"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/cloudwatch/cloudwatch_test.go",
+      "line": 317,
+      "severity": "MEDIUM",
+      "finding": "TestPostShutdownExportRefused exercises both signals and both metric paths in one function without table-driven t.Run subtests (ADR-0007).",
+      "evidence": "One linear function body covering writer-path metrics, events, second Shutdown, empty batch, and the PutMetricData path.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner: the test is a sequential lifecycle scenario \u2014 each assertion depends on state the prior step created (shutdown, then refusal, then idempotent re-shutdown, then the flushed-bytes check) \u2014 not a multi-case matrix with a uniform assertion body, which is the shape ADR-0007's table mandate addresses; scenario tests are a declared exception.",
+      "id": "cc358ba063014544"
+    }
+  ]
+}
