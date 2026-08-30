@@ -187,51 +187,58 @@ mutex, no publishing.
 
 | `-cpu` | ns/op per pair | spread | throughput | vs 1 core | allocs/op |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 55.9 | ±4% | 17.9M/s | 1.00× | 0 |
-| 2 | 123 | ±4% | 8.12M/s | 0.45× | 0 |
-| 4 | 214 | ±11% | 4.67M/s | 0.26× | 0 |
-| 8 | 207 | ±8% | 4.83M/s | 0.27× | 0 |
-| 18 | 287 | ±9% | 3.48M/s | 0.19× | 0 |
+| 1 | 85.7 | ±1% | 11.7M/s | 1.00× | 0 |
+| 2 | 103 | ±2% | 9.70M/s | 0.83× | 0 |
+| 4 | 85.8 | ±2% | 11.7M/s | 1.00× | 0 |
+| 8 | 135 | ±2% | 7.44M/s | 0.64× | 0 |
+| 18 | 124 | ±3% | 8.09M/s | 0.69× | 0 |
 
-**This is the most important shape on the page, and it is negative
-scaling.** The tracker does not merely fail to speed up with more
-consumers; it gets slower in absolute terms. Eighteen concurrent consumers
-get 19% of the throughput one consumer gets, and the loss is already 2.2×
-at two consumers. `InFlightTracker` is a Go map behind a single
-`sync.Mutex` with a critical section of a few tens of nanoseconds — short
-enough that under contention the cost is dominated by lock hand-off and
-cache-line ping-pong rather than by the work, and more contenders means
-more of both.
+The in-flight set is sharded by message-id hash across 32 cache-line-padded
+mutexes, so consumers contend only when their ids land on the same shard.
+The shape that used to sit here was **negative scaling** — a single
+`sync.Mutex` in front of one map put eighteen consumers at 19% of one
+consumer's throughput (287 ns/pair at `-cpu 18` against 55.9 at `-cpu 1`).
+Now the curve is a band: 86–135 ns/pair everywhere on the sweep, worst-case
+throughput 7.4M pairs/s instead of 3.5M.
 
-The absolute numbers are still large: 3.5M paired `Track`/`Done` calls per
-second is far above any payments queue this library is aimed at. So this is
-a shape to know before you size, not a fire to put out. It starts to matter
-when the tracked set is also being published — the next two tables.
+The sharding is not free at one core: a single-threaded caller pays the id
+hash, the exponent-pin lookup, and two atomics on the item count, which
+moved the uncontended pair from 55.9 ns to 85.7. That trade is taken
+deliberately — the tracker's deployment shape is many queue consumers, and
+the contended edge of the band is what an incident-sized backlog drains
+through. A same-id pathological stream lands on one shard and degrades to
+the old single-mutex behavior, no worse.
+
+The absolute numbers remain far above any payments queue this library is
+aimed at; the sweep is sizing information. Publish still stalls everything
+briefly — the next two tables.
 
 ### `Publish` — how long the mutex is held
 
-`BenchmarkTrackerPublishScale`: `Publish` snapshots the entire tracked set
-under the tracker's mutex before emitting anything, so its duration is also
-the worst-case stall a consumer goroutine takes on `Track` or `Done` when a
+`BenchmarkTrackerPublishScale`: `Publish` takes every shard lock at once
+and holds all of them while it aggregates — value and count must come from
+one consistent snapshot (ADR-0012) — so its duration is still the
+worst-case stall a consumer goroutine takes on `Track` or `Done` when a
 publish lands.
 
 | tracked items | ns/op | spread | wall | per item | B/op | allocs/op |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1000 | 35,190 | ±11% | 35.2 µs | 35.2 ns | 368 | 6 |
-| 10,000 | 354,500 | ±9% | 355 µs | 35.5 ns | 400 | 8 |
-| 100,000 | 3,278,000 | ±5% | 3.28 ms | 32.8 ns | 401 | 8 |
+| 1000 | 32,630 | ±2% | 32.6 µs | 32.6 ns | 368 | 6 |
+| 10,000 | 312,300 | ±1% | 312 µs | 31.2 ns | 400 | 8 |
+| 100,000 | 2,907,000 | ±1% | 2.91 ms | 29.1 ns | 407 | 8 |
 
-Linear, at roughly 34 ns per tracked item, and it allocates almost nothing.
+Linear, at roughly 31 ns per tracked item, and it allocates almost
+nothing; locking 32 mutexes instead of one is noise at these depths.
 Multiply by your publish interval to get the duty cycle: a 100k-deep
-backlog published every second holds the tracker's mutex for 3.3 ms in
-every 1000 ms — 0.3% of the time. That is small. It is not small if you
-publish every 10 ms.
+backlog published every second stalls the tracker for 2.9 ms in every
+1000 ms — 0.3% of the time. That is small. It is not small if you publish
+every 10 ms.
 
 The sink for this series is a counting emitter, so these are the tracker's
 own snapshot costs with none of the `Std` emitter's buffering folded in.
 The older `BenchmarkTrackerPublish10k` measures the pair together and lands
-at the same 354 µs — the emitter adds no measurable time at this size, only
-memory (11.8 kB and 78 allocations against 400 B and 8).
+at 317 µs — the emitter adds no measurable time at this size, only
+memory (11.5 kB and 78 allocations against 400 B and 8).
 
 ### `Track`/`Done` against a publisher that never stops
 
@@ -241,15 +248,17 @@ bound on interference: a publisher goroutine spinning on `Publish` over a
 
 | configuration (`-cpu 18`) | ns/op per `Track`+`Done` | spread | vs no publisher |
 |---|---:|---:|---:|
-| no publisher | 287 | ±9% | 1× |
-| publisher spinning over 10,000 items | 27,000–31,000 | ±13% and ±66% | **~100×** |
+| no publisher | 124 | ±3% | 1× |
+| publisher spinning over 10,000 items | 5,000–5,800 | ±6% | **~44×** |
 
-A consumer's `Track` goes from ~290 ns to roughly 30 µs when it has to
-queue behind a publisher that is always in its critical section. Two full
-runs of this benchmark landed at 31.1 µs (±13%) and 26.9 µs (±66%), and the
-completed-publish count spreads about ±34% across the samples within a
-single run — which is both why the figure is given as a range and why the
-benchmark is kept out of the regression gate. Take the order of magnitude, not the digits.
+A consumer's `Track` goes from ~124 ns to roughly 5.5 µs when it has to
+queue behind a publisher that is always inside its all-shard snapshot —
+down from the ~30 µs the single-mutex tracker paid here, because a
+consumer now waits only for the snapshot passes that overlap its shard
+acquisition rather than for every contender ahead of it in one queue.
+The completed-publish count still swings run to run, which is why the
+figure is a range and the benchmark stays out of the regression gate.
+Take the order of magnitude, not the digits.
 
 This is not a production cadence and must not be read as one — a real
 deployment publishes on an interval measured in seconds, where the duty
@@ -363,6 +372,42 @@ buffer loses to a 25 ms backend at roughly 800k accepted outcomes/sec. A
 larger `WithBufferSize` buys proportionally more time before the first
 drop and nothing after it — the buffer sets how long an outage you can
 absorb, not whether you absorb it.
+
+## Sustained load — what happens after the benchmark ends
+
+Benchmarks answer "how fast is one call". `TestSustainedLoadReconciles`
+(`testkit/load_test.go`) answers what a run that keeps going does:
+seeded checkout-ledger transactions replay through a real `emit.Std`
+(50 ms background flush) plus an `InFlightTracker` (25 ms publish loop)
+at a configurable offered rate, and at the end the sink must reconcile
+exactly — every issued outcome event received once, value sums equal,
+`biz_dropped_events_total` zero on the wire, nothing left in flight.
+The run's second half is asserted flat: median heap, goroutine count,
+and the metric series count must not grow with transaction count
+(cardinality protection is a library guarantee, and this is where it is
+tested rather than asserted). `TestSustainedLoadCatchesSeededLeak`
+keeps those assertions honest by seeding a pinned goroutine-and-buffer
+leak and requiring the harness to flag it.
+
+Two configurations, so nobody reads a seconds-long result as a soak:
+
+| configuration | rate | duration | workers | where it runs |
+|---|---:|---:|---:|---|
+| smoke (default) | 1,200 tx/s | 3 s | 8 | every `go test ./testkit`, so every PR gate |
+| soak | `SHORTFALL_LOAD_RATE` | `SHORTFALL_LOAD_SECONDS` | `SHORTFALL_LOAD_WORKERS` | release checks, run by hand |
+
+A soak invocation looks like:
+
+```sh
+SHORTFALL_LOAD_RATE=2000 SHORTFALL_LOAD_SECONDS=14400 \
+  go test ./testkit -run TestSustainedLoadReconciles -timeout 5h -v
+```
+
+The smoke configuration on the reference machine reconciles ~3,600
+transactions at 1,197/s achieved against 1,200/s offered, with
+Record-call-site latency p50 ≈ 2.7 µs and p99 ≈ 11 µs. A smoke run
+catches reconciliation breaks and gross leaks, not slow ones; the soak
+exists for the slow ones.
 
 ## What the gate runs, and what it does not
 
@@ -486,10 +531,12 @@ in a way that still compiles, is invisible until someone reruns the commands
 above. `go build -tags` would not have bought even the compile: every tagged
 file here is a `_test.go`, and `go build` only compiles non-test files.
 
-**Nothing here was optimised.** ADR-0015 orders correctness, then
-readability, then the benchstat comparison, and says the benchmark lands
-before the optimisation. The contention this page documents is reported,
-not fixed; no production code changed to produce these numbers.
+**One thing here was optimised, after its benchmark landed.** ADR-0015
+orders correctness, then readability, then the benchstat comparison, and
+says the benchmark lands before the optimisation. The tracker's negative
+scaling was first reported on this page unfixed; the sharded tracker then
+followed with the before/after sweep in its PR. Everything else on the
+page is reported, not tuned.
 
 ## Single-goroutine reference figures
 
@@ -501,7 +548,7 @@ the costs of the small pieces, not of the paths that contain them.
 | `emit.Record`, de-duplicated retry (`BenchmarkRecordSuppressed`) † | 453 | ±1% | 288 | 3 |
 | `emit.Record`, accepted (`BenchmarkRecordAccept`) † | 1,525 | ±2% | 3,265 | 17 |
 | `emit.AgeBucketFor` | 0.24 | ±11% | 0 | 0 |
-| `emit.InFlightTracker.Publish`, 10k items (`BenchmarkTrackerPublish10k`) | 354,100 | ±4% | 11,780 | 78 |
+| `emit.InFlightTracker.Publish`, 10k items (`BenchmarkTrackerPublish10k`) | 316,700 | ±1% | 11,485 | 78 |
 | `biz` ValueContext encode (`BenchmarkEncodeVC`) | 133 | ±3% | 112 | 3 |
 | `biz` ValueContext decode (`BenchmarkDecodeVC`) | 195 | ±16% | 176 | 1 |
 | `biz.ValueContext.Validate` | 335 | ±6% | 0 | 0 |
