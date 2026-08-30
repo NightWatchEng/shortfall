@@ -121,7 +121,7 @@ func sortedKeys[V any](m map[string]V) []string {
 // compared as numbers.
 //
 // Booleans are NOT compared by rendered form: "false" and false render
-// identically, so a transport that serialized biz.amount.est as a string
+// identically, so a transport that serialized biz.amount.estimated as a string
 // would pass while every consumer parsing it as a boolean broke. A value
 // the contract says is a bool must arrive as a bool.
 func sameWireValue(got, want any) bool {

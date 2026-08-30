@@ -26,11 +26,11 @@ propagated across service boundaries (deny-by-default egress; see ADR-0003).
 | `biz.entity.id` | string | invoice/order id — the de-dup key. May be reused across attempts; not assumed unique per transaction. |
 | `biz.customer.id` | string | opaque, already-hashed customer handle (`h:...`); never raw PII. |
 | `biz.segment` | string | bounded segment enumeration (e.g. `smb`, `enterprise`). Absent, not empty, when the flow declares none. |
-| `biz.amount_minor` | int | amount in ISO-4217 **minor units** (integer; never float). |
-| `biz.currency` | string | ISO-4217 alphabetic code. |
-| `biz.exponent` | int | minor-unit decimal places (0–4), so amount is unambiguous. |
+| `biz.amount.minor` | int | amount in ISO-4217 **minor units** (integer; never float). |
+| `biz.amount.currency` | string | ISO-4217 alphabetic code. |
+| `biz.amount.exponent` | int | minor-unit decimal places (0–4), so amount is unambiguous. |
 | `biz.value.kind` | string | money definition: `gmv` \| `net_revenue` \| `fee` \| `take_rate`. |
-| `biz.amount.est` | boolean | true when the amount came from the registry estimator, not observed. |
+| `biz.amount.estimated` | boolean | true when the amount came from the registry estimator, not observed. |
 | `biz.sla.deadline` | string | RFC-3339 UTC deadline, when the ValueContext carries one. Absent otherwise. |
 
 **Amended 2026-08-30 (workspace-cnz).** This table previously gave
@@ -40,6 +40,14 @@ propagated across service boundaries (deny-by-default egress; see ADR-0003).
 canonical JSON nor any shipped exporter. The names above are the ones on
 the wire, defined once as the `biz.Attr*` constants and pinned by
 `testkit/vectors/outcome-event.json`. See ADR-0002 for the settlement.
+
+**Amended 2026-08-30 (workspace-8yq).** The four money attributes moved
+into a consistent dotted namespace: `biz.amount_minor` → `biz.amount.minor`,
+`biz.currency` → `biz.amount.currency`, `biz.exponent` →
+`biz.amount.exponent`, `biz.amount.est` → `biz.amount.estimated`. The
+settlement above deliberately froze the shipped spelling verbatim; this
+pre-1.0 rename (a founder decision, wire-format break) made the rule
+inferable before v1.0 froze it for good.
 
 Bounded attributes (`biz.flow`, `biz.segment`, and the metric labels below) are
 the metric-cardinality fence: unbounded values (ids, amounts) ride events/spans,
@@ -74,7 +82,7 @@ caller that passes request data inflates one series instead of the family.
 
 - Amounts are integer minor units with an explicit exponent; **no floats**, and
   **no summing across currencies**.
-- Estimated amounts ride the event (`biz.amount.est=true`) and are **excluded**
+- Estimated amounts ride the event (`biz.amount.estimated=true`) and are **excluded**
   from `biz_value_total` — realized and estimated are never merged.
 - Metric label sets are fixed and bounded; ids and amounts never become labels.
 - Every event that carries value carries the co-emitted count (value and count

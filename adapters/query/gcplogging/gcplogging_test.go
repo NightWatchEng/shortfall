@@ -91,7 +91,7 @@ func TestGeneratedSQL(t *testing.T) {
 		{"fully-qualified backticked view", "FROM `my-project.logs_analytics._AllLogs`"},
 		{"half-open window on the entry timestamp", "timestamp >= @window_from AND timestamp < @window_to"},
 		{"outcome marker predicate", `JSON_VALUE(json_payload, '$.event') = @event_marker`},
-		{"currency filter, IFNULL-guarded and bound", `IFNULL(JSON_VALUE(json_payload, '$."biz.currency"'), '') = @f_currency`},
+		{"currency filter, IFNULL-guarded and bound", `IFNULL(JSON_VALUE(json_payload, '$."biz.amount.currency"'), '') = @f_currency`},
 		{"outcome filter, IFNULL-guarded and bound", `IFNULL(JSON_VALUE(json_payload, '$."biz.outcome"'), '') = @f_outcome`},
 		{"deterministic order", "ORDER BY timestamp"},
 		{"row cap one above maxRows so a full page is detectable", "LIMIT 11"},
@@ -657,7 +657,7 @@ func TestFailurePaths(t *testing.T) {
 				f.rows = []fakeRow{{
 					micros: from.Add(time.Minute).UnixMicro(),
 					payload: `{"event":"biz.outcome","biz.flow":"invoice.pay","biz.outcome":"failed",` +
-						`"biz.currency":"USD","biz.amount_minor":1.5}`,
+						`"biz.amount.currency":"USD","biz.amount.minor":1.5}`,
 				}}
 			}),
 			q:       usd,

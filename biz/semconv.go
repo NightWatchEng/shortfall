@@ -11,11 +11,13 @@ package biz
 // what makes the contract a thing the compiler can check rather than a
 // thing three documents describe.
 //
-// The spelling is the one the exporters already ship, so adopting these
-// constants moved no bytes on any wire (ADR-0002, amended). They are
-// exported because an out-of-tree adapter needs the same names to be
-// conformant, and testkit/vectors/outcome-event.json pins them for a port
-// that cannot import Go.
+// The money facts sit in a dotted biz.amount.* namespace matching
+// biz.entity.id and biz.value.kind (ADR-0002, amended 2026-08-30): the
+// constants first adopted the exporters' shipped spelling verbatim, then
+// the pre-1.0 rename made the rule inferable. The constants are exported
+// because an out-of-tree adapter needs the same names to be conformant,
+// and testkit/vectors/outcome-event.json pins them for a port that cannot
+// import Go.
 //
 // Changing a value here is a wire-format break for every consumer of every
 // exporter. It is an ADR amendment, not an edit.
@@ -37,11 +39,11 @@ const (
 
 	// The money facts. Amount is integer minor units and Exponent is what
 	// makes it unambiguous, so the two are meaningless apart (ADR-0001).
-	AttrAmountMinor = "biz.amount_minor"
-	AttrCurrency    = "biz.currency"
-	AttrExponent    = "biz.exponent"
+	AttrAmountMinor = "biz.amount.minor"
+	AttrCurrency    = "biz.amount.currency"
+	AttrExponent    = "biz.amount.exponent"
 	AttrValueKind   = "biz.value.kind"
-	AttrAmountEst   = "biz.amount.est"
+	AttrAmountEst   = "biz.amount.estimated"
 
 	// AttrSLADeadline is optional: present only when the ValueContext
 	// carries a deadline. Every transport that can express it emits it —

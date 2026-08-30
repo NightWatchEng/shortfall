@@ -57,10 +57,10 @@ func TestCheckOutcomeEventDetects(t *testing.T) {
 		wantSub string
 	}{
 		{"required field missing", func(m map[string]any) { delete(m, biz.AttrFlow) }, "biz.flow missing"},
-		{"wrong value", func(m map[string]any) { m[biz.AttrCurrency] = "XXX" }, "biz.currency"},
+		{"wrong value", func(m map[string]any) { m[biz.AttrCurrency] = "XXX" }, "biz.amount.currency"},
 		{"extra biz field", func(m map[string]any) { m["biz.invented"] = 1 }, "not in the contract"},
 		{"bool as string", func(m map[string]any) { m[biz.AttrAmountEst] = "false" }, "(string), contract says"},
-		{"number as string", func(m map[string]any) { m[biz.AttrAmountMinor] = "14900" }, "biz.amount_minor"},
+		{"number as string", func(m map[string]any) { m[biz.AttrAmountMinor] = "14900" }, "biz.amount.minor"},
 		{"natively-carried field dropped", func(m map[string]any) { delete(m, biz.AttrTraceID) }, "trace.id missing"},
 	}
 	for _, tc := range cases {

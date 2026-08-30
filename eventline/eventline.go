@@ -29,11 +29,11 @@ type line struct {
 	Outcome     string          `json:"biz.outcome"`
 	EntityID    string          `json:"biz.entity.id"`
 	CustomerID  string          `json:"biz.customer.id"`
-	AmountMinor json.RawMessage `json:"biz.amount_minor"`
-	Currency    string          `json:"biz.currency"`
-	Exponent    int8            `json:"biz.exponent"`
+	AmountMinor json.RawMessage `json:"biz.amount.minor"`
+	Currency    string          `json:"biz.amount.currency"`
+	Exponent    int8            `json:"biz.amount.exponent"`
 	Kind        string          `json:"biz.value.kind"`
-	Estimated   bool            `json:"biz.amount.est"`
+	Estimated   bool            `json:"biz.amount.estimated"`
 	Segment     string          `json:"biz.segment"`
 	SLADeadline string          `json:"biz.sla.deadline"`
 	Source      string          `json:"source"`
@@ -60,7 +60,7 @@ func Parse(raw []byte, at time.Time) (biz.Outcome, error) {
 	// The exporters always write the amount; a marked line without one is a
 	// truncated or foreign record, and counting it as $0 would skew sums.
 	if len(l.AmountMinor) == 0 {
-		return biz.Outcome{}, fmt.Errorf("eventline: outcome line carries no biz.amount_minor")
+		return biz.Outcome{}, fmt.Errorf("eventline: outcome line carries no biz.amount.minor")
 	}
 	var amount int64
 	if len(l.AmountMinor) > 0 {

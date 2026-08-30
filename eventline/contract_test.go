@@ -65,8 +65,8 @@ func TestLineTagsMatchTheWireContract(t *testing.T) {
 func TestDeadlineRoundTrips(t *testing.T) {
 	const line = `{"event":"biz.outcome","biz.flow":"invoice.pay","biz.stage":"capture",` +
 		`"biz.outcome":"failed","biz.entity.id":"inv_1","biz.customer.id":"h:c",` +
-		`"biz.amount_minor":100,"biz.currency":"USD","biz.exponent":2,` +
-		`"biz.value.kind":"fee","biz.amount.est":false,` +
+		`"biz.amount.minor":100,"biz.amount.currency":"USD","biz.amount.exponent":2,` +
+		`"biz.value.kind":"fee","biz.amount.estimated":false,` +
 		`"biz.sla.deadline":"2026-01-02T03:34:05Z"}`
 	o, err := Parse([]byte(line), time.Unix(0, 0).UTC())
 	if err != nil {
@@ -78,8 +78,8 @@ func TestDeadlineRoundTrips(t *testing.T) {
 	}
 	// A line without one leaves it zero rather than erroring.
 	noDeadline := `{"event":"biz.outcome","biz.flow":"f","biz.stage":"s","biz.outcome":"success",` +
-		`"biz.entity.id":"e","biz.customer.id":"h:c","biz.amount_minor":1,"biz.currency":"USD",` +
-		`"biz.exponent":2,"biz.value.kind":"fee","biz.amount.est":false}`
+		`"biz.entity.id":"e","biz.customer.id":"h:c","biz.amount.minor":1,"biz.amount.currency":"USD",` +
+		`"biz.amount.exponent":2,"biz.value.kind":"fee","biz.amount.estimated":false}`
 	o2, err := Parse([]byte(noDeadline), time.Unix(0, 0).UTC())
 	if err != nil {
 		t.Fatalf("parse without deadline: %v", err)

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "7a7239c476c60b0f75800ca430bbbc215128f92d",
+  "base_sha": "3de7084dd3722432910d632f192062ec54841bd9",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T23:35:12+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude sonnet, headless -p, isolated context, plan mode; two independent passes (2nd: 34 turns) over the warden diff package; rule bodies docs-accuracy/tests-required/vacuous-pass + policy review charter + reviewer memory in prompt. DEVIATION disclosed: invoked as a worktree fork that cannot spawn Agent-tool subagents, so passes ran as independent headless processes per the graph-wins rule."
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "not exercised this round: both reviewer passes returned zero candidate findings, leaving nothing to refute; examiner memory was recalled and kept disjoint but unused. With no examiner judgment the round is a single-finder pass, not a gauntlet."
+    }
+  ],
+  "records": []
+}

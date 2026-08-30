@@ -1,0 +1,17 @@
+{
+  "bead": "workspace-8yq",
+  "head_sha": "9c65ec2a95b171b9e33398de3260b9c8d30de027",
+  "base_sha": "9c65ec2a95b171b9e33398de3260b9c8d30de027",
+  "rules_version": "665bf6d03117",
+  "decided_at": "2026-08-30T23:20:34+00:00",
+  "decided": "Rename the four inconsistent outcome-event wire attributes to the dotted amount namespace: biz.amount_minor -> biz.amount.minor, biz.currency -> biz.amount.currency, biz.exponent -> biz.amount.exponent, biz.amount.est -> biz.amount.estimated. The canonical JSON codec field names (flow, entity_id, amount_minor, ...) and all other biz.* attributes are unchanged.",
+  "why": "Founder decision 2026-08-30, recorded on workspace-8yq: the repo is pre-1.0 and README ties v1.0.0 to surviving two external adapters, so the rename costs a regenerated vector, one ADR amendment and a constants pass now, versus a major version or compatibility shim after v1.0.0. The frozen spelling had no inferable rule (biz.amount.est dotted under an amount namespace biz.amount_minor did not use). workspace-cnz made the rename mechanical: every use site is a biz.Attr* constant, testkit/vectors/outcome-event.json pins the set, and TestEveryExporterChecksTheEventContract holds every event-capable exporter to it.",
+  "cost_if_wrong": "This is a wire-format break: any existing consumer parsing biz.amount_minor / biz.currency / biz.exponent / biz.amount.est from exported events or saved queries (e.g. the README's CloudWatch Insights examples) breaks until updated. Pre-1.0 and founder-approved; the repo's own queriers are updated in the same PR so no in-tree consumer is left behind.",
+  "alternatives": [
+    "Keep the frozen spelling and close the bead: rejected by the founder \u2014 the inconsistency would harden into the v1.0 contract.",
+    "Adopt the semconv draft's biz.money.* grouping instead: rejected \u2014 biz.amount.* is the minimal consistent form of what ships; biz.money.* renames three more attributes than needed and diverges from biz.entity.id/biz.value.kind style.",
+    "Rename only biz.amount_minor to biz.amount.minor and leave currency/exponent flat: rejected \u2014 currency and exponent are meaningless apart from the amount (ADR-0001), leaving them flat re-creates the no-rule problem.",
+    "Dual-emit old and new names for a deprecation window: rejected \u2014 doubles every event's money attributes, and pre-1.0 with no known external consumers there is nobody to migrate."
+  ],
+  "scope": "biz/semconv.go constants; eventline decode tags; testkit/vectors/outcome-event.json and testkit outcome-event checker; exporter/querier conformance test literals; docs/semconv.md, docs/adr/0002 amendment, docs/portability.md, README.md query examples."
+}

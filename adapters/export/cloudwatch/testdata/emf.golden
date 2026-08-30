@@ -64,12 +64,12 @@
   "_aws": {
     "Timestamp": 1787846400000
   },
-  "biz.amount.est": false,
-  "biz.amount_minor": 14900,
-  "biz.currency": "USD",
+  "biz.amount.currency": "USD",
+  "biz.amount.estimated": false,
+  "biz.amount.exponent": 2,
+  "biz.amount.minor": 14900,
   "biz.customer.id": "h:c",
   "biz.entity.id": "inv_1",
-  "biz.exponent": 2,
   "biz.flow": "invoice.pay",
   "biz.outcome": "failed",
   "biz.segment": "smb",

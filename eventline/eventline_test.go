@@ -35,8 +35,8 @@ func TestParse(t *testing.T) {
 		{
 			name: "loki line shape",
 			line: `{"biz.flow":"invoice.pay","biz.stage":"capture","biz.outcome":"failed",` +
-				`"biz.entity.id":"inv_00000042","biz.customer.id":"h:c000007","biz.amount_minor":14900,` +
-				`"biz.currency":"USD","biz.exponent":2,"biz.value.kind":"fee","biz.amount.est":false,` +
+				`"biz.entity.id":"inv_00000042","biz.customer.id":"h:c000007","biz.amount.minor":14900,` +
+				`"biz.amount.currency":"USD","biz.amount.exponent":2,"biz.value.kind":"fee","biz.amount.estimated":false,` +
 				`"biz.segment":"smb","source":"harness","error":"card_declined"}`,
 			want: full,
 		},
@@ -44,24 +44,24 @@ func TestParse(t *testing.T) {
 			name: "emf event record (extra envelope keys ignored)",
 			line: `{"_aws":{"Timestamp":1787967000000},"event":"biz.outcome",` +
 				`"biz.flow":"invoice.pay","biz.stage":"capture","biz.outcome":"failed",` +
-				`"biz.entity.id":"inv_00000042","biz.customer.id":"h:c000007","biz.amount_minor":14900,` +
-				`"biz.currency":"USD","biz.exponent":2,"biz.value.kind":"fee","biz.amount.est":false,` +
+				`"biz.entity.id":"inv_00000042","biz.customer.id":"h:c000007","biz.amount.minor":14900,` +
+				`"biz.amount.currency":"USD","biz.amount.exponent":2,"biz.value.kind":"fee","biz.amount.estimated":false,` +
 				`"biz.segment":"smb","source":"harness","error":"card_declined"}`,
 			want: full,
 		},
 		{
 			name: "splunk hec event object (source_system alias)",
 			line: `{"biz.flow":"invoice.pay","biz.stage":"capture","biz.outcome":"failed",` +
-				`"biz.entity.id":"inv_00000042","biz.customer.id":"h:c000007","biz.amount_minor":14900,` +
-				`"biz.currency":"USD","biz.exponent":2,"biz.value.kind":"fee","biz.amount.est":false,` +
+				`"biz.entity.id":"inv_00000042","biz.customer.id":"h:c000007","biz.amount.minor":14900,` +
+				`"biz.amount.currency":"USD","biz.amount.exponent":2,"biz.value.kind":"fee","biz.amount.estimated":false,` +
 				`"biz.segment":"smb","source_system":"harness","error":"card_declined"}`,
 			want: full,
 		},
 		{
 			name: "estimated flag survives",
 			line: `{"biz.flow":"invoice.pay","biz.stage":"auth","biz.outcome":"success",` +
-				`"biz.amount_minor":18750,"biz.currency":"USD","biz.exponent":2,` +
-				`"biz.value.kind":"fee","biz.amount.est":true}`,
+				`"biz.amount.minor":18750,"biz.amount.currency":"USD","biz.amount.exponent":2,` +
+				`"biz.value.kind":"fee","biz.amount.estimated":true}`,
 			want: biz.Outcome{
 				At: at, Stage: "auth", Result: biz.ResultSuccess,
 				VC: biz.ValueContext{
@@ -77,7 +77,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			name:    "amount overflows int64 via float",
-			line:    `{"biz.flow":"f","biz.outcome":"failed","biz.amount_minor":14900.5}`,
+			line:    `{"biz.flow":"f","biz.outcome":"failed","biz.amount.minor":14900.5}`,
 			wantErr: "amount_minor",
 		},
 		{
@@ -116,12 +116,12 @@ func TestParseRejectsSkewedLines(t *testing.T) {
 	}{
 		{
 			name:    "marked line without amount",
-			line:    `{"biz.flow":"invoice.pay","biz.outcome":"failed","biz.currency":"USD"}`,
-			wantErr: "no biz.amount_minor",
+			line:    `{"biz.flow":"invoice.pay","biz.outcome":"failed","biz.amount.currency":"USD"}`,
+			wantErr: "no biz.amount.minor",
 		},
 		{
 			name:    "invalid result string",
-			line:    `{"biz.flow":"invoice.pay","biz.outcome":"faild","biz.amount_minor":100}`,
+			line:    `{"biz.flow":"invoice.pay","biz.outcome":"faild","biz.amount.minor":100}`,
 			wantErr: "not a valid result",
 		},
 	}

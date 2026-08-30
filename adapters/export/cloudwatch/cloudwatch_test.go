@@ -137,8 +137,8 @@ func TestExportEventsCarryAmountsAsFieldsNotMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := decode(t, buf.Bytes())[0]
-	if r["biz.amount_minor"].(float64) != 14900 {
-		t.Fatalf("amount = %v", r["biz.amount_minor"])
+	if r["biz.amount.minor"].(float64) != 14900 {
+		t.Fatalf("amount = %v", r["biz.amount.minor"])
 	}
 	if r["biz.entity.id"] != "inv_1" || r["biz.customer.id"] != "h:c" {
 		t.Fatalf("ids missing: %v", r)

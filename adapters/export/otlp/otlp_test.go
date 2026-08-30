@@ -132,8 +132,8 @@ func TestBuildRecordCarriesMoneyOnEventsOnly(t *testing.T) {
 	})
 	want := map[string]string{
 		"biz.flow": "invoice.pay", "biz.stage": "capture", "biz.outcome": "failed",
-		"biz.entity.id": "inv_1", "biz.customer.id": "h:c", "biz.currency": "USD",
-		"biz.value.kind": "fee", "source": "stripe:webhook", "biz.amount_minor": "14900",
+		"biz.entity.id": "inv_1", "biz.customer.id": "h:c", "biz.amount.currency": "USD",
+		"biz.value.kind": "fee", "source": "stripe:webhook", "biz.amount.minor": "14900",
 	}
 	for k, v := range want {
 		if attrs[k] != v {
