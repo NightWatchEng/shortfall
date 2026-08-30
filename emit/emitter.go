@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"go.opentelemetry.io/otel/trace"
 
@@ -29,9 +31,10 @@ type Std struct {
 	clock  func() time.Time
 	logger *slog.Logger
 
-	bufSize    int
-	metricsCap int
-	interval   time.Duration
+	bufSize         int
+	metricsCap      int
+	interval        time.Duration
+	providerPairCap int
 
 	mu             sync.Mutex
 	events         []biz.Outcome
@@ -39,6 +42,7 @@ type Std struct {
 	dropCounts     map[string]int64 // reason -> delta since last flush
 	metricOverflow int64            // dropped points since last flush (logged, not a money counter)
 	dedup          *twoGenSet
+	providerPairs  map[string]struct{} // distinct (provider, op) admitted so far
 
 	loopCtx    context.Context
 	loopCancel context.CancelFunc
@@ -72,6 +76,11 @@ func WithFlushInterval(d time.Duration) EmitterOption { return func(s *Std) { s.
 // Record option helpers.
 
 // WithSource sets the outcome's Source field.
+// WithProviderPairCap bounds how many distinct (provider, op) pairs one
+// emitter will mint series for; pairs past the cap collapse to
+// ProviderOther. Default DefaultProviderPairCap.
+func WithProviderPairCap(n int) EmitterOption { return func(s *Std) { s.providerPairCap = n } }
+
 func WithSource(source string) Option { return func(c *RecordConfig) { c.Source = source } }
 
 // WithErr carries a short failure description onto the outcome.
@@ -87,21 +96,26 @@ func New(reg *registry.Registry, exp Exporter, opts ...EmitterOption) (*Std, err
 		return nil, fmt.Errorf("emit: registry and exporter are required")
 	}
 	s := &Std{
-		reg:        reg,
-		exp:        exp,
-		clock:      time.Now,
-		logger:     slog.Default(),
-		bufSize:    10000,
-		interval:   time.Second,
-		dropCounts: map[string]int64{},
-		dedup:      newTwoGenSet(1 << 16),
-		stop:       make(chan struct{}),
+		reg:             reg,
+		exp:             exp,
+		clock:           time.Now,
+		logger:          slog.Default(),
+		bufSize:         10000,
+		interval:        time.Second,
+		dropCounts:      map[string]int64{},
+		dedup:           newTwoGenSet(1 << 16),
+		providerPairs:   map[string]struct{}{},
+		providerPairCap: DefaultProviderPairCap,
+		stop:            make(chan struct{}),
 	}
 	for _, o := range opts {
 		o(s)
 	}
 	if s.bufSize < 1 {
 		return nil, fmt.Errorf("emit: buffer size %d < 1", s.bufSize)
+	}
+	if s.providerPairCap < 1 {
+		return nil, fmt.Errorf("emit: provider pair cap %d < 1", s.providerPairCap)
 	}
 	s.metricsCap = 8 * s.bufSize
 	s.loopCtx, s.loopCancel = context.WithCancel(context.Background())
@@ -247,6 +261,88 @@ func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money, count 
 		MetricPoint{Name: "biz_inflight_value", Labels: lbls(), Value: money.Amount, At: now},
 		MetricPoint{Name: "biz_inflight_count", Labels: lbls(), Value: count, At: now},
 	)
+}
+
+// DefaultProviderPairCap is how many distinct (provider, op) pairs one
+// emitter mints series for before collapsing the rest to ProviderOther.
+// ADR-0004 expects a handful of providers each with a small API surface;
+// this is that "handful" made enforceable.
+const DefaultProviderPairCap = 64
+
+// maxProviderLabelLen bounds one adapter-supplied constant. A label longer
+// than this is not a constant, it is request data.
+const maxProviderLabelLen = 64
+
+// RecordProviderCall implements Emitter: one counted downstream provider
+// call on biz_provider_calls_total{provider, op, outcome} (ADR-0004).
+//
+// Every label crosses a fence before it reaches a series. outcome must be
+// one of ProviderCallOutcomes; provider and op must look like the
+// adapter-supplied constants ADR-0004 assumes they are. Anything else is
+// dropped and counted on biz_dropped_events_total{reason=invalid} — never
+// silently. Past the distinct-pair cap the call is still counted, under
+// ProviderOther, so a caller that hands us request data inflates one
+// series instead of the whole family.
+func (s *Std) RecordProviderCall(provider, op, outcome string) {
+	if !validProviderOutcome(outcome) || !boundedProviderLabel(provider) || !boundedProviderLabel(op) {
+		s.dropInvalid(
+			"provider call rejected",
+			fmt.Errorf("provider %q / op %q / outcome %q", provider, op, outcome),
+		)
+		return
+	}
+	providerLabel, opLabel := s.providerPairLabels(provider, op)
+	s.appendMetrics(MetricPoint{
+		Name:   "biz_provider_calls_total",
+		Labels: map[string]string{"provider": providerLabel, "op": opLabel, "outcome": outcome},
+		Value:  1,
+		At:     s.clock(),
+	})
+}
+
+// validProviderOutcome keeps the outcome label a closed two-value enum.
+func validProviderOutcome(outcome string) bool {
+	for _, o := range ProviderCallOutcomes {
+		if outcome == o {
+			return true
+		}
+	}
+	return false
+}
+
+// boundedProviderLabel rejects what an adapter constant is not: empty or
+// blank, longer than maxProviderLabelLen, or carrying a control character
+// that would corrupt a label on the wire.
+func boundedProviderLabel(v string) bool {
+	if strings.TrimSpace(v) == "" || len(v) > maxProviderLabelLen {
+		return false
+	}
+	for _, r := range v {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// providerPairLabels admits a (provider, op) pair until the cap is
+// reached, then collapses every unseen pair to ProviderOther. Admitted
+// pairs keep working after the cap — the fence bounds new series, it does
+// not degrade the ones already earned.
+func (s *Std) providerPairLabels(provider, op string) (string, string) {
+	key := provider + "\x00" + op
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.providerPairs[key]; ok {
+		return provider, op
+	}
+	if len(s.providerPairs) >= s.providerPairCap {
+		s.logger.Warn("emit: provider pair cap reached; labels collapsed",
+			"provider", provider, "op", op, "cap", s.providerPairCap)
+		return ProviderOther, ProviderOther
+	}
+	s.providerPairs[key] = struct{}{}
+	return provider, op
 }
 
 // Flush exports everything pending and returns the first export error.
