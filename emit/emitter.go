@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/trace"
 
@@ -74,14 +75,14 @@ func WithLogger(l *slog.Logger) EmitterOption { return func(s *Std) { s.logger =
 // obligation to call it, since buffers are bounded and overflow drops).
 func WithFlushInterval(d time.Duration) EmitterOption { return func(s *Std) { s.interval = d } }
 
-// Record option helpers.
-
-// WithSource sets the outcome's Source field.
 // WithProviderPairCap bounds how many distinct (provider, op) pairs one
 // emitter will mint series for; pairs past the cap collapse to
 // ProviderOther. Default DefaultProviderPairCap.
 func WithProviderPairCap(n int) EmitterOption { return func(s *Std) { s.providerPairCap = n } }
 
+// Record option helpers.
+
+// WithSource sets the outcome's Source field.
 func WithSource(source string) Option { return func(c *RecordConfig) { c.Source = source } }
 
 // WithErr carries a short failure description onto the outcome.
@@ -292,7 +293,15 @@ func (s *Std) RecordProviderCall(provider, op, outcome string) {
 		)
 		return
 	}
-	providerLabel, opLabel := s.providerPairLabels(provider, op)
+	providerLabel, opLabel, capped := s.providerPairLabels(provider, op)
+	if capped {
+		// Logged after the lock is released: this branch fires on every
+		// over-cap call, and a handler write under s.mu would block
+		// Record on the request path — the one thing Record promises not
+		// to do — in exactly the abuse case the cap exists to survive.
+		s.logger.Warn("emit: provider pair cap reached; labels collapsed",
+			"provider", provider, "op", op, "cap", s.providerPairCap)
+	}
 	s.appendMetrics(MetricPoint{
 		Name:   "biz_provider_calls_total",
 		Labels: map[string]string{"provider": providerLabel, "op": opLabel, "outcome": outcome},
@@ -312,10 +321,18 @@ func validProviderOutcome(outcome string) bool {
 }
 
 // boundedProviderLabel rejects what an adapter constant is not: empty or
-// blank, longer than maxProviderLabelLen, or carrying a control character
-// that would corrupt a label on the wire.
+// blank, longer than maxProviderLabelLen bytes, not valid UTF-8, or
+// carrying a control character.
+//
+// provider and op are the only metric labels built from a raw caller
+// string — flow, stage and segment fall back to registry-validated names
+// and currency is validated by biz.Money — so this is where invalid UTF-8
+// would first reach a label. It must not: the OTLP exporter marshals label
+// values as protobuf string fields, which fails the whole batch on an
+// invalid byte, and Flush drops a failed metric batch entire. One bad op
+// string would take unrelated families' points down with it.
 func boundedProviderLabel(v string) bool {
-	if strings.TrimSpace(v) == "" || len(v) > maxProviderLabelLen {
+	if strings.TrimSpace(v) == "" || len(v) > maxProviderLabelLen || !utf8.ValidString(v) {
 		return false
 	}
 	for _, r := range v {
@@ -329,21 +346,20 @@ func boundedProviderLabel(v string) bool {
 // providerPairLabels admits a (provider, op) pair until the cap is
 // reached, then collapses every unseen pair to ProviderOther. Admitted
 // pairs keep working after the cap — the fence bounds new series, it does
-// not degrade the ones already earned.
-func (s *Std) providerPairLabels(provider, op string) (string, string) {
+// not degrade the ones already earned. capped reports the collapse so the
+// caller can log it with the lock released.
+func (s *Std) providerPairLabels(provider, op string) (labelProvider, labelOp string, capped bool) {
 	key := provider + "\x00" + op
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.providerPairs[key]; ok {
-		return provider, op
+		return provider, op, false
 	}
 	if len(s.providerPairs) >= s.providerPairCap {
-		s.logger.Warn("emit: provider pair cap reached; labels collapsed",
-			"provider", provider, "op", op, "cap", s.providerPairCap)
-		return ProviderOther, ProviderOther
+		return ProviderOther, ProviderOther, true
 	}
 	s.providerPairs[key] = struct{}{}
-	return provider, op
+	return provider, op, false
 }
 
 // Flush exports everything pending and returns the first export error.

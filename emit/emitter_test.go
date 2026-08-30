@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -793,6 +796,11 @@ func TestRecordProviderCallRejectsUnboundedLabels(t *testing.T) {
 		{"empty outcome", "stripe", "capture", ""},
 		{"over-long op", "stripe", strings.Repeat("x", 65), ProviderCallSuccess},
 		{"control character", "stripe", "cap\nture", ProviderCallSuccess},
+		// Invalid UTF-8 must never reach a label: the OTLP exporter
+		// marshals label values as protobuf strings, which fails the
+		// WHOLE batch on a bad byte, and Flush drops a failed metric
+		// batch entire — one bad op would take other families with it.
+		{"invalid utf-8", "stripe", "cap\xffture", ProviderCallSuccess},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -867,4 +875,47 @@ func TestRecordProviderCallIsOnTheEmitterInterface(t *testing.T) {
 	// is what makes that readable counter writable by any Emitter, not just Std.
 	var em Emitter = newTestEmitter(t, &captureExporter{})
 	em.RecordProviderCall("stripe", "capture", ProviderCallFailed)
+}
+
+// lockProbeHandler asserts, from inside the log handler, that the emitter's
+// mutex is NOT held while it runs. A handler write under s.mu blocks Record
+// on the request path — the one thing Record promises not to do.
+type lockProbeHandler struct {
+	slog.Handler
+	em     *Std
+	t      *testing.T
+	probed atomic.Bool
+}
+
+func (h *lockProbeHandler) Handle(ctx context.Context, r slog.Record) error {
+	h.probed.Store(true)
+	if !h.em.mu.TryLock() {
+		h.t.Errorf("emit: %q logged while holding the emitter mutex — that blocks Record on the request path", r.Message)
+	} else {
+		h.em.mu.Unlock()
+	}
+	return nil
+}
+
+func TestRecordProviderCallLogsWithTheLockReleased(t *testing.T) {
+	exp := &captureExporter{}
+	em, err := New(testRegistry(t), exp,
+		WithClock(func() time.Time { return testClock }),
+		WithProviderPairCap(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = em.Close(context.Background()) })
+
+	probe := &lockProbeHandler{Handler: slog.NewTextHandler(io.Discard, nil), em: em, t: t}
+	WithLogger(slog.New(probe))(em)
+
+	em.RecordProviderCall("stripe", "capture", ProviderCallSuccess) // admitted, no log
+	em.RecordProviderCall("stripe", "past-the-cap", ProviderCallFailed)
+	if !probe.probed.Load() {
+		t.Fatal("the over-cap branch never logged, so the lock was never probed")
+	}
+
+	// The rejection path logs too, and must also run unlocked.
+	em.RecordProviderCall("stripe", "", ProviderCallSuccess)
 }

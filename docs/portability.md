@@ -660,7 +660,9 @@ Twelve `host_allowlist` vectors pin these, including both verdicts.
 Governing ADRs: [ADR-0004](adr/0004-metric-label-set.md) (label sets),
 [ADR-0002](adr/0002-outcome-event-transport.md) (event transport and
 shape), [ADR-0005](adr/0005-inflight-age-buckets.md) (age buckets),
-[ADR-0012](adr/0012-inflight-count-gauge.md) (the in-flight count gauge).
+[ADR-0012](adr/0012-inflight-count-gauge.md) (the in-flight count gauge),
+[ADR-0018](adr/0018-provider-call-writer.md) (the provider-call writer and
+its cardinality fence).
 Draft convention write-up: [semconv.md](semconv.md).
 
 ### 5.1 What is frozen and what is not
@@ -734,8 +736,9 @@ never silently blown:
 |---|---|---|
 | `flow` or `stage` not in the registry | the fixed literal `unregistered` | keeps the raw names, for diagnosis |
 | `segment` outside the enumeration | the empty string, with a logged warning | keeps the raw value |
+| a (`provider`, `op`) pair past the emitter's cap (5.2) | both labels become the fixed literal `other`, with a logged warning | no event — this family is provider health, not a transaction |
 
-Both fallbacks are part of the contract: sums stay complete, the series
+All three fallbacks are part of the contract: sums stay complete, the series
 count stays bounded, and the misconfiguration is visible on a dashboard.
 
 ### 5.4 Ids never become labels
