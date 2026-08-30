@@ -362,8 +362,9 @@ const trackerSlots, trackerPerSlot = 256, 64
 
 // BenchmarkTrackerTrackDoneParallel is the queue-consumer hot path under
 // contention: Track on receive, Done on completion, from every consumer
-// goroutine at once against one shared tracker. InFlightTracker is a map
-// behind a single mutex, so this is where that mutex shows up. Sweep with
+// goroutine at once against one shared tracker. The in-flight set is
+// sharded by id hash, so this benchmark is where a contention
+// regression on the shard locks would show up. Sweep with
 // -cpu 1,2,4,8,18.
 func BenchmarkTrackerTrackDoneParallel(b *testing.B) {
 	ce := &countingEmitter{}

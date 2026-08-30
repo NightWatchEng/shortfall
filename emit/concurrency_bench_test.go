@@ -274,10 +274,17 @@ func recordAt(em *Std, ctxs []context.Context, n int64) {
 	)
 }
 
+// trackerItemCount sums the shard maps directly rather than trusting
+// the tracker's own itemCount, so a broken accounting would be caught
+// here instead of confirmed by itself.
 func trackerItemCount(tr *InFlightTracker) int {
-	tr.mu.Lock()
-	defer tr.mu.Unlock()
-	return len(tr.items)
+	n := 0
+	for i := range tr.shards {
+		tr.shards[i].mu.Lock()
+		n += len(tr.shards[i].items)
+		tr.shards[i].mu.Unlock()
+	}
+	return n
 }
 
 // BenchmarkTrackerPublishScale is how long the tracker holds its mutex on a
