@@ -74,7 +74,10 @@ type otlpHarness struct{}
 func (otlpHarness) New() (emit.Exporter, conformance.Backend) {
 	m := &countingMetric{}
 	l := &countingLogExporter{}
-	res := defaultResource()
+	// resolveResource, as New and newWith do: the suite is supposed to judge
+	// the real pipeline, and an unresolved resource is a shape production no
+	// longer builds.
+	res := resolveResource(defaultResource())
 	e := &Exporter{metrics: m, logs: newProviderSink(l, res), resource: res}
 	return e, otlpBackend{m: m, l: l}
 }

@@ -65,6 +65,10 @@ type eventSink interface {
 type providerSink struct {
 	provider *sdklog.LoggerProvider
 	logger   otellog.Logger
+	// res is the resource this sink was built from. The provider does not
+	// expose it, and a test that cannot see it cannot tell whether New
+	// handed both legs the same value.
+	res *resource.Resource
 
 	// mu serialises this sink's emit. The queue is per-sink, not per-call, so
 	// two overlapping ExportEvents calls would put twice its capacity in
@@ -72,6 +76,14 @@ type providerSink struct {
 	// releases its own lock before calling the exporter, and its background
 	// ticker can race a caller-driven Flush.
 	mu sync.Mutex
+	// stopped is guarded by mu, and that is the whole point of it. The
+	// Exporter-level atomic makes a post-Shutdown export fail, but a caller
+	// already past that check can still be waiting for mu when Shutdown
+	// stops the provider — and a stopped provider discards the record and
+	// answers ForceFlush with nil, so emit would report success for a batch
+	// nobody received. Deciding under the same lock emit holds is what makes
+	// the two operations ordered instead of merely racing.
+	stopped bool
 }
 
 // newProviderSink builds the real event pipeline over an otel log exporter.
@@ -90,6 +102,7 @@ func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink 
 	return &providerSink{
 		provider: provider,
 		logger:   provider.Logger("github.com/NightWatchEng/shortfall"),
+		res:      res,
 	}
 }
 
@@ -102,6 +115,9 @@ func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink 
 func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopped {
+		return ErrShutdown
+	}
 	for start := 0; start < len(batch); start += eventQueueSize {
 		end := min(start+eventQueueSize, len(batch))
 		if err := s.emitChunk(ctx, batch[start:end]); err != nil {
@@ -132,7 +148,17 @@ func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error
 	return s.provider.ForceFlush(ctx)
 }
 
-func (s *providerSink) Shutdown(ctx context.Context) error { return s.provider.Shutdown(ctx) }
+// Shutdown marks the sink stopped under mu, then stops the provider. An
+// emit already holding mu finishes and delivers; one still waiting for it
+// wakes to stopped and errors. The provider is stopped outside the lock —
+// no emit can run against it once stopped is set, so holding mu across the
+// SDK call would only make Shutdown wait longer.
+func (s *providerSink) Shutdown(ctx context.Context) error {
+	s.mu.Lock()
+	s.stopped = true
+	s.mu.Unlock()
+	return s.provider.Shutdown(ctx)
+}
 
 // ErrShutdown is returned by ExportMetrics and ExportEvents once Shutdown
 // has run. Shutdown is terminal here: the log provider cannot be restarted,
@@ -211,10 +237,13 @@ func WithLogOptions(o ...logexp.Option) func(*Options) {
 func resolveResource(res *resource.Resource) *resource.Resource {
 	merged, err := resource.Merge(resource.Environment(), res)
 	if err != nil {
+		// Unreachable while the first argument is Environment(): Merge errors
+		// only on ErrSchemaURLConflict, which needs both schema URLs non-empty,
+		// and Environment() is always schemaless. Handled rather than ignored
+		// so a future SDK change surfaces through otel's handler instead of
+		// being swallowed — Merge returns a usable resource either way, which
+		// is why merged is returned unconditionally.
 		otel.Handle(err)
-	}
-	if merged == nil {
-		return res
 	}
 	return merged
 }
