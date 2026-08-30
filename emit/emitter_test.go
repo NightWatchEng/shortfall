@@ -898,17 +898,23 @@ func (h *lockProbeHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func TestRecordProviderCallLogsWithTheLockReleased(t *testing.T) {
+	// The probe needs the *Std it will interrogate, and the emitter needs
+	// the probe as its logger, so the probe is built first and its target
+	// filled in after New. WithFlushInterval(0) keeps that safe: no
+	// background flusher exists to read s.logger, so nothing can log
+	// before this goroutine sets em.
+	probe := &lockProbeHandler{Handler: slog.NewTextHandler(io.Discard, nil), t: t}
 	exp := &captureExporter{}
 	em, err := New(testRegistry(t), exp,
 		WithClock(func() time.Time { return testClock }),
+		WithFlushInterval(0),
+		WithLogger(slog.New(probe)),
 		WithProviderPairCap(1))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
-
-	probe := &lockProbeHandler{Handler: slog.NewTextHandler(io.Discard, nil), em: em, t: t}
-	WithLogger(slog.New(probe))(em)
+	probe.em = em
 
 	em.RecordProviderCall("stripe", "capture", ProviderCallSuccess) // admitted, no log
 	em.RecordProviderCall("stripe", "past-the-cap", ProviderCallFailed)
