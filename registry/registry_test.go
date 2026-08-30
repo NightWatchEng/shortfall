@@ -175,9 +175,11 @@ func TestNegativeFixtures(t *testing.T) {
 		{"estimator segment outside enumeration", mutate("by_segment: { smb: 14200", "by_segment: { gov: 14200"), "gov"},
 		{"non-positive estimator", mutate("default_minor: 18750", "default_minor: 0"), "default_minor"},
 		{"bad recovered_fraction", mutate("recovered_fraction: 0.6", "recovered_fraction: 1.5"), "recovered_fraction"},
-		// NaN and the infinities fail BOTH halves of a < 0 || > 1 bound, so a
-		// pair of ordinary comparisons lets them through. NaN also fails the
-		// subsequent > 0 test, so it never even needs a within window.
+		// NaN is what a `< 0 || > 1` bound misses: it fails BOTH halves, and
+		// it fails the subsequent `> 0` test too, so such a flow was never
+		// even asked for its within window. The infinities ARE caught by the
+		// bound; they are here because the finiteness check changes the
+		// reason they are rejected for, and a reason is what these pin.
 		// Each pins the REASON, not just the rejection: before the finiteness
 		// check, ".nan with a window" was already rejected — but as
 		// "within is set but recovered_fraction is 0", the right verdict for
