@@ -150,25 +150,32 @@ allocations: the `ValueContext` is decoded out of the request context and
 the de-dup key string is built before the emitter has any way to know the
 call is a duplicate. Retry storms are not cheap on this path.
 
-### A note on `BenchmarkRecordAccept`
+### `BenchmarkRecordAccept`, and how it used to lie
 
-The older single-goroutine `BenchmarkRecordAccept` reports 3 allocs/op. The
-accept path allocates **17**. That benchmark rotates over a fixed pool of
-4096 contexts × 3 stages × 4 results = 49152 de-dup keys, and the emitter's
-two-generation set retains up to 131072 recent keys. The pool is smaller
-than the retention window, so once it has been walked once, every
-subsequent call finds its key already remembered: only the first 49152
-iterations of a run take the accept path. At `-benchtime 1s` that run is
-about 1.4M iterations, so under 4% of it measures acceptance. The
-reported `3 allocs/op` is the integer mean of ~96% suppressed calls at 3
-allocations and ~4% accepted calls at 17.
+The single-goroutine `BenchmarkRecordAccept` reported 3 allocs/op for a path
+that allocates **17**. It rotated over a fixed pool of 4096 contexts × 3
+stages × 4 results = 49152 de-dup keys while the emitter's two-generation
+set retains up to 131072 recent keys. The pool was smaller than the
+retention window, so once it had been walked once every subsequent call
+found its key already remembered: only the first 49152 iterations of a run
+took the accept path. At `-benchtime 1s` that is about 1.4M iterations, so
+under 4% of the run measured acceptance, and the published `3 allocs/op` was
+the integer mean of ~96% suppressed calls at 3 allocations and ~4% accepted
+calls at 17.
 
-It is still a stable, useful baseline for the regression gate — it just
-measures something narrower than its name says. The honest accept figures
-are the `BenchmarkRecordParallel` table above. Fixing the older benchmark
-is tracked separately; it is not done here, because correcting it would
-move a gate baseline in the same PR that introduces the numbers proving it
-needs correcting.
+It now forgets the de-dup set between passes over the pool, so every call is
+accepted, and it **asserts conservation**: `delivered == b.N`, the same check
+`BenchmarkRecordParallel` carries. Run against the old
+behaviour it reports `delivered 49152 outcomes` for a `b.N` in the hundreds
+of thousands — the 49152 is exact and is the pool size, the call count is
+whatever the run reached. The
+reason it is an assertion rather than a comment is that this benchmark
+drifted into measuring the wrong path precisely because nothing checked
+which path it took — a benchmark that cannot tell is one that will lie again.
+
+The row in the summary table below moves with it. The old figure is left
+here rather than quietly replaced, because a number that was published for
+weeks is worth being able to recognise.
 
 ## `emit.InFlightTracker` — the cost of contention
 
@@ -491,13 +498,39 @@ the costs of the small pieces, not of the paths that contain them.
 
 | Path | ns/op | spread | B/op | allocs/op |
 |---|---:|---:|---:|---:|
-| `emit.Record`, de-duplicated retry (`BenchmarkRecordSuppressed`) | 515 | ±6% | 288 | 3 |
-| `emit.Record`, mixed accept/suppress (`BenchmarkRecordAccept`) | 716 | ±4% | 381 | 3 |
+| `emit.Record`, de-duplicated retry (`BenchmarkRecordSuppressed`) † | 453 | ±1% | 288 | 3 |
+| `emit.Record`, accepted (`BenchmarkRecordAccept`) † | 1,525 | ±2% | 3,265 | 17 |
 | `emit.AgeBucketFor` | 0.24 | ±11% | 0 | 0 |
 | `emit.InFlightTracker.Publish`, 10k items (`BenchmarkTrackerPublish10k`) | 354,100 | ±4% | 11,780 | 78 |
 | `biz` ValueContext encode (`BenchmarkEncodeVC`) | 133 | ±3% | 112 | 3 |
 | `biz` ValueContext decode (`BenchmarkDecodeVC`) | 195 | ±16% | 176 | 1 |
 | `biz.ValueContext.Validate` | 335 | ±6% | 0 | 0 |
 
-`BenchmarkRecordAccept` is labelled "mixed accept/suppress" here rather
-than by its name, for the reason given [above](#a-note-on-benchmarkrecordaccept).
+† These two rows were re-measured together on 2026-08-30, when
+`BenchmarkRecordAccept` was corrected to measure the path its name claims
+(see [above](#benchmarkrecordaccept-and-how-it-used-to-lie)). Its previous
+row read 716 ns / 381 B / 3 allocs and was labelled "mixed accept/suppress",
+which is what it honestly measured.
+
+**They are not comparable to the rest of this table**, and the honest reason
+is worth stating rather than burying. The re-measurement ran under concurrent
+load, not the idle laptop the methodology above specifies, and not on the
+machine the other rows came from. `BenchmarkRecordSuppressed` is re-stated
+from the same run as a calibration point: unchanged code, previously
+published at 515 ns, measured here at 453.
+
+So read two things from this pair and nothing else. **The ratio**: an
+accepted call costs about 3.4× a de-duplicated one, which held at 3.3× on a
+quieter run of the same code, so it is the figure that survives the host.
+**The allocation columns**: 17 against 3, and 3,265 B against 288, identical
+across every run because they are deterministic. The absolute nanoseconds are
+this host on this afternoon; do not compare them to the rows above, and do
+not compare them to yours.
+
+They also do not contradict the README's "2.3 µs on one core" for an accepted
+outcome, which comes from `BenchmarkRecordParallel` at `-cpu 1`. That
+benchmark runs a live background flusher, so each call carries its amortised
+share of the export; `BenchmarkRecordAccept` uses `WithFlushInterval(0)` and
+drains with the timer stopped, so it prices `Record` itself. Two questions,
+two numbers: what one call costs the caller, and what one call costs the
+process.

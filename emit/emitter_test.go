@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -693,25 +694,53 @@ func BenchmarkRecordAccept(b *testing.B) {
 	}
 	stages := [...]string{"auth", "capture", "settle"}
 	results := [...]biz.Result{biz.ResultFailed, biz.ResultSuccess, biz.ResultDeferred, biz.ResultUnknown}
+	// delivered totals what actually reached the sink, so the conservation
+	// check below can prove every call took the accept path.
+	delivered := 0
+	drain := func() {
+		_ = em.Flush(context.Background())
+		exp.mu.Lock()
+		delivered += len(exp.events)
+		exp.events, exp.metrics = nil, nil
+		exp.mu.Unlock()
+		// Forget every key seen so far. The entity pool is far smaller than
+		// twoGenSet's 1<<16 capacity, so without this the set never rotates,
+		// every key stays remembered, and all but the first pass through the
+		// pool is suppressed — which is what this benchmark used to price
+		// while calling itself Accept.
+		// clear() rather than a fresh set: reallocating ~1 MB every block
+		// leaves its GC work inside the timed region, and this benchmark's
+		// whole point is to price nothing but the accept path (ADR-0015
+		// asks for the same). cur holds one block's 4096 keys against a
+		// 65536 capacity, so it never rotates and prev stays nil.
+		em.mu.Lock()
+		clear(em.dedup.cur)
+		em.mu.Unlock()
+	}
+
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Rotate stage/result/entity over 4096*3*4 = 49152 distinct keys.
-		// That pool is smaller than twoGenSet's 1<<16 capacity, so cur never
-		// rotates and every key stays remembered: only the first 49152
-		// iterations take the accept path and the rest are suppressed. This
-		// benchmark therefore prices the suppression path, not acceptance —
-		// see docs/performance.md. Correcting that is workspace-z7g; it moves
-		// a gate baseline, so it does not ride along with the doc.
+		// One block is one pass over the entity pool at a fixed stage and
+		// result, so every key inside a block is distinct; the drain between
+		// blocks makes the next block distinct from this one.
 		em.Record(ctxs[i%len(ctxs)], stages[(i/len(ctxs))%len(stages)], results[(i/(len(ctxs)*len(stages)))%len(results)])
 		if i%len(ctxs) == len(ctxs)-1 {
 			b.StopTimer()
-			_ = em.Flush(context.Background())
-			exp.mu.Lock()
-			exp.events, exp.metrics = nil, nil
-			exp.mu.Unlock()
+			drain()
 			b.StartTimer()
 		}
+	}
+	b.StopTimer()
+	drain()
+
+	// Conservation, borrowed from BenchmarkRecordParallel: if any call had
+	// been suppressed or dropped this count would fall short, and the ns/op
+	// would describe a path nobody asked about. A benchmark that cannot tell
+	// which path it measured is how the published accept figure came to
+	// describe de-dup hits.
+	if delivered != b.N {
+		b.Fatalf("delivered %d outcomes for %d Record calls — the benchmark stopped measuring the accept path", delivered, b.N)
 	}
 }
 
@@ -924,4 +953,63 @@ func TestRecordProviderCallLogsWithTheLockReleased(t *testing.T) {
 
 	// The rejection path logs too, and must also run unlocked.
 	em.RecordProviderCall("stripe", "", ProviderCallSuccess)
+}
+
+// TestDroppedEventsCountSurvivesAMetricExportFailure covers both sides of the
+// one exception in Flush's failed-metric-batch policy.
+//
+// A failed metric batch is logged and dropped without counting — re-queuing
+// deltas risks double-count on a partial write. The exception is
+// biz_dropped_events_total: those points are the record of the library's own
+// damage and never left the process, so they are re-credited rather than
+// lost. Neither side of that had a test: the only failure-injection test in
+// the package fails a batch that carries no drop point at all.
+func TestDroppedEventsCountSurvivesAMetricExportFailure(t *testing.T) {
+	exp := &captureExporter{}
+	em := newTestEmitter(t, exp)
+
+	// Mint a drop the emitter itself owns, so dropCounts is non-empty and
+	// the next flush carries a biz_dropped_events_total point.
+	em.SetInFlight("invoice.pay", "capture", "not-a-bucket", biz.Money{Amount: 1, Currency: "USD", Exponent: 2}, 1)
+	// And an ordinary metric alongside it, to pin the other half of the
+	// policy: this one must NOT come back.
+	em.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed)
+
+	exp.mu.Lock()
+	exp.failAll = true
+	exp.mu.Unlock()
+	if err := em.Flush(context.Background()); err == nil {
+		t.Fatal("failing export must surface through Flush")
+	}
+
+	exp.mu.Lock()
+	exp.failAll = false
+	exp.mu.Unlock()
+	metrics, _ := flushAndSnapshot(t, em, exp)
+	byName := metricsByName(metrics)
+
+	// The WHOLE drop-point set, not just the invalid sum. Asserting one
+	// reason cannot see the mutation that matters most: drop the branch's
+	// family guard and every failed point's value folds into dropCounts,
+	// minting biz_dropped_events_total{reason=""} out of a transaction
+	// count and a money amount — the counter corruption this branch's
+	// comment says re-crediting avoids.
+	got := map[string]int64{}
+	for _, p := range byName["biz_dropped_events_total"] {
+		got[p.Labels["reason"]] += p.Value
+	}
+	want := map[string]int64{"invalid": 1, "export": 1}
+	if !maps.Equal(got, want) {
+		t.Errorf("biz_dropped_events_total after a failed export = %v, want %v — "+
+			"a backend outage must not destroy the record of the library's own damage, "+
+			"and nothing but that record may be re-credited", got, want)
+	}
+	// The transaction families are NOT re-credited: re-queuing them past a
+	// partial write is how a counter double-counts.
+	if pts := byName["biz_txn_total"]; len(pts) != 0 {
+		t.Errorf("biz_txn_total came back after a failed export (%d points) — only the drop counters are re-credited", len(pts))
+	}
+	if pts := byName["biz_value_total"]; len(pts) != 0 {
+		t.Errorf("biz_value_total came back after a failed export (%d points)", len(pts))
+	}
 }
