@@ -65,14 +65,29 @@ var baseTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 // point shows up as a missing series either way.
 func sampleMetrics(n int) []emit.MetricPoint {
 	currencies := []string{"USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "SEK", "NZD", "NOK", "DKK", "SGD"}
+	// ADR-0002's fixed reason enum. biz_dropped_events_total carries only
+	// {reason}, so it can never hold more than four distinct series — the
+	// tightest limit on how far n can be raised (see the guard below).
+	reasons := []string{"invalid", "overflow", "encode", "export"}
+	if n > len(currencies) {
+		// Not a style rule: currency is what makes the currency-bearing
+		// families' points distinct, so past this the batch silently starts
+		// repeating a series and "delivered == n" stops meaning "nothing was
+		// dropped" for an aggregating backend. Raising n means giving those
+		// families another varying label first.
+		panic(fmt.Sprintf("conformance: sampleMetrics(%d) exceeds the %d distinct currencies that keep its series distinct", n, len(currencies)))
+	}
 	out := make([]emit.MetricPoint, 0, n)
 	for i := 0; i < n; i++ {
 		at := baseTime.Add(time.Duration(i) * time.Second)
 		cur := currencies[i%len(currencies)]
-		// Interleave the in-flight gauge families so every metric exporter is
-		// exercised on all families, not just biz_value_total — a family an
-		// exporter fails to handle drops the whole batch (ADR-0012).
-		switch i % 3 {
+		// Every one of the six ADR-0004 families appears, not just the three
+		// this batch used to carry: an exporter that fails to handle a family
+		// drops the whole batch (ADR-0012), so a family nobody feeds is a
+		// family nobody notices. biz_provider_calls_total and
+		// biz_dropped_events_total have no currency label, so each supplies
+		// its own varying label to stay on a distinct series.
+		switch i % 6 {
 		case 0:
 			out = append(out, emit.MetricPoint{
 				Name: "biz_inflight_count",
@@ -94,6 +109,33 @@ func sampleMetrics(n int) []emit.MetricPoint {
 					"currency":   cur,
 				},
 				Value: int64(100 + i), At: at,
+			})
+		case 2:
+			out = append(out, emit.MetricPoint{
+				Name: "biz_txn_total",
+				Labels: map[string]string{
+					"flow": "invoice.pay", "stage": "capture", "outcome": "failed",
+					"currency": cur, "segment": "smb",
+				},
+				Value: int64(1 + i), At: at,
+			})
+		case 3:
+			out = append(out, emit.MetricPoint{
+				Name: "biz_provider_calls_total",
+				Labels: map[string]string{
+					"provider": "stripe",
+					"op":       fmt.Sprintf("payment_intents.op_%d", i),
+					"outcome":  "failed",
+				},
+				Value: int64(1 + i), At: at,
+			})
+		case 4:
+			out = append(out, emit.MetricPoint{
+				Name: "biz_dropped_events_total",
+				Labels: map[string]string{
+					"reason": reasons[(i/6)%len(reasons)],
+				},
+				Value: int64(1 + i), At: at,
 			})
 		default:
 			out = append(out, emit.MetricPoint{
@@ -175,7 +217,10 @@ func Check(h Harness) []Result {
 	}
 	results = append(results, Result{Name: "declares at least one signal"})
 
-	const n = 8
+	// Two points per ADR-0004 family, and within sampleMetrics' distinct-series
+	// budget (12 currencies). The batch cuts below are 6/3/3, so every family
+	// also straddles more than one Export call.
+	const n = 12
 
 	// Flush-on-shutdown with no loss, per capable signal.
 	results = append(results, metricNoLoss(h, caps, n))
