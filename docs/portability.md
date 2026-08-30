@@ -39,20 +39,23 @@ guarantee costs a port more than an honest gap does.
 
 ## Conformance vectors
 
-A contract nothing verifies is a wish. Two language-neutral JSON files
+A contract nothing verifies is a wish. Three language-neutral JSON files
 carry the checkable half of this document:
 
 | File | Covers |
 |---|---|
 | [`testkit/vectors/vc-codec.json`](../testkit/vectors/vc-codec.json) | the `biz.vc` wire codec: encodings, accepted non-canonical inputs, rejections |
 | [`testkit/vectors/registry.json`](../testkit/vectors/registry.json) | the flow-registry validator: accepted documents and the facts they yield, rejected documents, the propagation allowlist, the duration subset |
+| [`testkit/vectors/outcome-event.json`](../testkit/vectors/outcome-event.json) | the outcome event's serialized field set: which names carry which facts, and which must be **absent** rather than empty (5.5, 7.1) |
 
 They contain no Go and require no Go to consume: load the JSON, feed each
-input to your implementation, compare against the expected output. Both
-files are produced by running the reference implementation
-(`go run ./testkit/cmd/genvectors` from the repo root) and are replayed
-back through it by `testkit/vectors_test.go` on every CI run, so the
-files, the Go code, and this document cannot drift apart silently. The
+input to your implementation, compare against the expected output. All three
+are produced by running the reference implementation
+(`go run ./testkit/cmd/genvectors` from the repo root) and are replayed back
+through it on every CI run — the first two by `testkit/vectors_test.go`, the
+third by each event-capable exporter's own contract test, which
+`TestEveryExporterChecksTheEventContract` requires it to have. So the files,
+the Go code, and this document cannot drift apart silently. The
 same test asserts that every rejection class named below appears in this
 file — a class added to the vectors without a line here fails CI.
 
@@ -678,7 +681,7 @@ though, so:
 | the `reason` value enumeration on drops | **frozen** |
 | the label fallbacks (5.3) | **frozen** |
 | the *facts* an outcome event carries | **frozen** |
-| the *serialized key names* of an outcome event | **NOT settled** — see 7.1 |
+| the *serialized key names* of an outcome event | **frozen** — see 7.1 |
 | the OTel attribute names in `semconv.md` | draft, pending upstream submission |
 
 ### 5.2 Metric families
@@ -766,9 +769,10 @@ whole value context plus the transition:
 | source | e.g. `stripe:webhook` |
 | error text | short, PII-guarded, bounded at 512 bytes |
 
-The **facts** above are the contract. Their serialized key names are not
-yet settled across the repository's own surfaces — see 7.1 before you
-pick spellings.
+The **facts** above are the contract, and their serialized key names are
+settled: see 7.1 and
+[`testkit/vectors/outcome-event.json`](../testkit/vectors/outcome-event.json),
+which is what a port implements against.
 
 ### 5.6 The PII guard
 
@@ -875,31 +879,39 @@ revenue must not be able to cost any.
 Stated plainly, because a port needs to know where to expect churn more
 than it needs a comforting guarantee.
 
-### 7.1 The outcome event's serialized key names
+### 7.1 The outcome event's serialized key names — **settled 2026-08-30**
 
-**Status: not settled. Do not treat any single spelling as canonical.**
+**Status: settled.** The names are those in 5.5, defined once in code as the
+`biz.Attr*` constants and pinned by
+[`testkit/vectors/outcome-event.json`](../testkit/vectors/outcome-event.json).
+A port matches that file.
 
-Three surfaces in this repository spell the event's fields differently:
+This section previously read *"not settled — do not treat any single
+spelling as canonical"* and tabulated three disagreeing columns: ADR-0002's
+canonical JSON (`flow`, `entity_id`, `amount_minor`, `kind`, `est`),
+`semconv.md` (`biz.entity_id`, `biz.money.amount_minor`, `biz.kind`,
+`biz.estimated`), and the shipped exporters (`biz.entity.id`,
+`biz.amount_minor`, `biz.value.kind`, `biz.amount.est`). The facts were
+never in dispute; only the spellings were.
 
-| Fact | ADR-0002's canonical JSON | `semconv.md` attribute | shipped exporters |
-|---|---|---|---|
-| flow | `flow` | `biz.flow` | `biz.flow` |
-| entity id | `entity_id` | `biz.entity_id` | `biz.entity.id` |
-| amount | `amount_minor` | `biz.money.amount_minor` | `biz.amount_minor` |
-| kind | `kind` | `biz.kind` | `biz.value.kind` |
-| estimated | `est` | `biz.estimated` | `biz.amount.est` |
+**How it was settled.** The exporters won, because all three already agreed
+with each other — the disagreement was entirely between the code and its own
+documentation, so adopting their spelling moved no bytes on any wire. ADR-0002
+and `semconv.md` were corrected to match, both carrying dated amendment notes
+recording what they had said. The names then stopped being literals: they are
+`biz.Attr*` constants that every exporter and querier references, so a rename
+is a compile error rather than a silent divergence.
 
-The **facts** are stable and agreed; only the spellings differ. Until this
-is resolved, a port should match the exporter it is writing against — the
-shipped exporters' spellings are what existing queries and dashboards
-read — and should not assume ADR-0002's JSON literally.
+**What now holds it.** `testkit.CheckOutcomeEvent` drives every event-capable
+exporter through the vector, and `TestEveryExporterChecksTheEventContract`
+fails the build of an exporter that does not run it. The vector records which
+names must be **absent** rather than empty, because an optional field nobody
+checked is how `biz.sla.deadline` came to ship on OTLP alone.
 
-**What would settle it:** one ADR amendment naming one spelling for each
-fact, plus a conformance vector file for the event shape (the same
-treatment the codec and registry get here) so the three surfaces cannot
-drift again. That is a bead, not a paragraph in this document, and it is
-deliberately not resolved here: picking a spelling unilaterally would
-create a fourth.
+**One declared difference remains**, and it is a difference in carriage, not
+in the field set: OTLP puts the trace id on the log record's span context,
+which is what a trace-aware transport should do. Every other transport must
+emit `trace.id` as an attribute, and the vector requires it of them.
 
 ### 7.2 ADR-0004's family count
 

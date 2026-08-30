@@ -44,9 +44,9 @@ func buildEventRecord(projectID string, o biz.Outcome) ([]byte, error) {
 		rec[biz.AttrSegment] = o.VC.Segment
 	}
 	// The deadline rides every transport that can express it. It was on the
-	// OTLP event alone until workspace-cnz, which made the same Outcome
-	// produce different fields depending on which exporter was wired —
-	// exactly what ADR-0002 says must not happen.
+	// OTLP event alone, which made the same Outcome produce different fields
+	// depending on which exporter was wired — exactly what ADR-0002 says
+	// must not happen.
 	if !o.VC.Deadline.IsZero() {
 		rec[biz.AttrSLADeadline] = o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")
 	}

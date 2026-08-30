@@ -555,6 +555,13 @@ type OutcomeEventVector struct {
 	// explicitly beats inferring absence: an optional field nobody thought
 	// about is exactly how biz.sla.deadline ended up on one transport.
 	Absent []string `json:"absent,omitempty"`
+	// AttrsIfCarried are required of a transport that carries the fact as an
+	// attribute, and ignored by one that does not. It exists for exactly one
+	// fact: OTLP puts the trace id on the log record's span context, which
+	// is what a trace-aware transport should do, while the line-oriented
+	// exporters have nowhere to put it but an attribute. Without this the
+	// field would be required of nobody — the hole that let it go unchecked.
+	AttrsIfCarried map[string]any `json:"attrs_if_carried,omitempty"`
 }
 
 // OutcomeEventInput is a biz.Outcome in the flat shape a vector file can

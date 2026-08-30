@@ -3,6 +3,7 @@ package eventline
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/NightWatchEng/shortfall/biz"
 )
@@ -31,6 +32,7 @@ func TestLineTagsMatchTheWireContract(t *testing.T) {
 		"Source":      biz.AttrSource,
 		"Err":         biz.AttrError,
 		"TraceID":     biz.AttrTraceID,
+		"SLADeadline": biz.AttrSLADeadline,
 	}
 	rt := reflect.TypeOf(line{})
 	for i := range rt.NumField() {
@@ -53,5 +55,36 @@ func TestLineTagsMatchTheWireContract(t *testing.T) {
 		if _, ok := rt.FieldByName(name); !ok {
 			t.Errorf("contract names %s but the decoder has no such field", name)
 		}
+	}
+}
+
+// TestDeadlineRoundTrips pins the field this decoder was missing: the
+// CloudWatch and GCP exporters write biz.sla.deadline, and a decoder that
+// dropped it would lose the deadline on every round trip through a log
+// store — silently, because the value simply arrives zero.
+func TestDeadlineRoundTrips(t *testing.T) {
+	const line = `{"event":"biz.outcome","biz.flow":"invoice.pay","biz.stage":"capture",` +
+		`"biz.outcome":"failed","biz.entity.id":"inv_1","biz.customer.id":"h:c",` +
+		`"biz.amount_minor":100,"biz.currency":"USD","biz.exponent":2,` +
+		`"biz.value.kind":"fee","biz.amount.est":false,` +
+		`"biz.sla.deadline":"2026-01-02T03:34:05Z"}`
+	o, err := Parse([]byte(line), time.Unix(0, 0).UTC())
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	want := time.Date(2026, 1, 2, 3, 34, 5, 0, time.UTC)
+	if !o.VC.Deadline.Equal(want) {
+		t.Errorf("Deadline = %v, want %v — a deadline on the wire must survive the round trip", o.VC.Deadline, want)
+	}
+	// A line without one leaves it zero rather than erroring.
+	noDeadline := `{"event":"biz.outcome","biz.flow":"f","biz.stage":"s","biz.outcome":"success",` +
+		`"biz.entity.id":"e","biz.customer.id":"h:c","biz.amount_minor":1,"biz.currency":"USD",` +
+		`"biz.exponent":2,"biz.value.kind":"fee","biz.amount.est":false}`
+	o2, err := Parse([]byte(noDeadline), time.Unix(0, 0).UTC())
+	if err != nil {
+		t.Fatalf("parse without deadline: %v", err)
+	}
+	if !o2.VC.Deadline.IsZero() {
+		t.Errorf("Deadline = %v for a line that carries none, want zero", o2.VC.Deadline)
 	}
 }

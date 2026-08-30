@@ -28,7 +28,7 @@ func TestOutcomeEventContract(t *testing.T) {
 			m[string(kv.Key)] = kv.Value.AsInterface()
 		}
 		return m, nil
-	})
+	}, biz.AttrTraceID)
 	for _, p := range problems {
 		t.Error(p)
 	}

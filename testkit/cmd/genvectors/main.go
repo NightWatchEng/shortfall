@@ -584,6 +584,7 @@ func buildOutcomeEventVectors() testkit.OutcomeEventVectors {
 					biz.AttrSLADeadline: "2026-01-02T03:34:05Z",
 					biz.AttrSource:      full.Source, biz.AttrError: full.Err,
 				},
+				AttrsIfCarried: map[string]any{biz.AttrTraceID: full.TraceID},
 			},
 			{
 				Name:  "required_only",

@@ -38,6 +38,9 @@
         "biz.value.kind": "fee",
         "error": "card_declined",
         "source": "stripe:webhook"
+      },
+      "attrs_if_carried": {
+        "trace.id": "4bf92f3577b34da6a3ce929d0e0e4736"
       }
     },
     {

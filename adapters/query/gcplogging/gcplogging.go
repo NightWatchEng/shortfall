@@ -84,7 +84,8 @@ const defaultMaxRows = 100000
 // payloadPaths maps a query label to the JSONPath of the payload key that
 // carries it. It is the allowlist as well as the mapping: a label that is
 // not here is refused, which is also what keeps every identifier in the
-// generated SQL a constant of this package. Values are always bound as
+// generated SQL a constant — of biz, for the names on the wire, so the read
+// side cannot drift from the write side. Values are always bound as
 // parameters, never rendered into the statement.
 var payloadPaths = map[string]string{
 	"flow":     jsonPath(biz.AttrFlow),
@@ -100,7 +101,7 @@ var payloadPaths = map[string]string{
 // jsonPath quotes an attribute name as a JSONPath selector. The names come
 // from biz rather than being spelled here, so the read side cannot drift
 // from what the exporters write — which is how three surfaces ended up with
-// three spellings of the same facts (workspace-cnz). The quoting is what
+// three spellings of the same facts. The quoting is what
 // lets a dotted name like biz.entity.id select one key rather than three
 // levels of nesting.
 func jsonPath(attr string) string { return `$."` + attr + `"` }
@@ -289,7 +290,7 @@ func (q *Querier) statement(qy query.EventQuery) (string, []queryParam) {
 	}
 	conds := []string{
 		"timestamp >= @window_from AND timestamp < @window_to",
-		"JSON_VALUE(json_payload, '$.event') = @event_marker",
+		"JSON_VALUE(json_payload, '$." + biz.EventKey + "') = @event_marker",
 	}
 	// Sorted, so the statement (and any BigQuery query cache hit) is
 	// deterministic for a given query.

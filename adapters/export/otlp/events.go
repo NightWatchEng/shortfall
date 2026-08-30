@@ -9,7 +9,12 @@ import (
 
 // eventName is the OTel semantic-convention event name for a shortfall
 // outcome.
-const eventName = biz.AttrOutcome
+// The event MARKER, not the result attribute. The two share a value today,
+// so binding this to biz.AttrOutcome was invisible — and renaming either one
+// would have split the transports: the OTLP event name would move with the
+// result attribute, or CloudWatch and GCP's "event" key would move without
+// it. That is the drift this contract exists to prevent.
+const eventName = biz.EventOutcome
 
 // buildRecord maps one outcome to an OpenTelemetry log API record (the
 // builder form — attribute limits are applied SDK-side, so all fields

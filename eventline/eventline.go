@@ -17,7 +17,7 @@ import (
 // biz.Attr* constants, and TestLineTagsMatchTheWireContract asserts exactly
 // that: struct tags cannot reference a constant, so this is the one place
 // the wire names are unavoidably respelled, and a test rather than the
-// compiler is what keeps the copy honest (workspace-cnz).
+// compiler is what keeps the copy honest .
 //
 // Source has two accepted
 // spellings on the wire: "source" (what the EMF exporter writes) and
@@ -35,6 +35,7 @@ type line struct {
 	Kind        string          `json:"biz.value.kind"`
 	Estimated   bool            `json:"biz.amount.est"`
 	Segment     string          `json:"biz.segment"`
+	SLADeadline string          `json:"biz.sla.deadline"`
 	Source      string          `json:"source"`
 	SourceSys   string          `json:"source_system"`
 	Err         string          `json:"error"`
@@ -79,6 +80,20 @@ func Parse(raw []byte, at time.Time) (biz.Outcome, error) {
 	if source == "" {
 		source = l.SourceSys
 	}
+	// The deadline is optional on the wire and only some flows carry one.
+	// A line that has it must round-trip it: the CloudWatch and GCP exporters
+	// both write it now, and a decoder that silently dropped it would put this
+	// package back on the wrong side of the contract biz/semconv.go exists to
+	// hold everything to.
+	var deadline time.Time
+	if l.SLADeadline != "" {
+		d, err := time.Parse(time.RFC3339, l.SLADeadline)
+		if err != nil {
+			return biz.Outcome{}, fmt.Errorf("eventline: %s %q: %w", biz.AttrSLADeadline, l.SLADeadline, err)
+		}
+		deadline = d
+	}
+
 	return biz.Outcome{
 		At:      at,
 		Stage:   l.Stage,
@@ -91,6 +106,7 @@ func Parse(raw []byte, at time.Time) (biz.Outcome, error) {
 			EntityID:   l.EntityID,
 			CustomerID: l.CustomerID,
 			Segment:    l.Segment,
+			Deadline:   deadline,
 			Kind:       biz.Kind(l.Kind),
 			Estimated:  l.Estimated,
 			Money:      biz.Money{Amount: amount, Currency: l.Currency, Exponent: l.Exponent},

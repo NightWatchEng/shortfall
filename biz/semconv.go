@@ -46,7 +46,7 @@ const (
 	// AttrSLADeadline is optional: present only when the ValueContext
 	// carries a deadline. Every transport that can express it emits it —
 	// ADR-0002 requires the transports to agree on the fields a given
-	// Outcome produces, and until workspace-cnz only OTLP did.
+	// Outcome produces, and for a time only OTLP did.
 	AttrSLADeadline = "biz.sla.deadline"
 
 	// Diagnostic fields, all optional. TraceID is carried natively by
@@ -56,15 +56,3 @@ const (
 	AttrError   = "error"
 	AttrTraceID = "trace.id"
 )
-
-// OutcomeEventAttrs lists every attribute name an outcome event can carry,
-// in the order the vector records them. A conformance test walks this to
-// prove an exporter emits the whole set and nothing outside it, which is
-// the check ADR-0002 claimed existed before workspace-cnz added it.
-var OutcomeEventAttrs = []string{
-	AttrFlow, AttrStage, AttrOutcome,
-	AttrEntityID, AttrCustomerID, AttrSegment,
-	AttrAmountMinor, AttrCurrency, AttrExponent, AttrValueKind, AttrAmountEst,
-	AttrSLADeadline,
-	AttrSource, AttrError, AttrTraceID,
-}

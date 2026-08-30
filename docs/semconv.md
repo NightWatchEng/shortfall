@@ -74,7 +74,7 @@ caller that passes request data inflates one series instead of the family.
 
 - Amounts are integer minor units with an explicit exponent; **no floats**, and
   **no summing across currencies**.
-- Estimated amounts ride the event (`biz.estimated=true`) and are **excluded**
+- Estimated amounts ride the event (`biz.amount.est=true`) and are **excluded**
   from `biz_value_total` — realized and estimated are never merged.
 - Metric label sets are fixed and bounded; ids and amounts never become labels.
 - Every event that carries value carries the co-emitted count (value and count
