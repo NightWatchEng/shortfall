@@ -95,7 +95,19 @@ type providerSink struct {
 
 // acquire takes the sink's one slot, or gives up when ctx does. Callers that
 // get a nil error must release.
+//
+// The ctx is checked before the select, not only inside it. A select whose
+// send and whose ctx.Done() are both ready picks at random, so an already
+// expired ctx would take the slot about half the time — and Shutdown would
+// then hand the provider a deadline it cannot meet, which sdklog answers by
+// latching stopped and returning before it shuts the processor down,
+// stranding the pipeline alive with every later Shutdown reporting nil.
+// Failing fast on a dead ctx is what makes "never give the provider a ctx
+// that cannot finish" true rather than usually true.
 func (s *providerSink) acquire(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	select {
 	case s.sem <- struct{}{}:
 		return nil
@@ -180,14 +192,26 @@ func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error
 // The one already holding the slot checked stopped before this call set it,
 // so it delivers in full while Shutdown waits.
 //
+// The slot is held across provider.Shutdown by the defer. That is a latency
+// choice, not a correctness one: stopped is set before the wait and read by
+// emit right after it takes the slot, so no emit can reach the provider once
+// Shutdown has begun whether the slot is held or not. Holding it makes a
+// concurrent emit wait out the drain before being told ErrShutdown, which
+// keeps the sink single-threaded end to end.
+//
 // The provider is NOT stopped when the wait is abandoned. sdklog latches its
 // stopped flag before honouring ctx, after which it discards records and
 // answers ForceFlush with nil — so stopping it out from under a live emit
 // turns that emit's remaining chunks into exactly the silent loss ADR-0002
-// forbids, and the latch makes a later retry a no-op. Leaving the provider
-// running lets the in-flight batch land, and lets the caller retry Shutdown
-// with a ctx that can actually finish. The ctx error is returned so the
-// caller knows the exporter is not shut down yet.
+// forbids. Leaving it running lets the in-flight batch land, and the ctx
+// error says the exporter is not shut down.
+//
+// What that costs, plainly: the abandoned exporter is left running, and the
+// sdklog batch processor's goroutine with it. A fresh Shutdown reclaims it,
+// but emit.Std.Close cannot make one — it is sync.Once-guarded and caches
+// its first result — so through that caller the leak lasts the process.
+// Losing a goroutine is the cheaper failure; losing outcome events silently
+// is the one ADR-0002 rules out.
 func (s *providerSink) Shutdown(ctx context.Context) error {
 	s.stopped.Store(true)
 	if err := s.acquire(ctx); err != nil {

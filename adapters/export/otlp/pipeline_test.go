@@ -734,3 +734,46 @@ func (c *countingSlowExporter) count() int {
 	defer c.mu.Unlock()
 	return c.n
 }
+
+// recordingExporter reports whether the SDK ever shut it down.
+type recordingExporter struct{ shut bool }
+
+func (r *recordingExporter) Export(context.Context, []sdklog.Record) error { return nil }
+func (r *recordingExporter) Shutdown(context.Context) error                { r.shut = true; return nil }
+func (r *recordingExporter) ForceFlush(context.Context) error              { return nil }
+
+// TestExpiredCtxNeverStrandsTheProvider covers the case a two-case select
+// gets wrong on its own: the slot is FREE and the ctx is ALREADY expired, so
+// both cases are ready and Go picks at random.
+//
+// Taking the slot there means handing provider.Shutdown a dead deadline, and
+// sdklog answers that by latching stopped and returning before it shuts the
+// processor down — the pipeline stays alive, its goroutine with it, and every
+// later Shutdown returns nil for something that never shut down. No events
+// are lost (the sink's stopped flag keeps exports loud), but the exporter
+// reports a success it did not achieve, which is its own kind of dishonesty.
+//
+// Reachable through Exporter.Shutdown whenever the metric leg, or the two
+// Flushes emit.Std.Close runs first, burn the budget.
+func TestExpiredCtxNeverStrandsTheProvider(t *testing.T) {
+	stranded := 0
+	const iters = 200
+	for range iters {
+		exp := &recordingExporter{}
+		sink := newProviderSink(exp, defaultResource())
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		time.Sleep(time.Millisecond) // ctx is definitely expired; slot is free
+		err := sink.Shutdown(ctx)
+		cancel()
+		// Stranded: Shutdown reported the deadline, but the provider was
+		// entered anyway and latched without shutting the processor down.
+		if err != nil && !exp.shut {
+			if retry := sink.Shutdown(context.Background()); retry == nil && !exp.shut {
+				stranded++
+			}
+		}
+	}
+	if stranded != 0 {
+		t.Errorf("%d of %d expired-ctx Shutdowns stranded the provider: latched, alive, and unrecoverable by retry", stranded, iters)
+	}
+}
