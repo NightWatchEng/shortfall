@@ -35,10 +35,12 @@ in-flight bucketing, engine `Compute`, baseline fit) carry Go benchmarks.
   cheap statistics, local precision runs want the Go defaults).
 - Benchmarks behind the `benchload` build tag are deliberately outside that
   set — either too large for a hosted runner or too variable to compare
-  with `benchstat`. `go test -list` never sees them, so they neither run
-  nor compile in CI. Run them with `-tags benchload`; the commands and the
-  reason for each exclusion are in
-  [docs/performance.md](docs/performance.md).
+  with `benchstat`. `go test -list` never sees them, so they do not RUN in
+  CI. They are compiled, though: `ci-go.sh vet` type-checks with
+  `-tags "benchload integration"`, so a refactor that breaks a tagged file
+  fails the gate rather than waiting for someone to run it by hand. Run them
+  with `-tags benchload`; the commands and the reason for each exclusion are
+  in [docs/performance.md](docs/performance.md).
 - CI's advisory `benchmarks` job compares PR vs main with `benchstat` and
   writes the delta to the job summary. It reports "0 benchmarks" honestly
   until the first one lands. A regression on a hot path should carry a
