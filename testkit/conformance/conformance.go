@@ -75,14 +75,20 @@ var baseTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 // would make "delivered == n" untestable. n distinct series in must mean n
 // series out, for preserving and aggregating exporters alike, so a dropped
 // point shows up as a missing series either way.
+// adr0002DropReasons is ADR-0002's fixed reason enum for
+// biz_dropped_events_total, in the ADR's order. sampleMetrics seeds from it
+// and TestSampleReasonsMatchADR0002 pins it to the ADR verbatim, so a drift
+// in either direction fails a test before it reaches a backend.
+var adr0002DropReasons = []string{"invalid", "overflow", "export"}
+
 func sampleMetrics(n int) []emit.MetricPoint {
 	currencies := []string{"USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "SEK", "NZD", "NOK", "DKK", "SGD"}
-	// ADR-0002's fixed reason enum. biz_dropped_events_total carries only
-	// {reason}, so it tops out at four distinct series — a ceiling, but not
-	// the one that binds: the currency-bearing families repeat at n=13,
-	// while this axis does not repeat until n=29. The guard below is a
-	// currency guard because currency is what runs out first.
-	reasons := []string{"invalid", "overflow", "encode", "export"}
+	// biz_dropped_events_total carries only {reason}, so it tops out at
+	// three distinct series — a ceiling, but not the one that binds: the
+	// currency-bearing families repeat at n=13, while this axis does not
+	// repeat until n=23. The guard below is a currency guard because
+	// currency is what runs out first.
+	reasons := adr0002DropReasons
 	if n > len(currencies) {
 		// Not a style rule: currency is what makes the currency-bearing
 		// families' points distinct, so past this the batch silently starts

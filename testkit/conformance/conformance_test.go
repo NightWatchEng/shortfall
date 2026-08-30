@@ -266,3 +266,22 @@ func TestRunExporterPassesConformant(t *testing.T) {
 		buffer: true,
 	}})
 }
+
+// TestSampleReasonsMatchADR0002 pins adr0002DropReasons — the list
+// sampleMetrics seeds from — to ADR-0002's enum, verbatim and in order. The
+// enum drifted once before (encode, retired by ADR-0002's 2026-08-30
+// amendment), and
+// a seeded-values check cannot catch a re-drift: sampleMetrics caps n at 12,
+// which reaches only the first two cycle slots, so the pin must be on the
+// list itself, where every slot is visible.
+func TestSampleReasonsMatchADR0002(t *testing.T) {
+	want := []string{"invalid", "overflow", "export"}
+	if len(adr0002DropReasons) != len(want) {
+		t.Fatalf("adr0002DropReasons = %v, want ADR-0002's enum %v", adr0002DropReasons, want)
+	}
+	for i, r := range want {
+		if adr0002DropReasons[i] != r {
+			t.Fatalf("adr0002DropReasons[%d] = %q, want %q (ADR-0002's enum %v)", i, adr0002DropReasons[i], r, want)
+		}
+	}
+}

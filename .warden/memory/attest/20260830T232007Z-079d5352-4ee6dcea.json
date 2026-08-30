@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "079d5352011dd0d1ce9b8b9f0d505fe4917f8a6c",
+  "base_sha": "9c65ec2a95b171b9e33398de3260b9c8d30de027",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T23:20:07+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude -p sonnet (headless, independent context; Agent tool unavailable to worktree fork)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude -p sonnet (headless, separate context, findings-only input)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T23:20:07+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "079d5352011dd0d1ce9b8b9f0d505fe4917f8a6c",
+      "base_sha": "9c65ec2a95b171b9e33398de3260b9c8d30de027",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "test-cannot-fail",
+        "vacuous-pass"
+      ],
+      "dir_prefix": "testkit/conformance",
+      "file": "testkit/conformance/conformance_test.go",
+      "line": 210,
+      "severity": "MEDIUM",
+      "finding": "TestSampleReasonsMatchADR0002 iterated sampleMetrics(n) for n<=12, which structurally reaches only reason cycle slots 0 and 1; an out-of-enum value at slot >=2 would never be observed, so the drift guard could pass vacuously.",
+      "evidence": "reasons[(i/6)%len(reasons)] with sampleMetrics panicking for n>12 makes index 2 unreachable in any legal call",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Enum lifted to package-level var adr0002DropReasons (sampleMetrics seeds from it); test now pins the var to ADR-0002's enum verbatim, element by element, independent of n. Scoped re-review verdict: addressed.",
+      "id": "4a538da8423a40f1"
+    }
+  ]
+}
