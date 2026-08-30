@@ -30,6 +30,7 @@ func (f *fakeMetric) Export(_ context.Context, rm *metricdata.ResourceMetrics) e
 	f.got = rm
 	return nil
 }
+
 // Shutdown mimics otlpmetrichttp: a second call returns the sdk's shutdown
 // sentinel, which is exactly the behavior the adapter must shield callers
 // from.
