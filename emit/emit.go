@@ -88,6 +88,17 @@ type Caps struct {
 // conformance suite in testkit: batching, flush on Shutdown, capability
 // honesty. Export failure semantics bind every implementation (ADR-0002):
 // never block the caller, drop with a visible counter, never silently.
+//
+// Shutdown flushes whatever is buffered, and after it returns an Export
+// call must either be refused — a non-nil error, nothing delivered — or
+// keep genuinely working. A push-transport exporter, whose delivery rides
+// a flush that has already happened, refuses (otlp, cloudwatch, gcp all
+// return their ErrShutdown); a pull-collected exporter may keep a no-op
+// Shutdown and stay functional (prometheus: unregistering would delete
+// series before a final scrape). What no implementation may do is accept
+// a post-Shutdown batch and silently absorb it — that is the invisible
+// outcome-data loss this library exists to prevent, and the conformance
+// suite enforces the distinction.
 type Exporter interface {
 	ExportMetrics(ctx context.Context, batch []MetricPoint) error
 	ExportEvents(ctx context.Context, batch []biz.Outcome) error

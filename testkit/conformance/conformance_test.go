@@ -24,12 +24,20 @@ type fakeCfg struct {
 	dishonestMetrics bool // deliver metrics though caps.Metrics is false
 	dishonestEvents  bool // deliver events though caps.Events is false
 	errOnExport      bool // error on a capable export (also a conformance failure)
+
+	// Post-Shutdown behavior. A buffering fake refuses by default (the
+	// terminal push-exporter shape) and an eager fake keeps delivering (the
+	// pull-collected shape) — both conformant. These dial in the two ways an
+	// implementation can break the disjunction instead.
+	absorbAfterShutdown bool // accept post-Shutdown exports and lose them (the workspace-9h1 class)
+	refuseButDeliver    bool // error on post-Shutdown exports yet deliver them anyway
 }
 
 type fakeExporter struct {
 	cfg        fakeCfg
 	be         *memBackend
 	bufM, bufE int
+	closed     bool
 }
 
 func (f *fakeExporter) Capabilities() emit.Caps { return f.cfg.caps }
@@ -43,6 +51,18 @@ func (f *fakeExporter) ExportMetrics(_ context.Context, b []emit.MetricPoint) er
 	}
 	if f.cfg.errOnExport && f.cfg.caps.Metrics {
 		return errors.New("metric backend down")
+	}
+	if f.closed {
+		switch {
+		case f.cfg.absorbAfterShutdown:
+			return nil // accepted, delivered nowhere
+		case f.cfg.refuseButDeliver:
+			f.be.metrics += len(b)
+			return errors.New("exporter is shut down")
+		case f.cfg.buffer:
+			return errors.New("exporter is shut down")
+		}
+		// eager: pull-collected, stays functional after Shutdown
 	}
 	if f.cfg.buffer {
 		f.bufM += len(b)
@@ -62,6 +82,17 @@ func (f *fakeExporter) ExportEvents(_ context.Context, b []biz.Outcome) error {
 	if f.cfg.errOnExport && f.cfg.caps.Events {
 		return errors.New("log backend down")
 	}
+	if f.closed {
+		switch {
+		case f.cfg.absorbAfterShutdown:
+			return nil
+		case f.cfg.refuseButDeliver:
+			f.be.events += len(b)
+			return errors.New("exporter is shut down")
+		case f.cfg.buffer:
+			return errors.New("exporter is shut down")
+		}
+	}
 	if f.cfg.buffer {
 		f.bufE += len(b)
 		return nil
@@ -76,6 +107,7 @@ func (f *fakeExporter) Shutdown(context.Context) error {
 		f.be.events += f.bufE
 	}
 	f.bufM, f.bufE = 0, 0
+	f.closed = true
 	return nil
 }
 
@@ -157,6 +189,27 @@ func TestSuiteVerdicts(t *testing.T) {
 			name:     "declares no signal at all",
 			cfg:      fakeCfg{caps: emit.Caps{}},
 			wantFail: []string{"declares at least one signal"},
+		},
+		{
+			// The workspace-9h1 class: post-Shutdown exports accepted into a
+			// buffer nothing will ever flush again. Neither refused nor
+			// delivered — the one behavior the contract forbids.
+			name: "silently absorbs post-shutdown exports",
+			cfg:  fakeCfg{caps: both, buffer: true, absorbAfterShutdown: true},
+			wantFail: []string{
+				"post-shutdown metric export is refused or delivered",
+				"post-shutdown event export is refused or delivered",
+			},
+		},
+		{
+			// A refusal must actually refuse: erroring while still delivering
+			// is a double answer, not a terminal exporter.
+			name: "errors on post-shutdown export but delivers it anyway",
+			cfg:  fakeCfg{caps: both, buffer: true, refuseButDeliver: true},
+			wantFail: []string{
+				"post-shutdown metric export is refused or delivered",
+				"post-shutdown event export is refused or delivered",
+			},
 		},
 	}
 

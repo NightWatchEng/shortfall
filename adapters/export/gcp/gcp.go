@@ -25,6 +25,7 @@ package gcp
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -34,10 +35,17 @@ import (
 	"github.com/NightWatchEng/shortfall/emit"
 )
 
+// ErrShutdown is returned by ExportEvents once Shutdown has run. Shutdown's
+// flush is the last thing that moves the buffer, so a batch accepted after
+// it would sit there forever — refused loudly instead (the emit.Exporter
+// post-Shutdown contract).
+var ErrShutdown = errors.New("gcp: exporter is shut down")
+
 // Exporter implements emit.Exporter over Cloud Logging.
 type Exporter struct {
-	mu sync.Mutex // guards w (bufio is not concurrency-safe)
-	w  *bufio.Writer
+	mu     sync.Mutex // guards w and closed (bufio is not concurrency-safe)
+	w      *bufio.Writer
+	closed bool
 
 	projectID string
 }
@@ -99,6 +107,9 @@ func (e *Exporter) ExportEvents(_ context.Context, batch []biz.Outcome) error {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed {
+		return ErrShutdown
+	}
 	for _, o := range batch {
 		rec, err := buildEventRecord(e.projectID, o)
 		if err != nil {
@@ -116,10 +127,13 @@ func (e *Exporter) ExportEvents(_ context.Context, batch []biz.Outcome) error {
 
 // Shutdown flushes the buffered writer. Buffered records are outcome data
 // that must reach the log, so a flush error surfaces rather than being
-// swallowed.
+// swallowed. It is terminal: exports arriving from then on return
+// ErrShutdown. Idempotent: the buffer a repeat call flushes is empty, so
+// it returns nil.
 func (e *Exporter) Shutdown(context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.closed = true
 	if err := e.w.Flush(); err != nil {
 		return fmt.Errorf("gcp: flush: %w", err)
 	}

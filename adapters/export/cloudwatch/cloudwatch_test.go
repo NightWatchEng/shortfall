@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"os"
 	"path/filepath"
@@ -318,4 +319,47 @@ func equalInts(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+// TestPostShutdownExportRefused pins the terminal branch of emit.Exporter's
+// post-Shutdown contract for both signals and both metric paths: a later
+// export returns ErrShutdown and delivers nothing (workspace-0cd).
+func TestPostShutdownExportRefused(t *testing.T) {
+	var buf bytes.Buffer
+	e := New(WithWriter(&buf))
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	flushed := buf.Len()
+	p := emit.MetricPoint{Name: "biz_value_total", Labels: valueLbls("USD"), Value: 100, At: at}
+	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{p}); !errors.Is(err, ErrShutdown) {
+		t.Fatalf("post-shutdown ExportMetrics err = %v, want ErrShutdown", err)
+	}
+	o := biz.Outcome{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed}
+	if err := e.ExportEvents(context.Background(), []biz.Outcome{o}); !errors.Is(err, ErrShutdown) {
+		t.Fatalf("post-shutdown ExportEvents err = %v, want ErrShutdown", err)
+	}
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("second shutdown: %v", err)
+	}
+	if buf.Len() != flushed {
+		t.Fatalf("post-shutdown export reached the writer: %d bytes appeared", buf.Len()-flushed)
+	}
+	// Empty batches stay a no-op even after Shutdown: nothing to refuse.
+	if err := e.ExportMetrics(context.Background(), nil); err != nil {
+		t.Fatalf("post-shutdown empty batch errored: %v", err)
+	}
+
+	// The PutMetricData path refuses too, before any API call.
+	fake := &fakePutter{}
+	ep := New(WithWriter(&bytes.Buffer{}), WithMetricPutter(fake))
+	if err := ep.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	if err := ep.ExportMetrics(context.Background(), []emit.MetricPoint{p}); !errors.Is(err, ErrShutdown) {
+		t.Fatalf("post-shutdown putter ExportMetrics err = %v, want ErrShutdown", err)
+	}
+	if got := len(fake.inputs); got != 0 {
+		t.Fatalf("post-shutdown export reached PutMetricData: %d calls", got)
+	}
 }

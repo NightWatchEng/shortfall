@@ -20,6 +20,7 @@ package cloudwatch
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -47,13 +48,20 @@ type metricPutter interface {
 	PutMetricData(ctx context.Context, in *cloudwatch.PutMetricDataInput, optFns ...func(*cloudwatch.Options)) (*cloudwatch.PutMetricDataOutput, error)
 }
 
+// ErrShutdown is returned by ExportMetrics and ExportEvents once Shutdown
+// has run. Shutdown's flush is the last thing that moves the buffer, so a
+// batch accepted after it would sit there forever — refused loudly instead
+// (the emit.Exporter post-Shutdown contract).
+var ErrShutdown = errors.New("cloudwatch: exporter is shut down")
+
 // Exporter implements emit.Exporter over CloudWatch EMF.
 type Exporter struct {
 	namespace string
 	unit      string
 
-	mu sync.Mutex // guards w (bufio is not concurrency-safe)
-	w  *bufio.Writer
+	mu     sync.Mutex // guards w and closed (bufio is not concurrency-safe)
+	w      *bufio.Writer
+	closed bool
 
 	putter metricPutter // optional direct PutMetricData path
 }
@@ -124,6 +132,14 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 		return nil
 	}
 	if e.putter != nil {
+		// After the empty-batch return, never before: an empty batch drops
+		// nothing, so there is nothing to be loud about.
+		e.mu.Lock()
+		closed := e.closed
+		e.mu.Unlock()
+		if closed {
+			return ErrShutdown
+		}
 		return e.putMetricData(ctx, batch)
 	}
 	return e.writeMetricRecords(batch)
@@ -132,6 +148,9 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 func (e *Exporter) writeMetricRecords(batch []emit.MetricPoint) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed {
+		return ErrShutdown
+	}
 	for _, p := range batch {
 		rec, err := buildMetricRecord(e.namespace, e.unit, p)
 		if err != nil {
@@ -190,6 +209,9 @@ func (e *Exporter) ExportEvents(_ context.Context, batch []biz.Outcome) error {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed {
+		return ErrShutdown
+	}
 	for _, o := range batch {
 		rec, err := buildEventRecord(o)
 		if err != nil {
@@ -215,10 +237,13 @@ func (e *Exporter) writeLine(rec []byte) error {
 }
 
 // Shutdown flushes the buffered writer — records held in the buffer are
-// outcome data that must reach the log stream, so a flush error surfaces.
+// outcome data that must reach the log stream, so a flush error surfaces —
+// and is terminal: exports arriving from then on return ErrShutdown.
+// Idempotent: the buffer a repeat call flushes is empty, so it returns nil.
 func (e *Exporter) Shutdown(context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.closed = true
 	if err := e.w.Flush(); err != nil {
 		return fmt.Errorf("cloudwatch: flush: %w", err)
 	}
