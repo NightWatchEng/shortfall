@@ -175,6 +175,18 @@ func TestNegativeFixtures(t *testing.T) {
 		{"estimator segment outside enumeration", mutate("by_segment: { smb: 14200", "by_segment: { gov: 14200"), "gov"},
 		{"non-positive estimator", mutate("default_minor: 18750", "default_minor: 0"), "default_minor"},
 		{"bad recovered_fraction", mutate("recovered_fraction: 0.6", "recovered_fraction: 1.5"), "recovered_fraction"},
+		// NaN and the infinities fail BOTH halves of a < 0 || > 1 bound, so a
+		// pair of ordinary comparisons lets them through. NaN also fails the
+		// subsequent > 0 test, so it never even needs a within window.
+		// Each pins the REASON, not just the rejection: before the finiteness
+		// check, ".nan with a window" was already rejected — but as
+		// "within is set but recovered_fraction is 0", the right verdict for
+		// the wrong reason, which a substring match on the field name would
+		// have happily accepted.
+		{"nan recovered_fraction", mutate("recovered_fraction: 0.6, within: PT2H", "recovered_fraction: .nan"), "not a finite number"},
+		{"nan recovered_fraction with a window", mutate("recovered_fraction: 0.6", "recovered_fraction: .nan"), "not a finite number"},
+		{"positive infinity recovered_fraction", mutate("recovered_fraction: 0.6", "recovered_fraction: .inf"), "not a finite number"},
+		{"negative infinity recovered_fraction", mutate("recovered_fraction: 0.6", "recovered_fraction: -.inf"), "not a finite number"},
 		{"zero lookback", mutate("lookback_weeks: 8", "lookback_weeks: 0"), "lookback"},
 		{"bad currency", mutate("[USD, EUR]", "[USD, euros]"), "curren"},
 		{"bad segment name", mutate("[smb, enterprise]", "[smb, Enterprise!]"), "segment"},

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 )
@@ -184,6 +185,17 @@ func TestConfigValidation(t *testing.T) {
 	badFrac := base
 	badFrac.EnterpriseFraction = 1.5
 	mustPanic("fraction > 1", badFrac)
+
+	// NaN fails == 0, == NoEnterprise AND both halves of the range test, so
+	// before the explicit finiteness check it fell through the whole switch
+	// and ran the scenario with a not-a-number segment split.
+	nanFrac := base
+	nanFrac.EnterpriseFraction = math.NaN()
+	mustPanic("fraction is NaN", nanFrac)
+
+	infFrac := base
+	infFrac.EnterpriseFraction = math.Inf(1)
+	mustPanic("fraction is +Inf", infFrac)
 
 	hot := base
 	curve := DefaultCurve()

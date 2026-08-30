@@ -617,24 +617,20 @@ rule it is named for.
 | `baseline_seasonality` | a seasonality model other than `hour_of_week` |
 | `baseline_lookback` | `lookback_weeks` below 1 |
 | `recovery_model` | a recovery model other than `usage_loss_curve` |
-| `recovery_fraction` | `recovered_fraction` outside `[0, 1]` |
+| `recovery_fraction` | `recovered_fraction` outside `[0, 1]`, or not a finite number |
 | `recovery_within_missing` | a positive recovered fraction with no window |
 | `recovery_within_without_fraction` | a window with a zero recovered fraction |
 | `reconcile_source_required` | a flow with no reconcile source |
 | `reconcile_source_scheme` | a reconcile source outside the known schemes (`sql:`, `stripe:`) |
 | `reconcile_stage_unknown` | `reconcile.stage` naming a stage the flow does not declare |
 
-**One known gap in the reference implementation.** The `[0, 1]` bound on
-`recovered_fraction` is a pair of ordinary comparisons, and a YAML `.nan`
-fails both — so a flow declaring `recovered_fraction: .nan` with no
-`within` window loads. (One declaring `.nan` *and* a window is rejected,
-but as `recovery_within_without_fraction`, because NaN fails the `> 0`
-test too: the right verdict for the wrong reason.) That is a defect in
-the reference implementation, tracked separately — not a licence to copy
-it. A conforming implementation MUST reject a non-finite
-`recovered_fraction` under `recovery_fraction`. There is no vector for it
-yet, because a vector asserts what the reference implementation does, and
-here that is the wrong answer; the vector lands with the fix.
+**Finiteness is checked before the bound.** A `[0, 1]` bound written as
+the pair `< 0 || > 1` admits NaN, which fails both halves — and NaN then
+fails the subsequent `> 0` test too, so such a flow is never even asked
+for its `within` window. An implementation MUST therefore reject a
+non-finite `recovered_fraction` explicitly, under `recovery_fraction`,
+rather than rely on the range comparisons to do it. The
+`recovery_fraction_nan` vector pins this.
 
 ### 4.4 Allowlist matching
 

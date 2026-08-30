@@ -164,6 +164,8 @@ func (c *Config) applyDefaults() {
 		c.EnterpriseFraction = 0.1
 	case c.EnterpriseFraction == NoEnterprise:
 		c.EnterpriseFraction = 0
+	case math.IsNaN(c.EnterpriseFraction) || math.IsInf(c.EnterpriseFraction, 0):
+		panic(fmt.Sprintf("checkout: EnterpriseFraction %v is not a finite number — scenario config error", c.EnterpriseFraction))
 	case c.EnterpriseFraction < 0 || c.EnterpriseFraction > 1:
 		panic(fmt.Sprintf("checkout: EnterpriseFraction %v invalid — scenario config error", c.EnterpriseFraction))
 	}
