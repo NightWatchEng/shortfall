@@ -74,12 +74,17 @@ API has been stable for some time; the SDK has not reached 1.0.
 - **Export failure semantics** (review charter item 6 made contract):
   `Record` never blocks the business request path. Events buffer in a
   bounded in-memory queue (default 10k, configurable); on validation
-  failure, overflow, encode failure, or terminal export failure the event
+  failure, overflow, or terminal export failure the event
   is **dropped and `biz_dropped_events_total{reason}` increments**
-  (`reason` ∈ `invalid`, `overflow`, `encode`, `export`). *(Amended
+  (`reason` ∈ `invalid`, `overflow`, `export`). *(Amended
   2026-08-27 under ADR-0008: `invalid` added; the enum previously read
   `overflow`, `encode`, `export` — the emit contract already said invalid
-  outcomes drop and count, and the enum had drifted from it.)* A silent drop is a defect; a visible drop is a
+  outcomes drop and count, and the enum had drifted from it. Amended
+  2026-08-30 under ADR-0008, workspace-m7l: `encode` removed; `emit`
+  buffers `biz.Outcome` values and never serializes them — encoding is a
+  transport concern inside each adapter, so a marshal failure surfaces as
+  an `ExportEvents` error and is counted as `export`. No code path has
+  ever incremented `reason="encode"`.)* A silent drop is a defect; a visible drop is a
   coverage-ratio conversation. The nightly reconciliation leg exists to
   catch exactly the residue this counter admits to.
 - `emit` speaks only the `Exporter` interface; transport choice is

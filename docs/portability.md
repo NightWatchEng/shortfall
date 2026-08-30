@@ -709,7 +709,7 @@ Bounded value enumerations:
   transaction families; on `biz_provider_calls_total` it is the narrower
   provider-health pair `success`, `failed`
 - `age_bucket` ∈ `lt1m`, `1m-5m`, `5m-30m`, `30m-2h`, `gt2h`
-- `reason` ∈ `invalid`, `overflow`, `encode`, `export`
+- `reason` ∈ `invalid`, `overflow`, `export`
 
 `currency` is the one data-driven label axis, bounded in practice by ISO
 4217 and boundable per flow by declaring `currencies` in the registry.
