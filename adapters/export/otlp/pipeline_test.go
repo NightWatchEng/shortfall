@@ -379,3 +379,58 @@ func TestConcurrentEmitNeverExceedsQueue(t *testing.T) {
 		t.Errorf("delivered %d of %d outcomes", got, want)
 	}
 }
+
+// TestPostShutdownExportsAreLoud pins the answer this adapter gives to a
+// question emit.Exporter's own contract leaves open: an Export after
+// Shutdown must fail, not report success having delivered nothing.
+//
+// It used to differ per leg. The metric leg errored (otlpmetrichttp swaps in
+// a shutdownClient), while the event leg returned nil: sdklog's stopped
+// provider discards the record in OnEmit and answers ForceFlush with nil, so
+// providerSink.emit reported success for a batch nobody received — the
+// silent drop ADR-0002 forbids. Same object, same call, opposite honesty.
+func TestPostShutdownExportsAreLoud(t *testing.T) {
+	logExp := &capturingLogExporter{}
+	metricExp := &fakeMetric{}
+	e := newWith(metricExp, newProviderSink(logExp, defaultResource()))
+
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+
+	evErr := e.ExportEvents(context.Background(), outcomes(3))
+	if evErr == nil {
+		t.Error("ExportEvents after Shutdown returned nil — a batch nobody received must not report success")
+	}
+	mErr := e.ExportMetrics(context.Background(), []emit.MetricPoint{{
+		Name:   "biz_txn_total",
+		Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": "USD", "segment": "smb"},
+		Value:  1, At: at,
+	}})
+	if mErr == nil {
+		t.Error("ExportMetrics after Shutdown returned nil")
+	}
+	// Both legs of one exporter must answer the same question the same way.
+	if (evErr == nil) != (mErr == nil) {
+		t.Errorf("legs disagree about post-Shutdown exports: events=%v metrics=%v", evErr, mErr)
+	}
+	if got := len(logExp.all()); got != 0 {
+		t.Errorf("delivered %d records after Shutdown, want 0", got)
+	}
+}
+
+// An empty batch drops nothing, so there is nothing to be loud about — and
+// testkit/conformance's empty-batch invariant depends on this staying a
+// no-op.
+func TestPostShutdownEmptyBatchStaysANoop(t *testing.T) {
+	e := newWith(&fakeMetric{}, newProviderSink(&capturingLogExporter{}, defaultResource()))
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	if err := e.ExportEvents(context.Background(), nil); err != nil {
+		t.Errorf("empty ExportEvents after Shutdown: %v", err)
+	}
+	if err := e.ExportMetrics(context.Background(), nil); err != nil {
+		t.Errorf("empty ExportMetrics after Shutdown: %v", err)
+	}
+}

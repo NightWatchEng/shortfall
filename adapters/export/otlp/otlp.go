@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	logexp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	metricexp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -132,11 +133,27 @@ func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error
 
 func (s *providerSink) Shutdown(ctx context.Context) error { return s.provider.Shutdown(ctx) }
 
+// ErrShutdown is returned by ExportMetrics and ExportEvents once Shutdown
+// has run. Shutdown is terminal here: the log provider cannot be restarted,
+// and a post-Shutdown export delivers nothing. Reporting that as success
+// would be the silent drop ADR-0002 forbids, so it is an error the caller
+// can test for — emit.Std.Flush turns it into
+// biz_dropped_events_total{reason=export}.
+var ErrShutdown = errors.New("otlp: exporter is shut down")
+
 // Exporter implements emit.Exporter over OTLP.
 type Exporter struct {
 	metrics  metricPusher
 	logs     eventSink
 	resource *resource.Resource
+
+	// shutdown is read by both legs so they answer a post-Shutdown export
+	// identically. Leaving it to the vendored SDKs does not: otlpmetrichttp
+	// swaps in a client that errors, while sdklog's stopped provider
+	// discards the record and answers ForceFlush with nil. Zero value is
+	// usable because newWith and the conformance harness build Exporter as
+	// a struct literal.
+	shutdown atomic.Bool
 }
 
 var _ emit.Exporter = (*Exporter)(nil)
@@ -208,6 +225,11 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 	if len(batch) == 0 {
 		return nil
 	}
+	// After the empty-batch return, never before: an empty batch drops
+	// nothing, so there is nothing to be loud about.
+	if e.shutdown.Load() {
+		return ErrShutdown
+	}
 	rm, err := buildResourceMetrics(batch, e.resource)
 	if err != nil {
 		return err
@@ -220,6 +242,9 @@ func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error 
 	if len(batch) == 0 {
 		return nil
 	}
+	if e.shutdown.Load() {
+		return ErrShutdown
+	}
 	return e.logs.emit(ctx, batch)
 }
 
@@ -228,6 +253,7 @@ func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error 
 // log-leg flush failure can mean dropped outcome data and must not be
 // masked by a metric-leg error.
 func (e *Exporter) Shutdown(ctx context.Context) error {
+	e.shutdown.Store(true)
 	mErr := e.metrics.Shutdown(ctx)
 	lErr := e.logs.Shutdown(ctx)
 	return errors.Join(mErr, lErr)
