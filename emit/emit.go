@@ -90,8 +90,9 @@ type Caps struct {
 // never block the caller, drop with a visible counter, never silently.
 //
 // Shutdown flushes whatever is buffered, and after it returns an Export
-// call must either be refused — a non-nil error, nothing delivered — or
-// keep genuinely working. A push-transport exporter, whose delivery rides
+// call on a capable signal must either be refused — a non-nil error,
+// nothing delivered — or keep genuinely working; an incapable signal's
+// honest no-op stays a no-op. A push-transport exporter, whose delivery rides
 // a flush that has already happened, refuses (otlp, cloudwatch, gcp all
 // return their ErrShutdown); a pull-collected exporter may keep a no-op
 // Shutdown and stay functional (prometheus: unregistering would delete
