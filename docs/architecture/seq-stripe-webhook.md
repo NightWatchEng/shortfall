@@ -44,6 +44,7 @@ sequenceDiagram
     rect rgba(140,140,140,0.10)
         Note over S,ST: Phase 2 — the sync truth a webhook never delivers
         WB-->>S: onCall(ProviderCall{op, outcome, status, latency, err})
+        S->>EM: em.RecordProviderCall("stripe", p.Op, p.Outcome)
         alt infrastructure failure on an auth op — timeout, 5xx or 429
             WB-->>S: onAuth(biz.Outcome{Stage auth, Result failed, Source stripe:client})
             S->>EM: em.Record(ctx, o.Stage, o.Result, emit.WithSource(o.Source), emit.WithAt(o.At))
@@ -78,7 +79,7 @@ sequenceDiagram
 | 2 | your service → backend decorator | Your call site is **unchanged stripe-go**. `WrapBackend` returns a `stripe.Backend` that embeds the inner one and overrides `Call`; you install it once with `stripe.SetBackend`. It creates nothing, reads no response body, and is invisible at the call site |
 | 3 | backend decorator → Stripe | The inner backend's `Call`, timed. `deriveOp` turns method and path into an op like `payment_intents.create` |
 | 4 | Stripe → backend decorator | `providerOutcome` classifies: status 0 (transport error or timeout), any 5xx, and 429 are `failed`. Every other 4xx is `success` — Stripe answered, and a declined card is a business result, not an outage |
-| 5 | backend decorator → your service | `WithProviderMetric` callback. **It is a callback, not a counter**: `emit` has no API for `biz_provider_calls_total{provider, op, outcome}`, so wiring the `ProviderCall` to that metric is your code's job |
+| 5 | backend decorator → your service | `WithProviderMetric` callback. It is a callback, not a counter: the adapter observes, `emit` counts. One line wires it — `em.RecordProviderCall("stripe", p.Op, p.Outcome)` — and the call lands on `biz_provider_calls_total{provider, op, outcome}` inside the buffer, the label fence and the drop counter |
 | 6 | backend decorator → your service | `WithAuthOutcome` callback, behind four gates: the call failed, the op is `payment_intents.create` or `.confirm`, the params are `*stripe.PaymentIntentParams`, and `biz_flow` metadata is present. The `ValueContext` is rebuilt from the **request params**, not the response, and `At` is the call-start time |
 | 7 | your service → `emit` | Your sink. The adapter never reaches `emit` — `Source` is `stripe:client` here, which is what distinguishes this capture point from the webhook one downstream |
 | 8 | Stripe → webhook receiver | Eight mapped event types, and the mapping is the adapter's whole opinion: succeeded/payment_failed/processing → `capture`, requires_action → `auth` deferred, `charge.failed` → `capture` failed, dispute → `dispute` failed, and the two `invoice.*` events → `settle`. A verified event outside the map is ignored with a 200 |

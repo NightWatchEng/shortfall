@@ -1,6 +1,8 @@
 // Package emit turns stage transitions into the two normalized signals:
 // bounded metrics (sums and counts with the fixed ADR-0004 label set) and
-// unsampled per-transaction outcome events. It never touches a backend
+// unsampled per-transaction outcome events. It also counts observed
+// downstream provider calls, the one metric family that describes the
+// provider rather than a transaction. It never touches a backend
 // directly; exporters do.
 //
 // The types and interfaces here are the frozen v0.1.0 contract adapters
@@ -111,7 +113,8 @@ type RecordConfig struct {
 }
 
 // Emitter is the application-facing surface: one call per stage
-// transition, one gauge update path for in-flight value.
+// transition, one gauge update path for in-flight value, and one counter
+// path for observed downstream provider calls.
 //
 // Record never blocks the request path and returns no error — invalid or
 // overflowing outcomes are dropped and counted on

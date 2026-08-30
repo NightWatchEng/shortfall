@@ -201,7 +201,8 @@ func newClient(reg *registry.Registry) *http.Client {
   the same entity and dollars — one flow, measured across every hop.
 - **External providers** (not allowlisted): the request leaves clean.
   For provider health, `adapters/payment/stripe`'s wrapped client
-  observes each call for the `biz_provider_calls_total` family.
+  observes each call; hand it to `emit.RecordProviderCall` and it lands on
+  the `biz_provider_calls_total` family.
 - **Queues instead of HTTP**: the `kafka`, `sqs`, `amqp` carriers do the
   same job on message headers.
 
@@ -281,7 +282,7 @@ coverage ratio on top.
 | Surface | What you get | Where |
 |---|---|---|
 | Instrument | `ValueContext`, int64 minor-unit `Money`, the PII guard | `biz` |
-| Record | `Record` per stage, `InFlightTracker`/`SetInFlight` backlog gauges, `Flush` | `emit` |
+| Record | `Record` per stage, `InFlightTracker`/`SetInFlight` backlog gauges, `RecordProviderCall` for provider health, `Flush` | `emit` |
 | Propagate | HTTP Baggage middleware + egress-fenced Transport; Kafka, SQS, AMQP carriers | `propagate/*` |
 | Export | OTLP (metrics + events, to any collector), Prometheus (metrics), CloudWatch EMF (metrics + events), Google Cloud (Cloud Logging events; metrics over OTLP) | `adapters/export/*` |
 | Query back | `promql` (metrics); `cwinsights`, `gcplogging`, `sql` (events) | `adapters/query/*` |

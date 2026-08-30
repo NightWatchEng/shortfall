@@ -704,13 +704,20 @@ prefix, and no family may gain a label.
 
 Bounded value enumerations:
 
-- `outcome` ∈ `success`, `failed`, `deferred`, `abandoned`, `unknown`
+- `outcome` ∈ `success`, `failed`, `deferred`, `abandoned`, `unknown` on the
+  transaction families; on `biz_provider_calls_total` it is the narrower
+  provider-health pair `success`, `failed`
 - `age_bucket` ∈ `lt1m`, `1m-5m`, `5m-30m`, `30m-2h`, `gt2h`
 - `reason` ∈ `invalid`, `overflow`, `encode`, `export`
 
 `currency` is the one data-driven label axis, bounded in practice by ISO
 4217 and boundable per flow by declaring `currencies` in the registry.
-`provider` and `op` are adapter-supplied constants, never request data.
+`provider` and `op` are adapter-supplied constants, never request data — and
+a conforming producer MUST enforce that rather than assume it. The reference
+implementation admits a fixed number of distinct (`provider`, `op`) pairs per
+emitter (64) and collapses every pair past it to the fixed value `other`; the
+call is still counted, so sums stay complete while the series count stays
+bounded. A port MAY choose a different cap, but MUST have one.
 
 A metric point's value is an **integer**: a counter point is a *delta*
 observed at its own timestamp, never a cumulative total; a gauge point is

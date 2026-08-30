@@ -18,7 +18,8 @@ import (
 
 // Std is the standard Emitter implementation: non-blocking Record with a
 // bounded event buffer and a bounded metric buffer, in-process
-// de-duplication, ADR-0004 label enforcement, and loud drops
+// de-duplication, ADR-0004 label enforcement on all three write paths
+// (Record, SetInFlight, RecordProviderCall), and loud drops
 // (biz_dropped_events_total{reason}) — never silent ones.
 //
 // Ordering: batches may reach the exporter out of order when flushes
@@ -447,8 +448,9 @@ func (s *Std) dropInvalid(msg string, err error) {
 	s.mu.Unlock()
 }
 
-// flowStageLabels applies the ADR-0004 fence shared by Record and
-// SetInFlight: names outside the registry emit as the fixed value
+// flowStageLabels applies the ADR-0004 registry fence, the one Record and
+// SetInFlight share (RecordProviderCall has its own, since provider and op
+// are adapter constants rather than registry names): names outside the registry emit as the fixed value
 // "unregistered" — sums stay complete, cardinality stays bounded, the
 // misconfiguration is visible on a dashboard.
 func (s *Std) flowStageLabels(flow, stage string) (flowLabel, stageLabel string) {
