@@ -3,6 +3,7 @@ package otlp
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/emit"
@@ -432,5 +434,93 @@ func TestPostShutdownEmptyBatchStaysANoop(t *testing.T) {
 	}
 	if err := e.ExportMetrics(context.Background(), nil); err != nil {
 		t.Errorf("empty ExportMetrics after Shutdown: %v", err)
+	}
+}
+
+// TestBothLegsResolveTheSameResource pins the whole resolved resource, not
+// just the writer identity. sdklog.WithResource merges resource.Environment()
+// into whatever it is given; the metric leg hand-builds its ResourceMetrics
+// and never touches the metric SDK, so nothing merged the environment in
+// there. A user who set OTEL_RESOURCE_ATTRIBUTES the standard way got those
+// attributes on events and not on metrics.
+//
+// The service.name assertion under a hostile OTEL_SERVICE_NAME is not
+// decoration: resource.Merge is last-wins, so merging in the wrong argument
+// order produces an identical attribute set except that the environment
+// captures service.name — and returns no error while doing it. Only this
+// assertion separates the two orders.
+func TestBothLegsResolveTheSameResource(t *testing.T) {
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=prod,k8s.pod.name=pod-7")
+	t.Setenv("OTEL_SERVICE_NAME", "hijack")
+
+	res := resolveResource(defaultResource())
+
+	exp := &capturingLogExporter{}
+	sink := newProviderSink(exp, res)
+	if err := sink.emit(context.Background(), outcomes(1)); err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	recs := exp.all()
+	if len(recs) != 1 {
+		t.Fatalf("delivered %d records, want 1", len(recs))
+	}
+	eventAttrs := attrSet(recs[0].Resource().Attributes())
+
+	rm, err := buildResourceMetrics([]emit.MetricPoint{{
+		Name:   "biz_txn_total",
+		Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
+		Value:  1, At: at,
+	}}, res)
+	if err != nil {
+		t.Fatalf("build metrics: %v", err)
+	}
+	metricAttrs := attrSet(rm.Resource.Attributes())
+
+	// Full-set equality, not a key list: a key list cannot see an asymmetry
+	// in a key nobody thought to name.
+	if !maps.Equal(eventAttrs, metricAttrs) {
+		t.Errorf("legs resolve different resources:\n events  %v\n metrics %v", eventAttrs, metricAttrs)
+	}
+	for key, want := range map[string]string{
+		"deployment.environment": "prod",
+		"k8s.pod.name":           "pod-7",
+	} {
+		if eventAttrs[key] != want {
+			t.Errorf("event leg %s = %q, want %q", key, eventAttrs[key], want)
+		}
+		if metricAttrs[key] != want {
+			t.Errorf("metric leg %s = %q, want %q — OTEL_RESOURCE_ATTRIBUTES must reach both signals", key, metricAttrs[key], want)
+		}
+	}
+	// The explicit resource must still win: OTEL_SERVICE_NAME cannot rename
+	// the writer out from under the instance id.
+	for name, got := range map[string]string{"events": eventAttrs["service.name"], "metrics": metricAttrs["service.name"]} {
+		if got != "shortfall" {
+			t.Errorf("%s service.name = %q, want shortfall — the explicit resource must win the merge", name, got)
+		}
+	}
+	// A schema URL of "" would mean resource.Default() had been merged in,
+	// whose semconv version differs from ours and conflicts.
+	if got := rm.Resource.SchemaURL(); got != semconv.SchemaURL {
+		t.Errorf("metric resource schema URL = %q, want %q", got, semconv.SchemaURL)
+	}
+
+	// Everything above tests the helper. These pin that the constructors
+	// actually route through it — without them the merge could be deleted
+	// from New and newWith and this test would still pass.
+	built := newWith(&fakeMetric{}, newProviderSink(&capturingLogExporter{}, res))
+	if got := attrSet(built.resource.Attributes())["deployment.environment"]; got != "prod" {
+		t.Errorf("newWith resource deployment.environment = %q, want prod — the constructor did not resolve the resource", got)
+	}
+	e, err := New(context.Background())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = e.Shutdown(context.Background()) })
+	if got := attrSet(e.resource.Attributes())["deployment.environment"]; got != "prod" {
+		t.Errorf("New resource deployment.environment = %q, want prod — the constructor did not resolve the resource", got)
+	}
+	if got := attrSet(e.resource.Attributes())["service.name"]; got != "shortfall" {
+		t.Errorf("New resource service.name = %q, want shortfall", got)
 	}
 }

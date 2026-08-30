@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.opentelemetry.io/otel"
 	logexp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	metricexp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	otellog "go.opentelemetry.io/otel/log"
@@ -165,10 +166,15 @@ type Options struct {
 	resource *resource.Resource
 }
 
-// WithResource overrides the resource carried by both signals — metric
-// points and log records alike. The default names this service and gives it
-// a per-process instance id, which is what keeps replicas off each other's
-// gauge series; an override must still distinguish one writer from another.
+// WithResource sets the resource carried by both signals — metric points and
+// log records alike. It is merged with resource.Environment() rather than
+// replacing it, so OTEL_RESOURCE_ATTRIBUTES reaches both legs, and this
+// resource wins every key they share: OTEL_SERVICE_NAME cannot rename a
+// writer that named itself.
+//
+// The default names this service and gives it a per-process instance id,
+// which is what keeps replicas off each other's gauge series; an override
+// must still distinguish one writer from another.
 func WithResource(res *resource.Resource) func(*Options) {
 	return func(o *Options) { o.resource = res }
 }
@@ -185,6 +191,34 @@ func WithLogOptions(o ...logexp.Option) func(*Options) {
 	return func(op *Options) { op.log = append(op.log, o...) }
 }
 
+// resolveResource is the single place a resource becomes the one both legs
+// carry. sdklog.WithResource merges resource.Environment() into whatever it
+// is given, while the metric leg hand-builds its ResourceMetrics and never
+// touches the metric SDK — so without this, OTEL_RESOURCE_ATTRIBUTES reached
+// events only, and the two legs disagreed about the writer's context.
+//
+// Argument order is the whole contract: resource.Merge is last-wins, so res
+// must be second for the explicit resource to beat the environment. Reversed,
+// OTEL_SERVICE_NAME silently renames the writer and no error is returned.
+//
+// resource.Environment() is always schemaless, so the merge cannot hit
+// ErrSchemaURLConflict and res's schema URL survives. resource.Default()
+// would NOT be safe here: it carries a different semconv version and
+// conflicts, which wipes the schema URL to "". On the error path we match
+// sdklog.WithResource and hand the merged value back — Merge returns a
+// usable resource even when it errors, and diverging here would trade one
+// asymmetry for another.
+func resolveResource(res *resource.Resource) *resource.Resource {
+	merged, err := resource.Merge(resource.Environment(), res)
+	if err != nil {
+		otel.Handle(err)
+	}
+	if merged == nil {
+		return res
+	}
+	return merged
+}
+
 // New builds an OTLP exporter wired to real otel HTTP exporters.
 func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 	o := Options{resource: defaultResource()}
@@ -194,6 +228,7 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 	if o.resource == nil {
 		o.resource = defaultResource()
 	}
+	o.resource = resolveResource(o.resource)
 	m, err := metricexp.New(ctx, o.metric...)
 	if err != nil {
 		return nil, fmt.Errorf("otlp: metric exporter: %w", err)
@@ -209,7 +244,7 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 // newWith wires arbitrary pushers — the seam the unit tests and the
 // testkit/conformance suite drive with in-memory collectors.
 func newWith(m metricPusher, l eventSink) *Exporter {
-	return &Exporter{metrics: m, logs: l, resource: defaultResource()}
+	return &Exporter{metrics: m, logs: l, resource: resolveResource(defaultResource())}
 }
 
 // Capabilities: OTLP writes both signals; it is write-only, so read-side
