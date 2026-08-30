@@ -426,6 +426,7 @@ func buildRegistryVectors() testkit.RegistryVectors {
 		{"baseline_lookback", "", "baseline_lookback", sub("lookback_weeks: 8", "lookback_weeks: 0")},
 		{"recovery_model", "", "recovery_model", sub("model: usage_loss_curve", "model: linear")},
 		{"recovery_fraction", "", "recovery_fraction", sub("recovered_fraction: 0.6", "recovered_fraction: 1.5")},
+		{"recovery_fraction_nan", "NaN fails both halves of a `< 0 || > 1` bound, so a range written as a pair of comparisons admits it", "recovery_fraction", sub("recovered_fraction: 0.6, within: PT2H", "recovered_fraction: .nan")},
 		{"recovery_within_missing", "", "recovery_within_missing", sub(", within: PT2H }", " }")},
 		{"recovery_within_without_fraction", "the iff holds in both directions", "recovery_within_without_fraction", sub("recovered_fraction: 0.6,", "recovered_fraction: 0,")},
 		{"reconcile_source_required", "coverage is how Finance comes to trust the numbers", "reconcile_source_required", sub(`source: "sql:ledger.payments"`, `source: ""`)},

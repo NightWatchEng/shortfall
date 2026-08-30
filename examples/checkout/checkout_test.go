@@ -203,6 +203,19 @@ func TestConfigValidation(t *testing.T) {
 	hot.Curve = &curve
 	mustPanic("curve rate beyond the sampler's honest range", hot)
 
+	// A NaN rate is worse than an out-of-range one: it passes a bound
+	// written as two comparisons, and if such an hour is ever sampled
+	// poisson() spins forever — its lambda <= 0 guard is false for NaN and
+	// its p <= l test can never become true. Validation is the only thing
+	// standing between an exported Config field and a non-terminating run,
+	// which is why this is asserted at applyDefaults and not left to a
+	// scenario that happens to reach hour 10.
+	nanCurve := DefaultCurve()
+	nanCurve[10] = math.NaN()
+	nanHot := base
+	nanHot.Curve = &nanCurve
+	mustPanic("curve rate is NaN", nanHot)
+
 	// Sentinels express literal zeros instead of being coerced to defaults.
 	zero := base
 	zero.EnterpriseFraction = NoEnterprise
