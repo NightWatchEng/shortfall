@@ -1,0 +1,245 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+  "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T15:10:34+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context; engine:claude rule bodies + review charter + reviewer-side memory recall)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context; findings list only, no reviewer rationale; examiner-side recall was empty)"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "general-purpose subagent (repair round f8407de..HEAD; per-finding addressed/not-addressed verdicts plus new-defect hunt)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter.go",
+      "line": 79,
+      "severity": "MEDIUM",
+      "finding": "WithProviderPairCap was spliced between WithSource's doc comment and func WithSource, so godoc attached WithSource's sentence to WithProviderPairCap and left exported WithSource undocumented; it also sat under a 'Record option helpers' heading despite being an EmitterOption.",
+      "evidence": "// Record option helpers.\n\n// WithSource sets the outcome's Source field.\n// WithProviderPairCap bounds how many distinct (provider, op) pairs...\nfunc WithProviderPairCap(n int) EmitterOption",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "Moved up with the other EmitterOptions; heading restored to WithSource. Re-review ran go doc on both and confirmed each renders its own comment.",
+      "id": "b5a630fe6ef7edc8"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0018-provider-call-writer.md",
+      "line": 56,
+      "severity": "MEDIUM",
+      "finding": "ADR-0018 claimed the sentinel collapse mirrors InFlightTracker's max-items behaviour. That bound drops the Track call, counts it on Overflowed() and publishes an understatement \u2014 the inverse of the 'sums stay complete' property the same bullet claims. The tracker's bound is on tracked items, not label cardinality.",
+      "evidence": "This mirrors the registry fence's `unregistered` fallback and `InFlightTracker`'s existing max-items behaviour: a caller that hands us request data inflates one series instead of the whole family. \u2014 vs emit/inflight.go:164 `if len(t.items) >= t.maxItems { t.overflow++; return }` (a drop) and its doc \"the published value then understates\".",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "Rewritten as an explicit contrast: mirrors the registry unregistered fallback, deliberately does NOT follow the tracker's bound, with the reason (memory vs cardinality; the engine reads this family as a presence signal). Verified against emit/inflight.go.",
+      "id": "3cd6868dfedd62c5"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 728,
+      "severity": "MEDIUM",
+      "finding": "The diff added a third contract-level label fallback but documented it only in 5.2; 5.3 'Label fallbacks' still listed two rows and closed 'Both fallbacks are part of the contract', so a port implementing 5.3 as written would implement an incomplete fence.",
+      "evidence": "### 5.3 Label fallbacks ... | `flow` or `stage` not in the registry | the fixed literal `unregistered` | ... | | `segment` outside the enumeration | the empty string ... |  ->  \"Both fallbacks are part of the contract\", while emit/emitter.go now returns ProviderOther, ProviderOther as a third fallback.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "5.3 gained the third row and now reads 'All three fallbacks'. 5.1's pointer is count-free, so it is no longer stale.",
+      "id": "dbbc33b8c2dfc23e"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "unmapped:lock-held-across-logging",
+      "tags": [
+        "lock-held-across-logging"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter.go",
+      "line": 341,
+      "severity": "MEDIUM",
+      "finding": "providerPairLabels held the emitter's global mutex across an unrate-limited logger.Warn on a per-call branch. s.mu is the lock Record takes on the request path, so every over-cap call blocked Record behind a handler write \u2014 worst in exactly the request-data abuse case the cap exists to survive, and against the 'Record never blocks the request path' contract.",
+      "evidence": "s.mu.Lock()\n\tdefer s.mu.Unlock()\n\t...\n\ts.logger.Warn(\"emit: provider pair cap reached; labels collapsed\", ...)",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "Examiner measured a concurrent SetInFlight blocked 80ms behind a slow handler. providerPairLabels now returns a capped flag and the caller logs with the lock released. Regression test TestRecordProviderCallLogsWithTheLockReleased probes s.mu.TryLock from inside the handler; mutation-proved twice (fails when the log is moved back under the lock).",
+      "id": "8c735a1f02ab289a"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "unmapped:label-validation-gap",
+      "tags": [
+        "label-validation-gap"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter.go",
+      "line": 317,
+      "severity": "LOW",
+      "finding": "boundedProviderLabel did not check UTF-8 validity: an invalid byte decodes to U+FFFD in a range loop, which is not a control rune, so it passed. provider and op are the only metric labels built from a raw caller string, and the OTLP exporter marshals label values as protobuf strings.",
+      "evidence": "if strings.TrimSpace(v) == \"\" || len(v) > maxProviderLabelLen { return false }\n\tfor _, r := range v { if unicode.IsControl(r) { return false } }",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "Examiner drove a real otlpmetrichttp exporter against a test server and got 'string field contains invalid UTF-8' for the WHOLE batch; Flush drops a failed metric batch entire, re-crediting only biz_dropped_events_total, so one bad op string would take unrelated families' points with it. Now rejected via utf8.ValidString and counted as invalid; test vector proved genuinely invalid UTF-8 and mutation-proved.",
+      "id": "5334d81972036b9b"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter_test.go",
+      "line": 865,
+      "severity": "LOW",
+      "finding": "TestRecordProviderCallIsOnTheEmitterInterface makes no runtime assertion, so it passes with an empty RecordProviderCall body; its compile-time assertion was said to duplicate emitter.go's var _ Emitter = (*Std)(nil).",
+      "evidence": "func TestRecordProviderCallIsOnTheEmitterInterface(t *testing.T) {\n\tvar em Emitter = newTestEmitter(t, &captureExporter{})\n\tem.RecordProviderCall(\"stripe\", \"capture\", ProviderCallFailed)\n}",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "REFUTED by the cross-examiner, by execution. Removing RecordProviderCall from the Emitter interface still builds emit (Std keeps the method, so var _ Emitter = (*Std)(nil) is unaffected); only this test fails to compile. It is therefore the sole guard pinning the method on the interface, which is precisely what ADR-0018 ships. Its runtime behaviour is covered by the three sibling tests, and a zero-assertion interface-conformance test matches none of vacuous-pass's three declared triggers.",
+      "id": "d6015872dda33838"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0018-provider-call-writer.md",
+      "line": 61,
+      "severity": "LOW",
+      "finding": "Two dangling references: the amended ADR-0004 bullet is the second top-level Decision bullet, not the third, and '(see below)' had no referent in Consequences.",
+      "evidence": "This amends ADR-0004 \u00a7\"Decision\" third bullet, which this ADR mandates be annotated in place (see below)",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "Ordinal corrected and the bullet quoted verbatim so it resolves without counting; Consequences gained the referent bullet naming the dated amendment note. Re-review confirmed the ordinal against ADR-0004 and the CONTRIBUTING carve-out.",
+      "id": "f7da7c80d136ea51"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 204,
+      "severity": "LOW",
+      "finding": "emit.RecordProviderCall written in package-qualified form though it is a method, said to violate a README convention reserving that form for package-level identifiers.",
+      "evidence": "hand it to `emit.RecordProviderCall` and it lands on the `biz_provider_calls_total` family.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "REFUTED by the cross-examiner: the claimed convention does not exist. README.md:304-306 already writes emit.Record and emit.InFlightTracker package-qualified, and go doc confirms Record is likewise a method on Std, not a package-level function. The usage predates this diff and introduces no drift.",
+      "id": "d55c44518608f9e2"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 660,
+      "severity": "LOW",
+      "finding": "Section 5's Governing ADRs line omitted ADR-0018 while the section carries ADR-0018-derived normative text (the per-emitter pair cap, the other collapse, the narrowed provider-health outcome pair).",
+      "evidence": "Governing ADRs: [ADR-0004](adr/0004-metric-label-set.md) (label sets), [ADR-0002](...), [ADR-0005](...) (age buckets), [ADR-0012](adr/0012-inflight-count-gauge.md) (the in-flight count gauge). \u2014 no ADR-0018, though 5.2 now carries its normative pair-cap text.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "ADR-0018 added to the list; re-review confirmed the relative link resolves. One supporting claim in the original finding (that ADR-0012 was added to that list by its own PR) was wrong and is not relied on.",
+      "id": "833285cdc8c391b6"
+    },
+    {
+      "ts": "2026-08-30T15:10:34+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "ac1455764e294ae5a92af588aca67b74ae6172a9",
+      "base_sha": "288a240cfef93ddd5f52ce7872febed6364816f9",
+      "rule_id": "unmapped:unsynchronized-test-setup",
+      "tags": [
+        "unsynchronized-test-setup"
+      ],
+      "dir_prefix": "emit",
+      "file": "emit/emitter_test.go",
+      "line": 911,
+      "severity": "LOW",
+      "finding": "Raised by the scoped re-review against the repair itself: the new lock-probe test applied WithLogger to an emitter New had already returned, an unsynchronized write to s.logger while the background flusher goroutine can read it. Latent only because the exporter never errors and the 1s tick never landed.",
+      "evidence": "probe := &lockProbeHandler{...em: em...}\n\tWithLogger(slog.New(probe))(em)   // applied AFTER New started the flusher",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-cp2",
+      "reason": "The probe is now built before New and passed as an option, with WithFlushInterval(0) so no goroutine exists to read s.logger before probe.em is filled in. Re-proved by mutation under -race.",
+      "id": "8493937ced0ec284"
+    }
+  ]
+}
