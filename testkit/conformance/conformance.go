@@ -56,7 +56,9 @@ type Result struct {
 var baseTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 // sampleMetrics builds a fixed batch of metric points, each on a distinct
-// series (a unique currency label per point), stamped with its own time.
+// series, stamped with its own time. A unique currency keeps most points
+// apart; biz_provider_calls_total and biz_dropped_events_total have no
+// currency label, so each varies one of its own instead.
 //
 // Distinct series is load-bearing: an aggregating backend (Prometheus)
 // collapses points that share a label set into one series, which
@@ -66,8 +68,10 @@ var baseTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 func sampleMetrics(n int) []emit.MetricPoint {
 	currencies := []string{"USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "SEK", "NZD", "NOK", "DKK", "SGD"}
 	// ADR-0002's fixed reason enum. biz_dropped_events_total carries only
-	// {reason}, so it can never hold more than four distinct series — the
-	// tightest limit on how far n can be raised (see the guard below).
+	// {reason}, so it tops out at four distinct series — a ceiling, but not
+	// the one that binds: the currency-bearing families repeat at n=13,
+	// while this axis does not repeat until n=29. The guard below is a
+	// currency guard because currency is what runs out first.
 	reasons := []string{"invalid", "overflow", "encode", "export"}
 	if n > len(currencies) {
 		// Not a style rule: currency is what makes the currency-bearing
