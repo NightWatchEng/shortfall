@@ -384,17 +384,17 @@ func TestEventOrderIsFaithful(t *testing.T) {
 // agreement (the cwinsights test makes the same trade for EMF).
 func eventRecord(o biz.Outcome) string {
 	rec := map[string]any{
-		"event":            "biz.outcome",
-		"biz.flow":         o.VC.Flow,
-		"biz.stage":        o.Stage,
-		"biz.outcome":      string(o.Result),
-		"biz.entity.id":    o.VC.EntityID,
-		"biz.customer.id":  o.VC.CustomerID,
-		"biz.amount_minor": o.VC.Money.Amount,
-		"biz.currency":     o.VC.Money.Currency,
-		"biz.exponent":     o.VC.Money.Exponent,
-		"biz.value.kind":   string(o.VC.Kind),
-		"biz.amount.est":   o.VC.Estimated,
+		"event":                "biz.outcome",
+		"biz.flow":             o.VC.Flow,
+		"biz.stage":            o.Stage,
+		"biz.outcome":          string(o.Result),
+		"biz.entity.id":        o.VC.EntityID,
+		"biz.customer.id":      o.VC.CustomerID,
+		"biz.amount.minor":     o.VC.Money.Amount,
+		"biz.amount.currency":  o.VC.Money.Currency,
+		"biz.amount.exponent":  o.VC.Money.Exponent,
+		"biz.value.kind":       string(o.VC.Kind),
+		"biz.amount.estimated": o.VC.Estimated,
 	}
 	if o.VC.Segment != "" {
 		rec["biz.segment"] = o.VC.Segment

@@ -32,8 +32,8 @@ API has been stable for some time; the SDK has not reached 1.0.
   ```json
   { "event":"biz.outcome", "biz.flow":"invoice.pay", "biz.stage":"capture",
     "biz.outcome":"failed", "biz.entity.id":"inv_8Ka…", "biz.customer.id":"h:3f9…",
-    "biz.amount_minor":14900, "biz.currency":"USD", "biz.exponent":2,
-    "biz.value.kind":"fee", "biz.amount.est":false, "biz.segment":"smb",
+    "biz.amount.minor":14900, "biz.amount.currency":"USD", "biz.amount.exponent":2,
+    "biz.value.kind":"fee", "biz.amount.estimated":false, "biz.segment":"smb",
     "biz.sla.deadline":"2026-08-27T14:32:00Z", "source":"stripe:webhook",
     "error":"card_declined", "trace.id":"…" }
   ```
@@ -47,6 +47,18 @@ API has been stable for some time; the SDK has not reached 1.0.
   `biz.Attr*` constants rather than repeated as literals in each exporter.
   The bare names were also a collision hazard: an event sink shared with
   anything else has no reason to reserve `flow` or `kind`.
+
+  **Amended 2026-08-30 (workspace-8yq).** The four money attributes were
+  renamed into a consistent dotted namespace: `biz.amount_minor` →
+  `biz.amount.minor`, `biz.currency` → `biz.amount.currency`,
+  `biz.exponent` → `biz.amount.exponent`, `biz.amount.est` →
+  `biz.amount.estimated`. The workspace-cnz settlement froze the shipped
+  spelling verbatim on purpose — a rename inside the settlement would have
+  broken its no-bytes-moved argument — and left the inconsistency (an
+  `amount.` namespace that `biz.amount_minor` did not use) as a recorded
+  founder call. The founder took the break pre-1.0, when it costs a
+  regenerated vector and this note instead of a major version. The block
+  above shows the renamed form.
 
   The fallback path is a `log/slog` handler emitting this shape for shops
   without OTLP; any log pipeline that can ship JSON lines becomes an event

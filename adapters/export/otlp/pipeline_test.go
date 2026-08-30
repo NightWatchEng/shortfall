@@ -131,15 +131,15 @@ func TestRecordCarriesEveryBizField(t *testing.T) {
 	})
 	for _, key := range []string{
 		"biz.flow", "biz.stage", "biz.outcome", "biz.entity.id", "biz.customer.id",
-		"biz.amount_minor", "biz.currency", "biz.exponent", "biz.value.kind",
-		"biz.amount.est", "biz.segment", "source",
+		"biz.amount.minor", "biz.amount.currency", "biz.amount.exponent", "biz.value.kind",
+		"biz.amount.estimated", "biz.segment", "source",
 	} {
 		if _, ok := got[key]; !ok {
 			t.Errorf("delivered record is missing %s", key)
 		}
 	}
-	if v := got["biz.amount_minor"]; v.AsInt64() != 14900 {
-		t.Errorf("biz.amount_minor = %v, want 14900", v)
+	if v := got["biz.amount.minor"]; v.AsInt64() != 14900 {
+		t.Errorf("biz.amount.minor = %v, want 14900", v)
 	}
 	if recs[0].EventName() != eventName {
 		t.Errorf("event name = %q, want %q", recs[0].EventName(), eventName)

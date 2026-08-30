@@ -24,12 +24,12 @@
         "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
       },
       "attrs": {
-        "biz.amount.est": false,
-        "biz.amount_minor": 14900,
-        "biz.currency": "USD",
+        "biz.amount.currency": "USD",
+        "biz.amount.estimated": false,
+        "biz.amount.exponent": 2,
+        "biz.amount.minor": 14900,
         "biz.customer.id": "h:c0ffee",
         "biz.entity.id": "inv_000042",
-        "biz.exponent": 2,
         "biz.flow": "invoice.pay",
         "biz.outcome": "failed",
         "biz.segment": "smb",
@@ -59,12 +59,12 @@
         "estimated": true
       },
       "attrs": {
-        "biz.amount.est": true,
-        "biz.amount_minor": 1,
-        "biz.currency": "EUR",
+        "biz.amount.currency": "EUR",
+        "biz.amount.estimated": true,
+        "biz.amount.exponent": 2,
+        "biz.amount.minor": 1,
         "biz.customer.id": "h:decaf",
         "biz.entity.id": "inv_000043",
-        "biz.exponent": 2,
         "biz.flow": "invoice.pay",
         "biz.outcome": "success",
         "biz.stage": "auth",

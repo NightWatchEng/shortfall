@@ -902,6 +902,13 @@ recording what they had said. The names then stopped being literals: they are
 `biz.Attr*` constants that every exporter and querier references, so a rename
 is a compile error rather than a silent divergence.
 
+**One later rename (2026-08-30, workspace-8yq).** After the settlement, the
+four money attributes moved into a consistent dotted namespace —
+`biz.amount.minor`, `biz.amount.currency`, `biz.amount.exponent`,
+`biz.amount.estimated` — a founder-approved pre-1.0 wire-format break. The
+settlement's mechanism is what made it cheap: the vector and the constants
+changed together, and every exporter followed by compilation.
+
 **What now holds it.** `testkit.CheckOutcomeEvent` drives every event-capable
 exporter through the vector, and `TestEveryExporterChecksTheEventContract`
 fails the build of an exporter that does not run it. The vector records which

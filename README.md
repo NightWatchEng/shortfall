@@ -251,14 +251,14 @@ the EMF record):
 
 ```
 filter event = "biz.outcome" and `biz.outcome` = "failed"
-| stats sum(`biz.amount_minor`) as failed_minor, count(*) as txns
-    by `biz.flow`, `biz.currency`
+| stats sum(`biz.amount.minor`) as failed_minor, count(*) as txns
+    by `biz.flow`, `biz.amount.currency`
 | sort failed_minor desc
 ```
 
 ```
 filter event = "biz.outcome" and `biz.outcome` = "failed"
-| stats sum(`biz.amount_minor`) as failed_minor
+| stats sum(`biz.amount.minor`) as failed_minor
     by `biz.customer.id`, `biz.segment`
 | sort failed_minor desc | limit 10
 ```

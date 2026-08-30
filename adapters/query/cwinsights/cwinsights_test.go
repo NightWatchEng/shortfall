@@ -38,8 +38,8 @@ func emfEventMessage(o biz.Outcome) string {
 		"_aws": map[string]any{"Timestamp": o.At.UnixMilli()}, "event": "biz.outcome",
 		"biz.flow": o.VC.Flow, "biz.stage": o.Stage, "biz.outcome": string(o.Result),
 		"biz.entity.id": o.VC.EntityID, "biz.customer.id": o.VC.CustomerID,
-		"biz.amount_minor": o.VC.Money.Amount, "biz.currency": o.VC.Money.Currency,
-		"biz.exponent": 2, "biz.value.kind": "fee", "biz.amount.est": false,
+		"biz.amount.minor": o.VC.Money.Amount, "biz.amount.currency": o.VC.Money.Currency,
+		"biz.amount.exponent": 2, "biz.value.kind": "fee", "biz.amount.estimated": false,
 		"biz.segment": o.VC.Segment,
 	}
 	b, _ := json.Marshal(m)
@@ -176,7 +176,7 @@ func TestFailurePaths(t *testing.T) {
 		{
 			name: "marked outcome row that cannot parse fails loudly",
 			results: `{"status":"Complete","results":[[` +
-				`{"field":"@message","value":"{\"event\":\"biz.outcome\",\"biz.flow\":\"f\",\"biz.outcome\":\"failed\",\"biz.amount_minor\":1.5}"},` +
+				`{"field":"@message","value":"{\"event\":\"biz.outcome\",\"biz.flow\":\"f\",\"biz.outcome\":\"failed\",\"biz.amount.minor\":1.5}"},` +
 				`{"field":"@timestamp","value":1787648400000}]]}`,
 			wantErr: "amount_minor",
 		},
