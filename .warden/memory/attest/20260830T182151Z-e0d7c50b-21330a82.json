@@ -1,0 +1,443 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+  "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T18:21:51+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "two parallel general-purpose subagents on disjoint dimensions (9h1 shutdown / a9f resource), each with the engine:claude rule bodies, the review charter and its own memory recall"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent, sole arbiter over the union of both passes; settled the concurrency claim by building its own harness"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "three successive rounds (dacd766, 8587a84, fd7a015..HEAD), each verdicting the prior round's findings and hunting for defects the repair introduced; the last was an independent review of the final commit only"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:post-shutdown-silent-drop-window-still-open",
+      "tags": [
+        "fail-open"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 135,
+      "severity": "HIGH",
+      "finding": "The first fix's atomic.Bool guard narrowed the silent-drop window without closing it: providerSink.Shutdown did not take the lock emit holds, so a caller past the flag check could resume inside emit against a stopped provider, where sdklog discards the record and ForceFlush answers nil.",
+      "evidence": "Examiner harness, 500 iterations of ExportEvents racing Shutdown: 12-13 silent drops per 500, 82/500 under -race, no data race. Production model over emit.Std's own Flush/Close ordering: 10/10 runs returned nil having delivered 1484-2048 of 6000 outcomes.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "The sink decides under the same slot emit holds: Shutdown marks stopped before waiting, emit reads it after taking the slot. Verified across forced interleavings by two independent passes; the regression test fails the previous fix at 35 of 300 races.",
+      "id": "2b03d9fe887694fc"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:shutdown-ignores-ctx",
+      "tags": [
+        "fail-open"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 156,
+      "severity": "MEDIUM",
+      "finding": "Introduced by the first repair: waiting on a sync.Mutex made Shutdown uncancellable, so it overran its deadline behind an in-flight emit. One emitChunk is an OTLP HTTP export with its own timeout and retries.",
+      "evidence": "Measured 280ms against a 10ms deadline where the pre-repair code returned in 12ms. emit/emitter.go documents that Close cancels in-flight work so it can honour its ctx.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "The sink serialises on a one-slot channel whose acquire selects against ctx.Done(). TestShutdownHonorsItsDeadline pins it and fails the mutex version at 280ms.",
+      "id": "94c7c45c3a183d34"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:shutdown-ctx-expiry-silent-drop",
+      "tags": [
+        "fail-open"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 188,
+      "severity": "HIGH",
+      "finding": "Introduced by the second repair: on an abandoned wait, Shutdown called provider.Shutdown with an expired ctx while an emit still held the slot. sdklog latches stopped before honouring ctx, so the in-flight emit's remaining chunks were discarded and it returned nil \u2014 the same silent drop the series exists to close.",
+      "evidence": "Reproduced at the public API: two-chunk batch, expired-ctx Shutdown, 'ExportEvents = <nil>, delivered = 2048 of 2053'. Reachable without a tight deadline because Exporter.Shutdown runs the metric leg first on the same ctx.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "Shutdown returns the ctx error without touching the provider when it cannot wait, so the in-flight batch lands. TestShutdownDeadlineNeverLosesEventsSilently fails the previous commit at 2048 of 2053. The final independent review could not produce a silent drop on any path it tried, under -race.",
+      "id": "4635f22ab1b5bebc"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:shutdown-strands-log-provider-on-dead-ctx",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 197,
+      "severity": "MEDIUM",
+      "finding": "acquire's two-case select picks at random when the slot is free and the ctx already expired, so about half of expired-ctx Shutdowns still handed the provider a dead deadline, stranding it latched-but-alive with every later Shutdown returning nil.",
+      "evidence": "Reviewer measured 27/60 stranded, and 26/60 through the public API with a metric leg consuming the budget. My own test: 101 of 200 without the fix, 0 with it.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "acquire checks ctx.Err() before the select. TestExpiredCtxNeverStrandsTheProvider fails the unfixed version at 101 of 200.",
+      "id": "396ee40aa2ef794d"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 404,
+      "severity": "MEDIUM",
+      "finding": "ErrShutdown is exported API sold by its doc as 'an error the caller can test for', but nothing pinned its identity; replacing both returns with a plain error left the suite green.",
+      "evidence": "Mutation: both 'return ErrShutdown' -> errors.New(...) -> 'ok github.com/NightWatchEng/shortfall/adapters/export/otlp'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "Both assertions use errors.Is and fail that mutation.",
+      "id": "db25ca41e0e54255"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 469,
+      "severity": "MEDIUM",
+      "finding": "TestBothLegsResolveTheSameResource tested the helper rather than the shipping path: breaking what New passes to buildResourceMetrics or newProviderSink left the package green.",
+      "evidence": "Both mutations applied together: 'ok ... 0.383s'. The wiring block only read struct fields, never what the export methods delivered.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "It exports through Exporter.ExportMetrics and pins that New hands both legs the same resource; providerSink keeps the resource it was built from so that is observable. Both mutations now fail.",
+      "id": "0054909d4e0127ee"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "tests-required",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 178,
+      "severity": "MEDIUM",
+      "finding": "WithResource, the exported option whose precedence contract this change rewrote, had no test anywhere in the repo.",
+      "evidence": "grep for WithResource excluding sdklog.WithResource returns only the doc comment and the declaration.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "TestWithResourceMergesRatherThanOverrides added, including the case defaultResource() cannot reach \u2014 a caller resource omitting service.name leaves it to OTEL_SERVICE_NAME. It fails a reversed merge order.",
+      "id": "e63a3bb759e9a9f1"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 416,
+      "severity": "LOW",
+      "finding": "The 'legs agree' assertion was the exact disjunction of the two assertions above it, so it could only ever duplicate a message; the first repair replaced it with an errors.Is disjunction that was dead in the same way.",
+      "evidence": "With the legs broken asymmetrically, deleting the block left the test failing identically.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "Deleted. The two errors.Is assertions above it already pin the sentinel.",
+      "id": "8be35c52f29d40c1"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:race-test-blind-to-partial-drops",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 615,
+      "severity": "LOW",
+      "finding": "The race test flagged only a total silent drop, while partial drops are a real mode of the bug.",
+      "evidence": "Re-review classifier against the broken code: 119 partial per 2000 against 50 fully silent.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "The assertion requires the full batch. Its justification was itself corrected afterwards: in this test's one-chunk shape every observed detection is total, and the comment now says so rather than claiming partial is common there.",
+      "id": "7abee0322a7d4309"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 188,
+      "severity": "MEDIUM",
+      "finding": "The Shutdown doc leaned the trade-off on a retry the only in-tree caller cannot perform, and dropped the sentence naming the goroutine leak without replacing it.",
+      "evidence": "emit.Std.Close is sync.Once-guarded and caches closeErr; a direct retry also returns non-nil because otlpmetrichttp's shutdownOnce errors on the second call.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "The doc states the retry limitation, the leak, and which failure is the cheaper one.",
+      "id": "56da4bdd8285ba8a"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 174,
+      "severity": "LOW",
+      "finding": "Across rounds the Shutdown comment first misattributed the cost of holding the slot, then had its justification deleted while the defer stayed, leaving a reader unable to tell whether the hold was load-bearing.",
+      "evidence": "Reviewer proved by mutation that releasing before the stop is behaviourally equivalent for the stated guarantee, surviving 6/6 runs.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "Restored as what it is: a latency choice, not a correctness dependency, with the ordering argument stated as the thing that carries the guarantee.",
+      "id": "091d67b19aaaef9c"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 354,
+      "severity": "LOW",
+      "finding": "Three comments still named providerSink.mu after the rewrite deleted it, one of them in the doc of the very test the rewrite changed.",
+      "evidence": "grep for providerSink.mu after the change.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "All three rewritten; no stale references remain.",
+      "id": "963f5fdaf4a3d6c7"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:deadline-test-sleep-race",
+      "tags": [
+        "test-cannot-fail"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/pipeline_test.go",
+      "line": 646,
+      "severity": "LOW",
+      "finding": "TestShutdownHonorsItsDeadline ordered itself with a 20ms sleep; if the emit had not taken the slot in time the test would fail on a misleading assertion.",
+      "evidence": "Reviewer saw zero failures in 190 runs including under 8-way load, but the ordering was a sleep, not a synchronisation.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "It gates on the exporter actually entering Export.",
+      "id": "968c436a6146ec9c"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 13,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:unreachable-branch",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 213,
+      "severity": "LOW",
+      "finding": "Both error branches in resolveResource were provably unreachable, and the comment said so about one of them while the code still handled it.",
+      "evidence": "resource.Merge never returns nil for two non-nil arguments, and Environment() is always schemaless so ErrSchemaURLConflict cannot fire.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "The nil fallback is gone; the error handler stays with a comment saying it is unreachable today and why it is kept.",
+      "id": "b094e893f1aa254e"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 14,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "unmapped:harness-drift",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/conformance_test.go",
+      "line": 78,
+      "severity": "LOW",
+      "finding": "The change made the conformance harness the only Exporter construction not resolving its resource, so the suite ran a shape production no longer builds.",
+      "evidence": "New and newWith route through resolveResource; the harness built the struct literal with a raw defaultResource().",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "The harness resolves too. Noted honestly: no assertion covers this, because the suite counts records and never inspects the resource.",
+      "id": "a47a802bb600f89e"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 15,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 137,
+      "severity": "MEDIUM",
+      "finding": "This change makes otlp the only exporter for which Shutdown is terminal, and emit.Exporter's contract is silent on post-Shutdown exports while three siblings keep working.",
+      "evidence": "emit/emit.go's Exporter doc names only batching, flush on Shutdown and capability honesty; testkit/conformance has no post-Shutdown invariant.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "REFUTED by the cross-examiner. Nothing is made false \u2014 docs-accuracy's shapes are all about a claim contradicted or left stale, and the finding concedes no sentence is now false. portability.md 6.5 already binds every implementation to never lose events without a visible counter; this change moves otlp into compliance with that uniform rule rather than inventing an adapter-local contract. The interface question is tracked on its own item.",
+      "id": "4655bac45be2b94c"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 16,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 141,
+      "severity": "LOW",
+      "finding": "The ErrShutdown doc says emit.Std.Flush turns it into biz_dropped_events_total{reason=export}, but in that state the metric leg is also down so the counter point can never ship.",
+      "evidence": "End-to-end run: no such point reached the backend; the outcome is a warning plus an in-memory counter.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "REFUTED. The sentence claims the increment, which emit/emitter.go does perform, and makes no delivery claim. emit.Std.Close already documents the terminal limit honestly.",
+      "id": "0a033d122ec494c7"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 17,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "adapters/export",
+      "file": "adapters/export/otlp/otlp.go",
+      "line": 194,
+      "severity": "LOW",
+      "finding": "'resolveResource is the single place a resource becomes the one both legs carry' understates a second Environment() parse inside sdklog.WithResource, which doubles otel.Handle warnings on malformed input.",
+      "evidence": "Counting handler: 2 calls per New for a single-error value.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "REFUTED. The very next sentence of the same comment discloses that sdklog.WithResource merges Environment() into whatever it is given, the second merge is a verified no-op, and the measurement in the finding was off.",
+      "id": "d3b1dcc58a833165"
+    },
+    {
+      "ts": "2026-08-30T18:21:51+00:00",
+      "seq": 18,
+      "source": "attest",
+      "sha": "e0d7c50ba590159b6fbf21be78bc799a30a9bfe3",
+      "base_sha": "1e3f49dc35f0660b20ce8285fba11377d2b3f459",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0004-metric-label-set.md",
+      "line": 44,
+      "severity": "LOW",
+      "finding": "Routing OTEL_RESOURCE_ATTRIBUTES onto the metric resource was said to conflict with ADR-0004's events-only rule, since a Collector can promote resource attributes to metric labels.",
+      "evidence": "ADR-0004: 'biz.entity.id and biz.customer.id are events-only attributes ... the emit layer's label construction makes it structurally impossible'.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-9h1",
+      "reason": "REFUTED. The rule is scoped to two named keys and to LABEL construction; resource attributes are not metric labels, the metric resource already carries per-process identity by design, and those attributes already reached the event resource before this change. The finding itself concedes it is not a cardinality defect.",
+      "id": "d71c236a5846c945"
+    }
+  ]
+}

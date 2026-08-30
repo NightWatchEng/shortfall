@@ -3,14 +3,18 @@ package otlp
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/emit"
@@ -347,7 +351,7 @@ func TestEmitNeverExceedsQueueBetweenFlushes(t *testing.T) {
 // TestConcurrentEmitNeverExceedsQueue is the per-sink half of the same
 // guarantee: the queue is shared across calls, so overlapping ExportEvents
 // calls must not put more than its capacity in flight between drains. Why
-// overlap is reachable at all is on providerSink.mu.
+// overlap is reachable at all is on providerSink's slot.
 func TestConcurrentEmitNeverExceedsQueue(t *testing.T) {
 	const callers, per = 4, eventQueueSize
 	exp := &boundedExporter{}
@@ -377,5 +381,399 @@ func TestConcurrentEmitNeverExceedsQueue(t *testing.T) {
 	}
 	if got, want := exp.delivered(), callers*per; got != want {
 		t.Errorf("delivered %d of %d outcomes", got, want)
+	}
+}
+
+// TestPostShutdownExportsAreLoud pins the answer this adapter gives to a
+// question emit.Exporter's own contract leaves open: an Export after
+// Shutdown must fail, not report success having delivered nothing.
+//
+// It used to differ per leg. The metric leg errored (otlpmetrichttp swaps in
+// a shutdownClient), while the event leg returned nil: sdklog's stopped
+// provider discards the record in OnEmit and answers ForceFlush with nil, so
+// providerSink.emit reported success for a batch nobody received — the
+// silent drop ADR-0002 forbids. Same object, same call, opposite honesty.
+func TestPostShutdownExportsAreLoud(t *testing.T) {
+	logExp := &capturingLogExporter{}
+	metricExp := &fakeMetric{}
+	e := newWith(metricExp, newProviderSink(logExp, defaultResource()))
+
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+
+	evErr := e.ExportEvents(context.Background(), outcomes(3))
+	if !errors.Is(evErr, ErrShutdown) {
+		t.Errorf("ExportEvents after Shutdown = %v, want ErrShutdown — a batch nobody received must not report success", evErr)
+	}
+	mErr := e.ExportMetrics(context.Background(), []emit.MetricPoint{{
+		Name:   "biz_txn_total",
+		Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": "USD", "segment": "smb"},
+		Value:  1, At: at,
+	}})
+	if !errors.Is(mErr, ErrShutdown) {
+		t.Errorf("ExportMetrics after Shutdown = %v, want ErrShutdown", mErr)
+	}
+	if got := len(logExp.all()); got != 0 {
+		t.Errorf("delivered %d records after Shutdown, want 0", got)
+	}
+}
+
+// An empty batch drops nothing, so there is nothing to be loud about. Note
+// testkit/conformance's empty-batch invariant does NOT cover this: it runs
+// both empty exports on a fresh exporter before Shutdown, so it is
+// insensitive to where the guard sits. This test is the only thing pinning
+// that placement.
+func TestPostShutdownEmptyBatchStaysANoop(t *testing.T) {
+	e := newWith(&fakeMetric{}, newProviderSink(&capturingLogExporter{}, defaultResource()))
+	if err := e.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	if err := e.ExportEvents(context.Background(), nil); err != nil {
+		t.Errorf("empty ExportEvents after Shutdown: %v", err)
+	}
+	if err := e.ExportMetrics(context.Background(), nil); err != nil {
+		t.Errorf("empty ExportMetrics after Shutdown: %v", err)
+	}
+}
+
+// TestBothLegsResolveTheSameResource pins the whole resolved resource, not
+// just the writer identity. sdklog.WithResource merges resource.Environment()
+// into whatever it is given; the metric leg hand-builds its ResourceMetrics
+// and never touches the metric SDK, so nothing merged the environment in
+// there. A user who set OTEL_RESOURCE_ATTRIBUTES the standard way got those
+// attributes on events and not on metrics.
+//
+// The service.name assertion under a hostile OTEL_SERVICE_NAME is not
+// decoration: resource.Merge is last-wins, so merging in the wrong argument
+// order produces an identical attribute set except that the environment
+// captures service.name — and returns no error while doing it. Only this
+// assertion separates the two orders.
+func TestBothLegsResolveTheSameResource(t *testing.T) {
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=prod,k8s.pod.name=pod-7")
+	t.Setenv("OTEL_SERVICE_NAME", "hijack")
+
+	res := resolveResource(defaultResource())
+
+	exp := &capturingLogExporter{}
+	sink := newProviderSink(exp, res)
+	if err := sink.emit(context.Background(), outcomes(1)); err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	recs := exp.all()
+	if len(recs) != 1 {
+		t.Fatalf("delivered %d records, want 1", len(recs))
+	}
+	eventAttrs := attrSet(recs[0].Resource().Attributes())
+
+	// Through Exporter.ExportMetrics, not buildResourceMetrics directly: what
+	// the metric leg SHIPS is the thing under test, and a helper-only
+	// assertion cannot see a regression one line downstream of it.
+	pusher := &fakeMetric{}
+	shipping := newWith(pusher, newProviderSink(&capturingLogExporter{}, res))
+	if err := shipping.ExportMetrics(context.Background(), []emit.MetricPoint{{
+		Name:   "biz_txn_total",
+		Labels: map[string]string{"flow": "f", "stage": "s", "outcome": "failed", "currency": "USD", "segment": ""},
+		Value:  1, At: at,
+	}}); err != nil {
+		t.Fatalf("export metrics: %v", err)
+	}
+	if pusher.got == nil {
+		t.Fatal("metric leg shipped nothing")
+	}
+	rm := pusher.got
+	metricAttrs := attrSet(rm.Resource.Attributes())
+
+	// Full-set equality, not a key list: a key list cannot see an asymmetry
+	// in a key nobody thought to name.
+	if !maps.Equal(eventAttrs, metricAttrs) {
+		t.Errorf("legs resolve different resources:\n events  %v\n metrics %v", eventAttrs, metricAttrs)
+	}
+	for key, want := range map[string]string{
+		"deployment.environment": "prod",
+		"k8s.pod.name":           "pod-7",
+	} {
+		if eventAttrs[key] != want {
+			t.Errorf("event leg %s = %q, want %q", key, eventAttrs[key], want)
+		}
+		if metricAttrs[key] != want {
+			t.Errorf("metric leg %s = %q, want %q — OTEL_RESOURCE_ATTRIBUTES must reach both signals", key, metricAttrs[key], want)
+		}
+	}
+	// The explicit resource must still win: OTEL_SERVICE_NAME cannot rename
+	// the writer out from under the instance id.
+	for name, got := range map[string]string{"events": eventAttrs["service.name"], "metrics": metricAttrs["service.name"]} {
+		if got != "shortfall" {
+			t.Errorf("%s service.name = %q, want shortfall — the explicit resource must win the merge", name, got)
+		}
+	}
+	// A schema URL of "" would mean resource.Default() had been merged in,
+	// whose semconv version differs from ours and conflicts.
+	if got := rm.Resource.SchemaURL(); got != semconv.SchemaURL {
+		t.Errorf("metric resource schema URL = %q, want %q", got, semconv.SchemaURL)
+	}
+
+	// Everything above tests the helper. These pin that the constructors
+	// actually route through it — without them the merge could be deleted
+	// from New and newWith and this test would still pass.
+	built := newWith(&fakeMetric{}, newProviderSink(&capturingLogExporter{}, res))
+	if got := attrSet(built.resource.Attributes())["deployment.environment"]; got != "prod" {
+		t.Errorf("newWith resource deployment.environment = %q, want prod — the constructor did not resolve the resource", got)
+	}
+	e, err := New(context.Background())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = e.Shutdown(context.Background()) })
+	if got := attrSet(e.resource.Attributes())["deployment.environment"]; got != "prod" {
+		t.Errorf("New resource deployment.environment = %q, want prod — the constructor did not resolve the resource", got)
+	}
+	if got := attrSet(e.resource.Attributes())["service.name"]; got != "shortfall" {
+		t.Errorf("New resource service.name = %q, want shortfall", got)
+	}
+	// Both legs, not just the field the metric leg reads: New builds the log
+	// sink separately, so handing it a different resource would leave events
+	// carrying one identity and metrics another.
+	sink, ok := e.logs.(*providerSink)
+	if !ok {
+		t.Fatalf("New built %T, want *providerSink", e.logs)
+	}
+	if !maps.Equal(attrSet(sink.res.Attributes()), attrSet(e.resource.Attributes())) {
+		t.Errorf("New gave the legs different resources:\n events  %v\n metrics %v",
+			attrSet(sink.res.Attributes()), attrSet(e.resource.Attributes()))
+	}
+}
+
+// TestWithResourceMergesRatherThanOverrides covers the exported option whose
+// contract this change rewrote. defaultResource() happens to carry both
+// identity keys, so testing only through it cannot see what happens to a
+// caller-supplied resource that omits one.
+func TestWithResourceMergesRatherThanOverrides(t *testing.T) {
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=prod")
+	t.Setenv("OTEL_SERVICE_NAME", "from-env")
+
+	named := attrSet(resolveResource(resource.NewWithAttributes(
+		semconv.SchemaURL, semconv.ServiceName("custom"), semconv.ServiceInstanceID("replica-1"))).Attributes())
+	if named["service.name"] != "custom" {
+		t.Errorf("service.name = %q, want custom — a resource that names itself must win", named["service.name"])
+	}
+	if named["service.instance.id"] != "replica-1" {
+		t.Errorf("service.instance.id = %q, want replica-1", named["service.instance.id"])
+	}
+	if named["deployment.environment"] != "prod" {
+		t.Errorf("deployment.environment = %q, want prod — the environment must still be merged in", named["deployment.environment"])
+	}
+
+	// A caller-supplied resource that does NOT name the service leaves that
+	// key to the environment rather than blanking it.
+	unnamed := attrSet(resolveResource(resource.NewWithAttributes(
+		semconv.SchemaURL, semconv.ServiceInstanceID("replica-2"))).Attributes())
+	if unnamed["service.name"] != "from-env" {
+		t.Errorf("service.name = %q, want from-env — an unnamed resource must not shadow OTEL_SERVICE_NAME", unnamed["service.name"])
+	}
+	if unnamed["service.instance.id"] != "replica-2" {
+		t.Errorf("service.instance.id = %q, want replica-2", unnamed["service.instance.id"])
+	}
+}
+
+// TestShutdownRacingAnExportIsNeverSilent is the test the single-threaded
+// post-Shutdown case could not be: it drives the window between the
+// Exporter-level check and the sink's lock.
+//
+// emit.Std.Flush releases its own lock before calling the exporter, so a
+// caller-driven Flush can still be inside ExportEvents when Close reaches
+// Shutdown — the sink's own doc names that concurrency. If the sink is
+// stopped while such a call is in flight, sdklog discards the records and
+// answers ForceFlush with nil, and the caller is told a batch of outcome
+// events landed when none did. Marking stopped before the wait, and reading
+// it after taking the slot, is what orders the two.
+func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
+	const iters = 2000
+	const batch = 3
+	silent := 0
+	for range iters {
+		logExp := &capturingLogExporter{}
+		e := newWith(&fakeMetric{}, newProviderSink(logExp, defaultResource()))
+
+		var wg sync.WaitGroup
+		var exportErr error
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			exportErr = e.ExportEvents(context.Background(), outcomes(batch))
+		}()
+		go func() {
+			defer wg.Done()
+			_ = e.Shutdown(context.Background())
+		}()
+		wg.Wait()
+
+		// Reported success while delivering fewer than it was handed. This
+		// batch is one chunk, so in practice the drops seen here are total;
+		// the assertion is written against the batch rather than zero because
+		// a multi-chunk emit stopped between chunks loses part, and a check
+		// for zero would call that a pass.
+		if exportErr == nil && len(logExp.all()) != batch {
+			silent++
+		}
+	}
+	if silent != 0 {
+		t.Errorf("%d of %d races reported success having delivered less than the batch — that is the silent drop ADR-0002 forbids", silent, iters)
+	}
+}
+
+// slowLogExporter holds the sink's slot for a fixed time, standing in for a
+// real OTLP HTTP export with its own timeout and retries.
+type slowLogExporter struct {
+	d       time.Duration
+	entered chan struct{}
+}
+
+func (s *slowLogExporter) Export(context.Context, []sdklog.Record) error {
+	if s.entered != nil {
+		close(s.entered)
+		s.entered = nil
+	}
+	time.Sleep(s.d)
+	return nil
+}
+func (s *slowLogExporter) Shutdown(context.Context) error   { return nil }
+func (s *slowLogExporter) ForceFlush(context.Context) error { return nil }
+
+// TestShutdownHonorsItsDeadline pins that waiting for an in-flight emit does
+// not mean waiting without bound. Shutdown must wait — that is what keeps a
+// racing export from being cut short silently — but sync.Mutex.Lock cannot
+// be cancelled, so waiting on one would pin a SIGTERM handler behind an OTLP
+// export's own timeout and retries, well past any shutdown budget. The sink
+// serialises on a channel for exactly this reason.
+func TestShutdownHonorsItsDeadline(t *testing.T) {
+	entered := make(chan struct{})
+	sink := newProviderSink(&slowLogExporter{d: 300 * time.Millisecond, entered: entered}, defaultResource())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = sink.emit(context.Background(), outcomes(3))
+	}()
+	<-entered // the emit holds the slot; no sleep to lose a race against
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := sink.Shutdown(ctx)
+	elapsed := time.Since(start)
+	<-done
+
+	if elapsed > 150*time.Millisecond {
+		t.Errorf("Shutdown blocked %v on a 10ms deadline — a bounded shutdown budget cannot be honoured", elapsed)
+	}
+	if err == nil {
+		t.Error("Shutdown that abandoned its wait returned nil — the caller must learn the drain did not finish")
+	}
+}
+
+// TestShutdownDeadlineNeverLosesEventsSilently guards the seam between the
+// two things Shutdown owes its caller: finish by the deadline, and never lose
+// events without saying so. When those conflict, durability wins.
+//
+// sdklog latches its stopped flag BEFORE honouring ctx, after which it
+// discards records and answers ForceFlush with nil. So a Shutdown that
+// stopped the provider on its way out of an expired wait would turn an
+// in-flight emit's remaining chunks into silent loss — and the latch makes a
+// later retry a no-op, so nothing recovers them. Leaving the provider
+// running instead costs a Shutdown that reports it did not finish.
+//
+// The batch spans two chunks deliberately: one chunk cannot show partial
+// loss, and partial is the shape this path produces.
+func TestShutdownDeadlineNeverLosesEventsSilently(t *testing.T) {
+	entered := make(chan struct{})
+	logExp := &countingSlowExporter{d: 150 * time.Millisecond, entered: entered}
+	e := newWith(&fakeMetric{}, newProviderSink(logExp, defaultResource()))
+
+	const n = eventQueueSize + 5 // two chunks
+	var exportErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		exportErr = e.ExportEvents(context.Background(), outcomes(n))
+	}()
+	<-entered
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	shutErr := e.Shutdown(ctx)
+	<-done
+
+	t.Logf("Shutdown=%v ExportEvents=%v delivered=%d of %d", shutErr, exportErr, logExp.count(), n)
+	if exportErr == nil && logExp.count() != n {
+		t.Errorf("SILENT: ExportEvents returned nil having delivered %d of %d", logExp.count(), n)
+	}
+}
+
+type countingSlowExporter struct {
+	d       time.Duration
+	entered chan struct{}
+	mu      sync.Mutex
+	n       int
+}
+
+func (c *countingSlowExporter) Export(_ context.Context, recs []sdklog.Record) error {
+	if c.entered != nil {
+		close(c.entered)
+		c.entered = nil
+	}
+	time.Sleep(c.d)
+	c.mu.Lock()
+	c.n += len(recs)
+	c.mu.Unlock()
+	return nil
+}
+func (c *countingSlowExporter) Shutdown(context.Context) error   { return nil }
+func (c *countingSlowExporter) ForceFlush(context.Context) error { return nil }
+func (c *countingSlowExporter) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.n
+}
+
+// recordingExporter reports whether the SDK ever shut it down.
+type recordingExporter struct{ shut bool }
+
+func (r *recordingExporter) Export(context.Context, []sdklog.Record) error { return nil }
+func (r *recordingExporter) Shutdown(context.Context) error                { r.shut = true; return nil }
+func (r *recordingExporter) ForceFlush(context.Context) error              { return nil }
+
+// TestExpiredCtxNeverStrandsTheProvider covers the case a two-case select
+// gets wrong on its own: the slot is FREE and the ctx is ALREADY expired, so
+// both cases are ready and Go picks at random.
+//
+// Taking the slot there means handing provider.Shutdown a dead deadline, and
+// sdklog answers that by latching stopped and returning before it shuts the
+// processor down — the pipeline stays alive, its goroutine with it, and every
+// later Shutdown returns nil for something that never shut down. No events
+// are lost (the sink's stopped flag keeps exports loud), but the exporter
+// reports a success it did not achieve, which is its own kind of dishonesty.
+//
+// Reachable through Exporter.Shutdown whenever the metric leg, or the two
+// Flushes emit.Std.Close runs first, burn the budget.
+func TestExpiredCtxNeverStrandsTheProvider(t *testing.T) {
+	stranded := 0
+	const iters = 200
+	for range iters {
+		exp := &recordingExporter{}
+		sink := newProviderSink(exp, defaultResource())
+		ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		time.Sleep(time.Millisecond) // ctx is definitely expired; slot is free
+		err := sink.Shutdown(ctx)
+		cancel()
+		// Stranded: Shutdown reported the deadline, but the provider was
+		// entered anyway and latched without shutting the processor down.
+		if err != nil && !exp.shut {
+			if retry := sink.Shutdown(context.Background()); retry == nil && !exp.shut {
+				stranded++
+			}
+		}
+	}
+	if stranded != 0 {
+		t.Errorf("%d of %d expired-ctx Shutdowns stranded the provider: latched, alive, and unrecoverable by retry", stranded, iters)
 	}
 }

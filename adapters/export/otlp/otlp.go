@@ -19,8 +19,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+	"sync/atomic"
 
+	"go.opentelemetry.io/otel"
 	logexp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	metricexp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	otellog "go.opentelemetry.io/otel/log"
@@ -63,14 +64,59 @@ type eventSink interface {
 type providerSink struct {
 	provider *sdklog.LoggerProvider
 	logger   otellog.Logger
+	// res is the resource this sink was built from. The provider does not
+	// expose it, and a test that cannot see it cannot tell whether New
+	// handed both legs the same value.
+	res *resource.Resource
 
-	// mu serialises this sink's emit. The queue is per-sink, not per-call, so
-	// two overlapping ExportEvents calls would put twice its capacity in
-	// flight and overflow it. The emit package reaches that: emit.Std.Flush
-	// releases its own lock before calling the exporter, and its background
-	// ticker can race a caller-driven Flush.
-	mu sync.Mutex
+	// sem serialises this sink's emit, one holder at a time. The queue is
+	// per-sink, not per-call, so two overlapping ExportEvents calls would put
+	// twice its capacity in flight and overflow it. The emit package reaches
+	// that: emit.Std.Flush releases its own lock before calling the exporter,
+	// and its background ticker can race a caller-driven Flush.
+	//
+	// It is a channel rather than a sync.Mutex because Mutex.Lock cannot be
+	// cancelled, and Shutdown has to wait here: one emitChunk is an OTLP HTTP
+	// export with its own timeout and retries, so a Shutdown that ignored its
+	// ctx could pin a SIGTERM handler well past any shutdown budget.
+	sem chan struct{}
+	// stopped is set before Shutdown waits for sem, and read by an emit that
+	// already holds it. That ordering is the whole point: the Exporter-level
+	// atomic makes a post-Shutdown export fail, but a caller already past
+	// that check can still be waiting for the sink when Shutdown stops the
+	// provider — and a stopped provider discards the record and answers
+	// ForceFlush with nil, so emit would report success for a batch nobody
+	// received. An emit holding sem checked stopped before Shutdown set it,
+	// and Shutdown does not stop the provider until that emit releases — if
+	// it cannot wait that long it leaves the provider alone rather than
+	// pulling it out from under a batch in flight.
+	stopped atomic.Bool
 }
+
+// acquire takes the sink's one slot, or gives up when ctx does. Callers that
+// get a nil error must release.
+//
+// The ctx is checked before the select, not only inside it. A select whose
+// send and whose ctx.Done() are both ready picks at random, so an already
+// expired ctx would take the slot about half the time — and Shutdown would
+// then hand the provider a deadline it cannot meet, which sdklog answers by
+// latching stopped and returning before it shuts the processor down,
+// stranding the pipeline alive with every later Shutdown reporting nil.
+// Failing fast on a dead ctx is what makes "never give the provider a ctx
+// that cannot finish" true rather than usually true.
+func (s *providerSink) acquire(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case s.sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *providerSink) release() { <-s.sem }
 
 // newProviderSink builds the real event pipeline over an otel log exporter.
 // The queue is sized explicitly rather than left to the SDK default, because
@@ -88,6 +134,8 @@ func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink 
 	return &providerSink{
 		provider: provider,
 		logger:   provider.Logger("github.com/NightWatchEng/shortfall"),
+		res:      res,
+		sem:      make(chan struct{}, 1),
 	}
 }
 
@@ -95,11 +143,16 @@ func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink 
 // flushing each chunk before the next. On overflow the queue overwrites its
 // oldest record and reports it through no channel the caller can reach: Emit
 // returns nothing and ForceFlush surfaces only export failures. Chunking
-// under a lock is what keeps it from overflowing, which ADR-0002 requires —
+// while holding the sink's one slot is what keeps it from overflowing, which ADR-0002 requires —
 // a dropped outcome must be counted, never silent.
 func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if err := s.acquire(ctx); err != nil {
+		return err
+	}
+	defer s.release()
+	if s.stopped.Load() {
+		return ErrShutdown
+	}
 	for start := 0; start < len(batch); start += eventQueueSize {
 		end := min(start+eventQueueSize, len(batch))
 		if err := s.emitChunk(ctx, batch[start:end]); err != nil {
@@ -130,13 +183,65 @@ func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error
 	return s.provider.ForceFlush(ctx)
 }
 
-func (s *providerSink) Shutdown(ctx context.Context) error { return s.provider.Shutdown(ctx) }
+// Shutdown marks the sink stopped, waits for any emit already in flight to
+// finish delivering, and only then stops the provider.
+//
+// Marking first is what orders the two: stopped is set before the wait
+// begins and read by emit immediately after it takes the slot, so any emit
+// arriving from then on returns ErrShutdown without touching the provider.
+// The one already holding the slot checked stopped before this call set it,
+// so it delivers in full while Shutdown waits.
+//
+// The slot is held across provider.Shutdown by the defer. That is a latency
+// choice, not a correctness one: stopped is set before the wait and read by
+// emit right after it takes the slot, so no emit can reach the provider once
+// Shutdown has begun whether the slot is held or not. Holding it makes a
+// concurrent emit wait out the drain before being told ErrShutdown, which
+// keeps the sink single-threaded end to end.
+//
+// The provider is NOT stopped when the wait is abandoned. sdklog latches its
+// stopped flag before honouring ctx, after which it discards records and
+// answers ForceFlush with nil — so stopping it out from under a live emit
+// turns that emit's remaining chunks into exactly the silent loss ADR-0002
+// forbids. Leaving it running lets the in-flight batch land, and the ctx
+// error says the exporter is not shut down.
+//
+// What that costs, plainly: the abandoned exporter is left running, and the
+// sdklog batch processor's goroutine with it. A fresh Shutdown reclaims it,
+// but emit.Std.Close cannot make one — it is sync.Once-guarded and caches
+// its first result — so through that caller the leak lasts the process.
+// Losing a goroutine is the cheaper failure; losing outcome events silently
+// is the one ADR-0002 rules out.
+func (s *providerSink) Shutdown(ctx context.Context) error {
+	s.stopped.Store(true)
+	if err := s.acquire(ctx); err != nil {
+		return err
+	}
+	defer s.release()
+	return s.provider.Shutdown(ctx)
+}
+
+// ErrShutdown is returned by ExportMetrics and ExportEvents once Shutdown
+// has run. Shutdown is terminal here: the log provider cannot be restarted,
+// and a post-Shutdown export delivers nothing. Reporting that as success
+// would be the silent drop ADR-0002 forbids, so it is an error the caller
+// can test for — emit.Std.Flush turns it into
+// biz_dropped_events_total{reason=export}.
+var ErrShutdown = errors.New("otlp: exporter is shut down")
 
 // Exporter implements emit.Exporter over OTLP.
 type Exporter struct {
 	metrics  metricPusher
 	logs     eventSink
 	resource *resource.Resource
+
+	// shutdown is read by both legs so they answer a post-Shutdown export
+	// identically. Leaving it to the vendored SDKs does not: otlpmetrichttp
+	// swaps in a client that errors, while sdklog's stopped provider
+	// discards the record and answers ForceFlush with nil. Zero value is
+	// usable because newWith and the conformance harness build Exporter as
+	// a struct literal.
+	shutdown atomic.Bool
 }
 
 var _ emit.Exporter = (*Exporter)(nil)
@@ -148,10 +253,15 @@ type Options struct {
 	resource *resource.Resource
 }
 
-// WithResource overrides the resource carried by both signals — metric
-// points and log records alike. The default names this service and gives it
-// a per-process instance id, which is what keeps replicas off each other's
-// gauge series; an override must still distinguish one writer from another.
+// WithResource sets the resource carried by both signals — metric points and
+// log records alike. It is merged with resource.Environment() rather than
+// replacing it, so OTEL_RESOURCE_ATTRIBUTES reaches both legs, and this
+// resource wins every key they share: OTEL_SERVICE_NAME cannot rename a
+// writer that named itself.
+//
+// The default names this service and gives it a per-process instance id,
+// which is what keeps replicas off each other's gauge series; an override
+// must still distinguish one writer from another.
 func WithResource(res *resource.Resource) func(*Options) {
 	return func(o *Options) { o.resource = res }
 }
@@ -168,6 +278,37 @@ func WithLogOptions(o ...logexp.Option) func(*Options) {
 	return func(op *Options) { op.log = append(op.log, o...) }
 }
 
+// resolveResource is the single place a resource becomes the one both legs
+// carry. sdklog.WithResource merges resource.Environment() into whatever it
+// is given, while the metric leg hand-builds its ResourceMetrics and never
+// touches the metric SDK — so without this, OTEL_RESOURCE_ATTRIBUTES reached
+// events only, and the two legs disagreed about the writer's context.
+//
+// Argument order is the whole contract: resource.Merge is last-wins, so res
+// must be second for the explicit resource to beat the environment. Reversed,
+// OTEL_SERVICE_NAME silently renames the writer and no error is returned.
+//
+// resource.Environment() is always schemaless, so the merge cannot hit
+// ErrSchemaURLConflict and res's schema URL survives. resource.Default()
+// would NOT be safe here: it carries a different semconv version and
+// conflicts, which wipes the schema URL to "". On the error path we match
+// sdklog.WithResource and hand the merged value back — Merge returns a
+// usable resource even when it errors, and diverging here would trade one
+// asymmetry for another.
+func resolveResource(res *resource.Resource) *resource.Resource {
+	merged, err := resource.Merge(resource.Environment(), res)
+	if err != nil {
+		// Unreachable while the first argument is Environment(): Merge errors
+		// only on ErrSchemaURLConflict, which needs both schema URLs non-empty,
+		// and Environment() is always schemaless. Handled rather than ignored
+		// so a future SDK change surfaces through otel's handler instead of
+		// being swallowed — Merge returns a usable resource either way, which
+		// is why merged is returned unconditionally.
+		otel.Handle(err)
+	}
+	return merged
+}
+
 // New builds an OTLP exporter wired to real otel HTTP exporters.
 func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 	o := Options{resource: defaultResource()}
@@ -177,6 +318,7 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 	if o.resource == nil {
 		o.resource = defaultResource()
 	}
+	o.resource = resolveResource(o.resource)
 	m, err := metricexp.New(ctx, o.metric...)
 	if err != nil {
 		return nil, fmt.Errorf("otlp: metric exporter: %w", err)
@@ -192,7 +334,7 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 // newWith wires arbitrary pushers — the seam the unit tests and the
 // testkit/conformance suite drive with in-memory collectors.
 func newWith(m metricPusher, l eventSink) *Exporter {
-	return &Exporter{metrics: m, logs: l, resource: defaultResource()}
+	return &Exporter{metrics: m, logs: l, resource: resolveResource(defaultResource())}
 }
 
 // Capabilities: OTLP writes both signals; it is write-only, so read-side
@@ -208,6 +350,11 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 	if len(batch) == 0 {
 		return nil
 	}
+	// After the empty-batch return, never before: an empty batch drops
+	// nothing, so there is nothing to be loud about.
+	if e.shutdown.Load() {
+		return ErrShutdown
+	}
 	rm, err := buildResourceMetrics(batch, e.resource)
 	if err != nil {
 		return err
@@ -220,6 +367,9 @@ func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error 
 	if len(batch) == 0 {
 		return nil
 	}
+	if e.shutdown.Load() {
+		return ErrShutdown
+	}
 	return e.logs.emit(ctx, batch)
 }
 
@@ -228,6 +378,7 @@ func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error 
 // log-leg flush failure can mean dropped outcome data and must not be
 // masked by a metric-leg error.
 func (e *Exporter) Shutdown(ctx context.Context) error {
+	e.shutdown.Store(true)
 	mErr := e.metrics.Shutdown(ctx)
 	lErr := e.logs.Shutdown(ctx)
 	return errors.Join(mErr, lErr)
