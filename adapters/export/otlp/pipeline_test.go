@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -413,12 +414,6 @@ func TestPostShutdownExportsAreLoud(t *testing.T) {
 	if !errors.Is(mErr, ErrShutdown) {
 		t.Errorf("ExportMetrics after Shutdown = %v, want ErrShutdown", mErr)
 	}
-	// Both legs must answer the same question with the same error, not merely
-	// both non-nil: ErrShutdown is exported so callers can test for it, and
-	// nothing else in the tree pins that identity.
-	if !errors.Is(evErr, ErrShutdown) || !errors.Is(mErr, ErrShutdown) {
-		t.Errorf("legs disagree about post-Shutdown exports: events=%v metrics=%v", evErr, mErr)
-	}
 	if got := len(logExp.all()); got != 0 {
 		t.Errorf("delivered %d records after Shutdown, want 0", got)
 	}
@@ -592,7 +587,8 @@ func TestWithResourceMergesRatherThanOverrides(t *testing.T) {
 // answers ForceFlush with nil, and the caller is told a batch of outcome
 // events landed when none did. Deciding under mu is what orders the two.
 func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
-	const iters = 300
+	const iters = 2000
+	const batch = 3
 	silent := 0
 	for range iters {
 		logExp := &capturingLogExporter{}
@@ -603,7 +599,7 @@ func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			exportErr = e.ExportEvents(context.Background(), outcomes(3))
+			exportErr = e.ExportEvents(context.Background(), outcomes(batch))
 		}()
 		go func() {
 			defer wg.Done()
@@ -611,12 +607,55 @@ func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
 		}()
 		wg.Wait()
 
-		// The only forbidden outcome: reported success, delivered nothing.
-		if exportErr == nil && len(logExp.all()) == 0 {
+		// Reported success while delivering fewer than it was handed. Partial
+		// is the commoner mode — a provider stopped mid-batch — and a check
+		// for zero delivered would miss it entirely.
+		if exportErr == nil && len(logExp.all()) != batch {
 			silent++
 		}
 	}
 	if silent != 0 {
-		t.Errorf("%d of %d races reported success having delivered nothing — that is the silent drop ADR-0002 forbids", silent, iters)
+		t.Errorf("%d of %d races reported success having delivered less than the batch — that is the silent drop ADR-0002 forbids", silent, iters)
+	}
+}
+
+// slowLogExporter holds the sink's slot for a fixed time, standing in for a
+// real OTLP HTTP export with its own timeout and retries.
+type slowLogExporter struct{ d time.Duration }
+
+func (s *slowLogExporter) Export(context.Context, []sdklog.Record) error {
+	time.Sleep(s.d)
+	return nil
+}
+func (s *slowLogExporter) Shutdown(context.Context) error   { return nil }
+func (s *slowLogExporter) ForceFlush(context.Context) error { return nil }
+
+// TestShutdownHonorsItsDeadline pins that waiting for an in-flight emit does
+// not mean waiting without bound. Shutdown must wait — that is what keeps a
+// racing export from being cut short silently — but sync.Mutex.Lock cannot
+// be cancelled, so waiting on one would pin a SIGTERM handler behind an OTLP
+// export's own timeout and retries, well past any shutdown budget. The sink
+// serialises on a channel for exactly this reason.
+func TestShutdownHonorsItsDeadline(t *testing.T) {
+	sink := newProviderSink(&slowLogExporter{d: 300 * time.Millisecond}, defaultResource())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = sink.emit(context.Background(), outcomes(3))
+	}()
+	time.Sleep(20 * time.Millisecond) // let emit take the slot
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := sink.Shutdown(ctx)
+	elapsed := time.Since(start)
+	<-done
+
+	if elapsed > 150*time.Millisecond {
+		t.Errorf("Shutdown blocked %v on a 10ms deadline — a bounded shutdown budget cannot be honoured", elapsed)
+	}
+	if err == nil {
+		t.Error("Shutdown that abandoned its wait returned nil — the caller must learn the drain did not finish")
 	}
 }

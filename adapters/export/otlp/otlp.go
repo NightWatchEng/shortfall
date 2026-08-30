@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
@@ -70,21 +69,40 @@ type providerSink struct {
 	// handed both legs the same value.
 	res *resource.Resource
 
-	// mu serialises this sink's emit. The queue is per-sink, not per-call, so
-	// two overlapping ExportEvents calls would put twice its capacity in
-	// flight and overflow it. The emit package reaches that: emit.Std.Flush
-	// releases its own lock before calling the exporter, and its background
-	// ticker can race a caller-driven Flush.
-	mu sync.Mutex
-	// stopped is guarded by mu, and that is the whole point of it. The
-	// Exporter-level atomic makes a post-Shutdown export fail, but a caller
-	// already past that check can still be waiting for mu when Shutdown
-	// stops the provider — and a stopped provider discards the record and
-	// answers ForceFlush with nil, so emit would report success for a batch
-	// nobody received. Deciding under the same lock emit holds is what makes
-	// the two operations ordered instead of merely racing.
-	stopped bool
+	// sem serialises this sink's emit, one holder at a time. The queue is
+	// per-sink, not per-call, so two overlapping ExportEvents calls would put
+	// twice its capacity in flight and overflow it. The emit package reaches
+	// that: emit.Std.Flush releases its own lock before calling the exporter,
+	// and its background ticker can race a caller-driven Flush.
+	//
+	// It is a channel rather than a sync.Mutex because Mutex.Lock cannot be
+	// cancelled, and Shutdown has to wait here: one emitChunk is an OTLP HTTP
+	// export with its own timeout and retries, so a Shutdown that ignored its
+	// ctx could pin a SIGTERM handler well past any shutdown budget.
+	sem chan struct{}
+	// stopped is set before Shutdown waits for sem, and read by an emit that
+	// already holds it. That ordering is the whole point: the Exporter-level
+	// atomic makes a post-Shutdown export fail, but a caller already past
+	// that check can still be waiting for the sink when Shutdown stops the
+	// provider — and a stopped provider discards the record and answers
+	// ForceFlush with nil, so emit would report success for a batch nobody
+	// received. An emit holding sem checked stopped before Shutdown set it,
+	// and Shutdown cannot stop the provider until that emit releases.
+	stopped atomic.Bool
 }
+
+// acquire takes the sink's one slot, or gives up when ctx does. Callers that
+// get a nil error must release.
+func (s *providerSink) acquire(ctx context.Context) error {
+	select {
+	case s.sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *providerSink) release() { <-s.sem }
 
 // newProviderSink builds the real event pipeline over an otel log exporter.
 // The queue is sized explicitly rather than left to the SDK default, because
@@ -103,6 +121,7 @@ func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink 
 		provider: provider,
 		logger:   provider.Logger("github.com/NightWatchEng/shortfall"),
 		res:      res,
+		sem:      make(chan struct{}, 1),
 	}
 }
 
@@ -113,9 +132,11 @@ func newProviderSink(exp sdklog.Exporter, res *resource.Resource) *providerSink 
 // under a lock is what keeps it from overflowing, which ADR-0002 requires —
 // a dropped outcome must be counted, never silent.
 func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.stopped {
+	if err := s.acquire(ctx); err != nil {
+		return err
+	}
+	defer s.release()
+	if s.stopped.Load() {
 		return ErrShutdown
 	}
 	for start := 0; start < len(batch); start += eventQueueSize {
@@ -148,16 +169,29 @@ func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error
 	return s.provider.ForceFlush(ctx)
 }
 
-// Shutdown marks the sink stopped under mu, then stops the provider. An
-// emit already holding mu finishes and delivers; one still waiting for it
-// wakes to stopped and errors. The provider is stopped outside the lock —
-// no emit can run against it once stopped is set, so holding mu across the
-// SDK call would only make Shutdown wait longer.
+// Shutdown marks the sink stopped, waits for any emit already in flight to
+// finish delivering, and stops the provider while still holding the sink.
+//
+// The slot is held across provider.Shutdown deliberately. Marking stopped
+// first already turns away any emit that has not started, but an emit that
+// takes the slot while the provider is being stopped would run against a
+// half-stopped provider — which discards records and answers ForceFlush with
+// nil. Holding the slot means the two never overlap: an emit either had it
+// first and delivered in full, or takes it afterwards and finds stopped set.
+// The cost falls only on emit callers who are about to get ErrShutdown.
+//
+// If ctx expires before the in-flight emit finishes, the provider is stopped
+// anyway and the ctx error is joined: the caller asked to be done by a
+// deadline, and an exporter left half-shut would leak the batch processor's
+// goroutine. That in-flight emit may then cut short, which it reports as its
+// own export error — it is never silent.
 func (s *providerSink) Shutdown(ctx context.Context) error {
-	s.mu.Lock()
-	s.stopped = true
-	s.mu.Unlock()
-	return s.provider.Shutdown(ctx)
+	s.stopped.Store(true)
+	waitErr := s.acquire(ctx)
+	if waitErr == nil {
+		defer s.release()
+	}
+	return errors.Join(waitErr, s.provider.Shutdown(ctx))
 }
 
 // ErrShutdown is returned by ExportMetrics and ExportEvents once Shutdown
