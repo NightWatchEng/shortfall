@@ -104,30 +104,36 @@ func buildMetricRecord(namespace, unit string, p emit.MetricPoint) ([]byte, erro
 // Timestamp is the outcome's own time.
 func buildEventRecord(o biz.Outcome) ([]byte, error) {
 	rec := map[string]any{
-		"_aws":             map[string]any{"Timestamp": o.At.UnixMilli()},
-		"event":            "biz.outcome",
-		"biz.flow":         o.VC.Flow,
-		"biz.stage":        o.Stage,
-		"biz.outcome":      string(o.Result),
-		"biz.entity.id":    o.VC.EntityID,
-		"biz.customer.id":  o.VC.CustomerID,
-		"biz.amount_minor": o.VC.Money.Amount,
-		"biz.currency":     o.VC.Money.Currency,
-		"biz.exponent":     o.VC.Money.Exponent,
-		"biz.value.kind":   string(o.VC.Kind),
-		"biz.amount.est":   o.VC.Estimated,
+		"_aws":              map[string]any{"Timestamp": o.At.UnixMilli()},
+		biz.EventKey:        biz.EventOutcome,
+		biz.AttrFlow:        o.VC.Flow,
+		biz.AttrStage:       o.Stage,
+		biz.AttrOutcome:     string(o.Result),
+		biz.AttrEntityID:    o.VC.EntityID,
+		biz.AttrCustomerID:  o.VC.CustomerID,
+		biz.AttrAmountMinor: o.VC.Money.Amount,
+		biz.AttrCurrency:    o.VC.Money.Currency,
+		biz.AttrExponent:    o.VC.Money.Exponent,
+		biz.AttrValueKind:   string(o.VC.Kind),
+		biz.AttrAmountEst:   o.VC.Estimated,
 	}
 	if o.VC.Segment != "" {
-		rec["biz.segment"] = o.VC.Segment
+		rec[biz.AttrSegment] = o.VC.Segment
+	}
+	// See the note in the GCP exporter: the deadline rides every transport
+	// that can express it, so the same Outcome does not produce different
+	// fields depending on which exporter is wired (ADR-0002).
+	if !o.VC.Deadline.IsZero() {
+		rec[biz.AttrSLADeadline] = o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")
 	}
 	if o.Source != "" {
-		rec["source"] = o.Source
+		rec[biz.AttrSource] = o.Source
 	}
 	if o.Err != "" {
-		rec["error"] = o.Err
+		rec[biz.AttrError] = o.Err
 	}
 	if o.TraceID != "" {
-		rec["trace.id"] = o.TraceID
+		rec[biz.AttrTraceID] = o.TraceID
 	}
 	return json.Marshal(rec)
 }

@@ -9,7 +9,7 @@ import (
 
 // eventName is the OTel semantic-convention event name for a shortfall
 // outcome.
-const eventName = "biz.outcome"
+const eventName = biz.AttrOutcome
 
 // buildRecord maps one outcome to an OpenTelemetry log API record (the
 // builder form — attribute limits are applied SDK-side, so all fields
@@ -29,28 +29,28 @@ func buildRecord(o biz.Outcome) otellog.Record {
 
 func outcomeAttrs(o biz.Outcome) []attribute.KeyValue {
 	kv := []attribute.KeyValue{
-		attribute.String("biz.flow", o.VC.Flow),
-		attribute.String("biz.stage", o.Stage),
-		attribute.String("biz.outcome", string(o.Result)),
-		attribute.String("biz.entity.id", o.VC.EntityID),
-		attribute.String("biz.customer.id", o.VC.CustomerID),
-		attribute.Int64("biz.amount_minor", o.VC.Money.Amount),
-		attribute.String("biz.currency", o.VC.Money.Currency),
-		attribute.Int("biz.exponent", int(o.VC.Money.Exponent)),
-		attribute.String("biz.value.kind", string(o.VC.Kind)),
-		attribute.Bool("biz.amount.est", o.VC.Estimated),
+		attribute.String(biz.AttrFlow, o.VC.Flow),
+		attribute.String(biz.AttrStage, o.Stage),
+		attribute.String(biz.AttrOutcome, string(o.Result)),
+		attribute.String(biz.AttrEntityID, o.VC.EntityID),
+		attribute.String(biz.AttrCustomerID, o.VC.CustomerID),
+		attribute.Int64(biz.AttrAmountMinor, o.VC.Money.Amount),
+		attribute.String(biz.AttrCurrency, o.VC.Money.Currency),
+		attribute.Int(biz.AttrExponent, int(o.VC.Money.Exponent)),
+		attribute.String(biz.AttrValueKind, string(o.VC.Kind)),
+		attribute.Bool(biz.AttrAmountEst, o.VC.Estimated),
 	}
 	if o.VC.Segment != "" {
-		kv = append(kv, attribute.String("biz.segment", o.VC.Segment))
+		kv = append(kv, attribute.String(biz.AttrSegment, o.VC.Segment))
 	}
 	if !o.VC.Deadline.IsZero() {
-		kv = append(kv, attribute.String("biz.sla.deadline", o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")))
+		kv = append(kv, attribute.String(biz.AttrSLADeadline, o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")))
 	}
 	if o.Source != "" {
-		kv = append(kv, attribute.String("source", o.Source))
+		kv = append(kv, attribute.String(biz.AttrSource, o.Source))
 	}
 	if o.Err != "" {
-		kv = append(kv, attribute.String("error", o.Err))
+		kv = append(kv, attribute.String(biz.AttrError, o.Err))
 	}
 	return kv
 }

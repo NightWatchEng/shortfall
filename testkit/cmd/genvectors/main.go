@@ -42,6 +42,7 @@ func main() {
 	}
 	write(filepath.Join(dir, testkit.VCVectorsFile), buildVCVectors())
 	write(filepath.Join(dir, testkit.RegistryVectorsFile), buildRegistryVectors())
+	write(filepath.Join(dir, testkit.OutcomeEventVectorsFile), buildOutcomeEventVectors())
 }
 
 func fail(err error) {
@@ -534,5 +535,71 @@ func buildRegistryVectors() testkit.RegistryVectors {
 		HostAllowlist:  hostCases,
 		Duration:       durationCases,
 		DurationReject: durationRejectCases,
+	}
+}
+
+// buildOutcomeEventVectors emits the outcome event's wire contract: for one
+// fully-populated Outcome and one carrying only the required facts, the
+// exact biz.* attribute set every transport must produce.
+//
+// The names come from the biz constants rather than being spelled here, so
+// the vector cannot disagree with the exporters it checks — the whole
+// failure this file exists to prevent.
+func buildOutcomeEventVectors() testkit.OutcomeEventVectors {
+	full := testkit.OutcomeEventInput{
+		Flow: "invoice.pay", Stage: "capture", Result: "failed",
+		EntityID: "inv_000042", CustomerID: "h:c0ffee", Segment: "smb",
+		AmountMinor: 14900, Currency: "USD", Exponent: 2,
+		Kind: "fee", Estimated: false,
+		Deadline: "2026-01-02T03:34:05Z",
+		Source:   "stripe:webhook",
+		Err:      "card_declined",
+		TraceID:  "4bf92f3577b34da6a3ce929d0e0e4736",
+	}
+	minimal := testkit.OutcomeEventInput{
+		Flow: "invoice.pay", Stage: "auth", Result: "success",
+		EntityID: "inv_000043", CustomerID: "h:decaf",
+		AmountMinor: 1, Currency: "EUR", Exponent: 2,
+		Kind: "gmv", Estimated: true,
+	}
+	return testkit.OutcomeEventVectors{
+		Vectors:        "biz.outcome",
+		VectorsVersion: testkit.VectorsVersion,
+		Note: "The field names an outcome event carries, for every transport. " +
+			"ADR-0002 requires that the same Outcome produce the same fields on " +
+			"each; absent lists what must NOT appear, because an optional field " +
+			"nobody checked is how biz.sla.deadline came to ship on OTLP alone.",
+		Cases: []testkit.OutcomeEventVector{
+			{
+				Name:  "fully_populated",
+				Note:  "every optional fact present: segment, deadline, source, error, trace id",
+				Input: full,
+				Attrs: map[string]any{
+					biz.AttrFlow: full.Flow, biz.AttrStage: full.Stage, biz.AttrOutcome: full.Result,
+					biz.AttrEntityID: full.EntityID, biz.AttrCustomerID: full.CustomerID,
+					biz.AttrSegment:     full.Segment,
+					biz.AttrAmountMinor: full.AmountMinor, biz.AttrCurrency: full.Currency,
+					biz.AttrExponent: full.Exponent, biz.AttrValueKind: full.Kind,
+					biz.AttrAmountEst:   full.Estimated,
+					biz.AttrSLADeadline: "2026-01-02T03:34:05Z",
+					biz.AttrSource:      full.Source, biz.AttrError: full.Err,
+				},
+			},
+			{
+				Name:  "required_only",
+				Note:  "no segment, no deadline, no source, no error, no trace — each must be absent, not empty",
+				Input: minimal,
+				Attrs: map[string]any{
+					biz.AttrFlow: minimal.Flow, biz.AttrStage: minimal.Stage, biz.AttrOutcome: minimal.Result,
+					biz.AttrEntityID: minimal.EntityID, biz.AttrCustomerID: minimal.CustomerID,
+					biz.AttrAmountMinor: minimal.AmountMinor, biz.AttrCurrency: minimal.Currency,
+					biz.AttrExponent: minimal.Exponent, biz.AttrValueKind: minimal.Kind,
+					biz.AttrAmountEst: minimal.Estimated,
+				},
+				Absent: []string{
+					biz.AttrSegment, biz.AttrSLADeadline, biz.AttrSource, biz.AttrError, biz.AttrTraceID,
+				},
+			},
+		},
 	}
 }

@@ -30,16 +30,47 @@ API has been stable for some time; the SDK has not reached 1.0.
   equivalent attributes on the OTLP path):
 
   ```json
-  { "event":"biz.outcome", "flow":"invoice.pay", "stage":"capture",
-    "outcome":"failed", "entity_id":"inv_8Ka…", "customer_id":"h:3f9…",
-    "amount_minor":14900, "currency":"USD", "kind":"fee", "est":false,
-    "deadline":"2026-08-27T14:32:00Z", "trace_id":"…", "source":"stripe:webhook" }
+  { "event":"biz.outcome", "biz.flow":"invoice.pay", "biz.stage":"capture",
+    "biz.outcome":"failed", "biz.entity.id":"inv_8Ka…", "biz.customer.id":"h:3f9…",
+    "biz.amount_minor":14900, "biz.currency":"USD", "biz.exponent":2,
+    "biz.value.kind":"fee", "biz.amount.est":false, "biz.segment":"smb",
+    "biz.sla.deadline":"2026-08-27T14:32:00Z", "source":"stripe:webhook",
+    "error":"card_declined", "trace.id":"…" }
   ```
+
+  **Amended 2026-08-30 (workspace-cnz).** This block previously showed
+  unnamespaced names — `flow`, `entity_id`, `amount_minor`, `kind`, `est`,
+  `deadline`, `trace_id` — which no exporter has ever emitted, while
+  `docs/semconv.md` gave a third spelling again (`biz.entity_id`,
+  `biz.money.amount_minor`, `biz.kind`, `biz.estimated`). The shipped
+  spelling above is now the only one, and it is defined once in code as the
+  `biz.Attr*` constants rather than repeated as literals in each exporter.
+  The bare names were also a collision hazard: an event sink shared with
+  anything else has no reason to reserve `flow` or `kind`.
 
   The fallback path is a `log/slog` handler emitting this shape for shops
   without OTLP; any log pipeline that can ship JSON lines becomes an event
-  sink. A conformance test in `testkit` asserts both transports produce the
-  same fields from the same Outcome.
+  sink.
+
+  `testkit/vectors/outcome-event.json` records the field set for a fully
+  populated Outcome and for one carrying only the required facts, including
+  which names must be **absent** rather than empty, and
+  `testkit.CheckOutcomeEvent` drives every exporter through it.
+
+  **Amended 2026-08-30 (workspace-cnz).** That test is new. This ADR
+  previously asserted "a conformance test in `testkit` asserts both
+  transports produce the same fields from the same Outcome" as though it
+  existed. It did not — the exporter conformance suite checked delivery
+  counts and capability honesty, never field names — and the transports did
+  not in fact agree: `biz.sla.deadline` reached the OTLP event alone, so an
+  operator's event contents depended on which exporter they had wired. The
+  CloudWatch and GCP exporters now emit it too, and the vector is what keeps
+  the claim true instead of aspirational.
+
+  The one declared difference is the trace id: OTLP carries it as the log
+  record's span context, which is what a trace-aware transport should do,
+  so it is absent from that transport's attributes by design rather than
+  missing.
 - **Export failure semantics** (review charter item 6 made contract):
   `Record` never blocks the business request path. Events buffer in a
   bounded in-memory queue (default 10k, configurable); on validation

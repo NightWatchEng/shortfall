@@ -23,14 +23,23 @@ propagated across service boundaries (deny-by-default egress; see ADR-0003).
 | Attribute | Type | Notes |
 |---|---|---|
 | `biz.flow` | string | the business flow, e.g. `invoice.pay`. Bounded (registry-declared). |
-| `biz.entity_id` | string | invoice/order id — the de-dup key. May be reused across attempts; not assumed unique per transaction. |
-| `biz.customer_id` | string | opaque, already-hashed customer handle (`h:...`); never raw PII. |
-| `biz.segment` | string | bounded segment enumeration (e.g. `smb`, `enterprise`). |
-| `biz.money.amount_minor` | int | amount in ISO-4217 **minor units** (integer; never float). |
-| `biz.money.currency` | string | ISO-4217 alphabetic code. |
-| `biz.money.exponent` | int | minor-unit decimal places (0–4), so amount is unambiguous. |
-| `biz.kind` | string | money definition: `gmv` \| `net_revenue` \| `fee` \| `take_rate`. |
-| `biz.estimated` | boolean | true when the amount came from the registry estimator, not observed. |
+| `biz.entity.id` | string | invoice/order id — the de-dup key. May be reused across attempts; not assumed unique per transaction. |
+| `biz.customer.id` | string | opaque, already-hashed customer handle (`h:...`); never raw PII. |
+| `biz.segment` | string | bounded segment enumeration (e.g. `smb`, `enterprise`). Absent, not empty, when the flow declares none. |
+| `biz.amount_minor` | int | amount in ISO-4217 **minor units** (integer; never float). |
+| `biz.currency` | string | ISO-4217 alphabetic code. |
+| `biz.exponent` | int | minor-unit decimal places (0–4), so amount is unambiguous. |
+| `biz.value.kind` | string | money definition: `gmv` \| `net_revenue` \| `fee` \| `take_rate`. |
+| `biz.amount.est` | boolean | true when the amount came from the registry estimator, not observed. |
+| `biz.sla.deadline` | string | RFC-3339 UTC deadline, when the ValueContext carries one. Absent otherwise. |
+
+**Amended 2026-08-30 (workspace-cnz).** This table previously gave
+`biz.entity_id`, `biz.customer_id`, `biz.money.amount_minor`,
+`biz.money.currency`, `biz.money.exponent`, `biz.kind` and `biz.estimated`
+— a third spelling of the same facts, agreeing with neither ADR-0002's
+canonical JSON nor any shipped exporter. The names above are the ones on
+the wire, defined once as the `biz.Attr*` constants and pinned by
+`testkit/vectors/outcome-event.json`. See ADR-0002 for the settlement.
 
 Bounded attributes (`biz.flow`, `biz.segment`, and the metric labels below) are
 the metric-cardinality fence: unbounded values (ids, amounts) ride events/spans,

@@ -19,38 +19,45 @@ import (
 // log-level filter hide exactly the events the realized-loss leg is
 // computed from — the outcome rides the payload, where queries read it.
 
-const eventMarker = "biz.outcome"
+const eventMarker = biz.EventOutcome
 
 // buildEventRecord renders one Outcome as a Cloud Logging structured entry.
 // It carries the exact amount and the entity/customer ids, which ADR-0004
 // keeps off metrics and on events.
 func buildEventRecord(projectID string, o biz.Outcome) ([]byte, error) {
 	rec := map[string]any{
-		"time":             o.At.UTC().Format(time.RFC3339Nano),
-		"severity":         "INFO",
-		"event":            eventMarker,
-		"biz.flow":         o.VC.Flow,
-		"biz.stage":        o.Stage,
-		"biz.outcome":      string(o.Result),
-		"biz.entity.id":    o.VC.EntityID,
-		"biz.customer.id":  o.VC.CustomerID,
-		"biz.amount_minor": o.VC.Money.Amount,
-		"biz.currency":     o.VC.Money.Currency,
-		"biz.exponent":     o.VC.Money.Exponent,
-		"biz.value.kind":   string(o.VC.Kind),
-		"biz.amount.est":   o.VC.Estimated,
+		"time":              o.At.UTC().Format(time.RFC3339Nano),
+		"severity":          "INFO",
+		biz.EventKey:        eventMarker,
+		biz.AttrFlow:        o.VC.Flow,
+		biz.AttrStage:       o.Stage,
+		biz.AttrOutcome:     string(o.Result),
+		biz.AttrEntityID:    o.VC.EntityID,
+		biz.AttrCustomerID:  o.VC.CustomerID,
+		biz.AttrAmountMinor: o.VC.Money.Amount,
+		biz.AttrCurrency:    o.VC.Money.Currency,
+		biz.AttrExponent:    o.VC.Money.Exponent,
+		biz.AttrValueKind:   string(o.VC.Kind),
+		biz.AttrAmountEst:   o.VC.Estimated,
 	}
 	if o.VC.Segment != "" {
-		rec["biz.segment"] = o.VC.Segment
+		rec[biz.AttrSegment] = o.VC.Segment
+	}
+	// The deadline rides every transport that can express it. It was on the
+	// OTLP event alone until workspace-cnz, which made the same Outcome
+	// produce different fields depending on which exporter was wired —
+	// exactly what ADR-0002 says must not happen.
+	if !o.VC.Deadline.IsZero() {
+		rec[biz.AttrSLADeadline] = o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")
 	}
 	if o.Source != "" {
-		rec["source"] = o.Source
+		rec[biz.AttrSource] = o.Source
 	}
 	if o.Err != "" {
-		rec["error"] = o.Err
+		rec[biz.AttrError] = o.Err
 	}
 	if o.TraceID != "" {
-		rec["trace.id"] = o.TraceID
+		rec[biz.AttrTraceID] = o.TraceID
 		if projectID != "" {
 			// The reserved key Cloud Logging correlates with Cloud Trace.
 			rec["logging.googleapis.com/trace"] = fmt.Sprintf("projects/%s/traces/%s", projectID, o.TraceID)

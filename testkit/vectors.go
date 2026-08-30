@@ -35,6 +35,9 @@ const (
 	VectorsDir          = "vectors"
 	VCVectorsFile       = "vc-codec.json"
 	RegistryVectorsFile = "registry.json"
+	// OutcomeEventVectorsFile pins the outcome event's wire contract — the
+	// field names every transport must produce for a given Outcome.
+	OutcomeEventVectorsFile = "outcome-event.json"
 )
 
 // VectorsVersion is the schema version of the vector files themselves.
@@ -518,4 +521,110 @@ func readJSON(path string, into any) error {
 		return fmt.Errorf("%s: %w", path, err)
 	}
 	return nil
+}
+
+// ---- outcome-event vectors ----
+
+// OutcomeEventVectors pins the outcome event's WIRE CONTRACT: for a given
+// biz.Outcome, exactly which attribute names carry which values, and which
+// are absent.
+//
+// ADR-0002 has always said a conformance test asserts both transports
+// produce the same fields from the same Outcome. No such test existed, and
+// the transports did not agree — biz.sla.deadline reached the OTLP event
+// alone, so an operator's event contents depended on which exporter they
+// wired. This file is that test's evidence, and it is JSON rather than Go
+// so a port in another language is held to the same set.
+type OutcomeEventVectors struct {
+	Vectors        string               `json:"vectors"`
+	VectorsVersion int                  `json:"vectors_version"`
+	Note           string               `json:"note"`
+	Cases          []OutcomeEventVector `json:"cases"`
+}
+
+// OutcomeEventVector is one Outcome and the fields it must serialize to.
+// Attrs is exhaustive for the biz.* namespace: a name absent from it must
+// be absent from the event, which is what makes an accidental extra field
+// a failure rather than a silent addition.
+type OutcomeEventVector struct {
+	Name  string            `json:"name"`
+	Note  string            `json:"note,omitempty"`
+	Input OutcomeEventInput `json:"input"`
+	Attrs map[string]any    `json:"attrs"`
+	// Absent names fields that must NOT appear for this input. Listing them
+	// explicitly beats inferring absence: an optional field nobody thought
+	// about is exactly how biz.sla.deadline ended up on one transport.
+	Absent []string `json:"absent,omitempty"`
+}
+
+// OutcomeEventInput is a biz.Outcome in the flat shape a vector file can
+// hold. It is deliberately not biz.Outcome itself: a port reading this file
+// has no Go types, and a Go struct with json tags would make the vector's
+// shape follow the library's rather than the wire's.
+type OutcomeEventInput struct {
+	Flow        string `json:"flow"`
+	Stage       string `json:"stage"`
+	Result      string `json:"result"`
+	EntityID    string `json:"entity_id"`
+	CustomerID  string `json:"customer_id"`
+	Segment     string `json:"segment,omitempty"`
+	AmountMinor int64  `json:"amount_minor"`
+	Currency    string `json:"currency"`
+	Exponent    int8   `json:"exponent"`
+	Kind        string `json:"kind"`
+	Estimated   bool   `json:"estimated"`
+	Deadline    string `json:"deadline,omitempty"`
+	Source      string `json:"source,omitempty"`
+	Err         string `json:"err,omitempty"`
+	TraceID     string `json:"trace_id,omitempty"`
+}
+
+// Names lists every case name, for the uniqueness guard.
+func (v OutcomeEventVectors) Names() []string {
+	names := make([]string, 0, len(v.Cases))
+	for _, c := range v.Cases {
+		names = append(names, "case/"+c.Name)
+	}
+	return names
+}
+
+// LoadOutcomeEventVectors reads an outcome-event vector file.
+func LoadOutcomeEventVectors(path string) (OutcomeEventVectors, error) {
+	var v OutcomeEventVectors
+	if err := readJSON(path, &v); err != nil {
+		return OutcomeEventVectors{}, err
+	}
+	if v.VectorsVersion != VectorsVersion {
+		return OutcomeEventVectors{}, fmt.Errorf("%s: vectors_version %d, this build understands %d", path, v.VectorsVersion, VectorsVersion)
+	}
+	return v, nil
+}
+
+// Outcome rebuilds the biz.Outcome a vector describes, so an exporter test
+// serializes the same input every other transport does.
+func (in OutcomeEventInput) Outcome() (biz.Outcome, error) {
+	o := biz.Outcome{
+		Stage:   in.Stage,
+		Result:  biz.Result(in.Result),
+		Source:  in.Source,
+		Err:     in.Err,
+		TraceID: in.TraceID,
+		VC: biz.ValueContext{
+			Flow:       in.Flow,
+			EntityID:   in.EntityID,
+			CustomerID: in.CustomerID,
+			Segment:    in.Segment,
+			Money:      biz.Money{Amount: in.AmountMinor, Currency: in.Currency, Exponent: in.Exponent},
+			Kind:       biz.Kind(in.Kind),
+			Estimated:  in.Estimated,
+		},
+	}
+	if in.Deadline != "" {
+		d, err := time.Parse(time.RFC3339, in.Deadline)
+		if err != nil {
+			return biz.Outcome{}, fmt.Errorf("deadline %q: %w", in.Deadline, err)
+		}
+		o.VC.Deadline = d
+	}
+	return o, nil
 }

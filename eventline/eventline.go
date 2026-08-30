@@ -13,7 +13,13 @@ import (
 	"github.com/NightWatchEng/shortfall/biz"
 )
 
-// line mirrors the exporter's field set. Source has two accepted
+// line mirrors the exporter's field set. Its json tags must equal the
+// biz.Attr* constants, and TestLineTagsMatchTheWireContract asserts exactly
+// that: struct tags cannot reference a constant, so this is the one place
+// the wire names are unavoidably respelled, and a test rather than the
+// compiler is what keeps the copy honest (workspace-cnz).
+//
+// Source has two accepted
 // spellings on the wire: "source" (what the EMF exporter writes) and
 // "source_system" (kept for records ingested by since-removed exporters
 // whose envelope reserved "source").
