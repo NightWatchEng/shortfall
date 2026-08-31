@@ -27,6 +27,18 @@ expect fail "unknown type"                     "feet: add Money type (workspace-
 expect fail "missing tracked-item id"          "feat: add Money type"
 expect fail "scoped type"                      "feat(emit): add thing (workspace-abc.1)"
 
+# Bundled-PR form: several ids in one parens, single-space separated — the
+# ONE multi-id spelling (workspace-53y). Commas and doubled spaces stay
+# rejected so the convention has exactly one canonical shape.
+expect pass "two ids, space separated"          "fix: close two beads at once (workspace-abc workspace-x.2)"
+expect pass "three ids, space separated"        "ci: sweep the scripts (workspace-a1 workspace-b2 workspace-c3)"
+expect pass "multi-id with squash suffix"       "fix: close two beads at once (workspace-abc workspace-x.2) (#34)"
+expect fail "comma-separated ids"               "fix: close two beads at once (workspace-abc, workspace-x.2)"
+expect fail "comma without space"               "fix: close two beads at once (workspace-abc,workspace-x.2)"
+expect fail "doubled space between ids"         "fix: close two beads at once (workspace-abc  workspace-x.2)"
+expect fail "trailing space inside parens"      "fix: close two beads at once (workspace-abc )"
+expect fail "bare second id without prefix"     "fix: close two beads at once (workspace-abc x.2)"
+
 # Byte-length cap: exactly 100 bytes passes, 101 fails.
 h100="feat: $filler (no-bead: len888)"  # 6+76+18 = 100 bytes
 [ "$(printf '%s' "$h100" | LC_ALL=C wc -c | tr -d ' ')" = 100 ] || { echo "FAIL: h100 fixture is not 100 bytes" >&2; fails=$((fails + 1)); }

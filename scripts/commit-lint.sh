@@ -1,6 +1,8 @@
 #!/bin/sh
 # Lint one commit-message (or PR-title) header against the repo convention:
 #   type: summary (tracked-item-id)   or   type: summary (no-bead: reason)
+# A bundled PR lists every id it closes in the one parens, single-space
+# separated: (workspace-a workspace-b) — the only multi-id spelling.
 # Types: feat fix docs chore test refactor perf ci build revert — no scopes;
 # the convention is documented scope-free in CONTRIBUTING.md and the
 # changelog filters rely on unscoped prefixes.
@@ -47,11 +49,13 @@ if [ "$len" -gt 100 ]; then
 fi
 
 if ! printf '%s' "$header" | grep -Eq \
-  '^(feat|fix|docs|chore|test|refactor|perf|ci|build|revert): .+ \((workspace-[a-z0-9.]+|no-bead: [^)]+)\)( \(#[0-9]+\))?$'; then
+  '^(feat|fix|docs|chore|test|refactor|perf|ci|build|revert): .+ \((workspace-[a-z0-9.]+( workspace-[a-z0-9.]+)*|no-bead: [^)]+)\)( \(#[0-9]+\))?$'; then
   cat >&2 <<EOF
 commit-lint: header does not match the convention:
   type: summary (tracked-item-id)      e.g.  feat: add Money type (workspace-abc.1)
+  type: summary (id-1 id-2)            e.g.  fix: close both beads (workspace-a workspace-b)
   type: summary (no-bead: reason)      e.g.  chore: fix typo (no-bead: trivial)
+A bundled PR lists every id it closes, single-space separated, in one parens.
 Types (no scopes): feat fix docs chore test refactor perf ci build revert
 Got: $header
 EOF
