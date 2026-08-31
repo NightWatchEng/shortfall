@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "af09549021603ca5dde85337c70eb672551dcc3c",
+  "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-31T00:40:18+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude sonnet, isolated headless claude -p process (fork cannot spawn Agent subagents; contexts isolated, split memory honored \u2014 both recalls empty)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude sonnet, isolated headless claude -p process; received only the findings list and the review package, per graph.yaml (single arbiter)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T00:40:18+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "af09549021603ca5dde85337c70eb672551dcc3c",
+      "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/c4-l2-containers.md",
+      "line": 103,
+      "severity": "MEDIUM",
+      "finding": "Key-facts bullet 'go through emit like everything else' alleged to contradict the rerouted stripe edge",
+      "evidence": "Edge table: 'adapters/payment/stripe -> your code | ... your code is what calls Record. The adapter takes no dependency on emit' vs Key facts: 'they become biz.Outcomes and go through emit like everything else'",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by cross-examiner: the diagram draws PAY->CODE and CODE->EMIT, so the bullet's runtime-dataflow claim (outcomes reach emit via your code's Record) and the edge table's import-graph claim (adapter takes no emit dependency) describe the same path at different levels; no contradiction.",
+      "id": "d7aede3415578706"
+    },
+    {
+      "ts": "2026-08-31T00:40:18+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "af09549021603ca5dde85337c70eb672551dcc3c",
+      "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0018-provider-call-writer.md",
+      "line": 113,
+      "severity": "MEDIUM",
+      "finding": "Amendment note attributed to workspace-v42, alleged unresolvable id",
+      "evidence": "'**Amended 2026-08-30 (workspace-v42)**: at acceptance this bullet said the suite \"still never seeds this family\"' \u2014 commit message names workspace-v42 as this edit's bead",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by cross-examiner: workspace-v42 is the tracked bead id for exactly this ADR-0018 edit, named in this commit's own message; bead ids (workspace-crg, workspace-cnz, workspace-8yq) are this repo's established amendment attribution convention.",
+      "id": "e44558a4dc0a7791"
+    },
+    {
+      "ts": "2026-08-31T00:40:18+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "af09549021603ca5dde85337c70eb672551dcc3c",
+      "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/docsnippets",
+      "file": "test/docsnippets/snippets_test.go",
+      "line": 136,
+      "severity": "LOW",
+      "finding": "TestDocRegistryFencesValidate's doc list omitted docs/inhouse.md although its Go fences are newly governed, leaving its complete registry example mechanically unchecked",
+      "evidence": "docs := []string{...} lacked docs/inhouse.md while checkedDocs gained it; no TestDocRegistryFencesValidate/docs_inhouse.md subtest ran",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Confirmed by cross-examiner; fixed in commit 'test: registry-fence validator covers docs/inhouse.md (workspace-lc8)' \u2014 the docs_inhouse.md subtest now runs and passes.",
+      "id": "0c2a22e5d7137ef0"
+    }
+  ]
+}
