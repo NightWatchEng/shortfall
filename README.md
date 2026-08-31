@@ -343,7 +343,8 @@ adapters not written by the authors.
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 In plain words: you may use, modify, and redistribute this library, in
-commercial and private work, without asking. What you must preserve is
-the attribution — the copyright and license notices in the source, and
-the [NOTICE](NOTICE) file naming the author, travel with any copy or
-derivative you ship.
+commercial and private work, without asking. When you redistribute a
+copy or derivative, the license's conditions travel with it: keep the
+copyright and license notices in the source and the [NOTICE](NOTICE)
+file naming the author, include a copy of the [LICENSE](LICENSE), and
+mark the files you changed as changed.
