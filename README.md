@@ -57,6 +57,11 @@ Deterministic and estimated legs are never summed into one figure.
 go get github.com/NightWatchEng/shortfall
 ```
 
+**Not yet:** the repository is private, so the checksum database cannot
+verify the module and `go get` fails. Until the flip, clone it and use a
+`replace` directive — the [quickstart](docs/quickstart.md) has the exact
+steps.
+
 The core module pulls `otel` and `yaml.v3` and nothing else. Every
 adapter under `adapters/` is a separate nested module, so a Prometheus
 shop never compiles the AWS SDK and nobody compiles stripe-go by
