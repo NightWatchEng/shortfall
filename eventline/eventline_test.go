@@ -96,11 +96,14 @@ func TestParse(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 					t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if got.At != c.want.At || got.Stage != c.want.Stage || got.Result != c.want.Result ||
 				got.Source != c.want.Source || got.Err != c.want.Err || got.VC != c.want.VC {
 				t.Fatalf("parsed = %+v\nwant     %+v", got, c.want)

@@ -46,6 +46,7 @@ func buildEventRecord(projectID string, o biz.Outcome) ([]byte, error) {
 	if o.VC.Segment != "" {
 		rec[biz.AttrSegment] = o.VC.Segment
 	}
+
 	// The deadline rides every transport that can express it. It was on the
 	// OTLP event alone, which made the same Outcome produce different fields
 	// depending on which exporter was wired — exactly what ADR-0002 says
@@ -53,12 +54,15 @@ func buildEventRecord(projectID string, o biz.Outcome) ([]byte, error) {
 	if !o.VC.Deadline.IsZero() {
 		rec[biz.AttrSLADeadline] = o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")
 	}
+
 	if o.Source != "" {
 		rec[biz.AttrSource] = o.Source
 	}
+
 	if o.Err != "" {
 		rec[biz.AttrError] = o.Err
 	}
+
 	if o.TraceID != "" {
 		rec[biz.AttrTraceID] = o.TraceID
 		if projectID != "" {
@@ -66,5 +70,6 @@ func buildEventRecord(projectID string, o biz.Outcome) ([]byte, error) {
 			rec["logging.googleapis.com/trace"] = fmt.Sprintf("projects/%s/traces/%s", projectID, o.TraceID)
 		}
 	}
+
 	return json.Marshal(rec)
 }

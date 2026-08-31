@@ -70,6 +70,7 @@ func TestSummaryDegradedLegs(t *testing.T) {
 			t.Fatalf("summary missing %q: %q", must, got)
 		}
 	}
+
 	if strings.Contains(got, "suggested") {
 		t.Fatalf("no severity suggestion should render when empty: %q", got)
 	}
@@ -115,6 +116,7 @@ func TestSummaryUnavailableLegsSayNA(t *testing.T) {
 			if !strings.Contains(got, c.want) {
 				t.Fatalf("summary missing %q: %q", c.want, got)
 			}
+
 			if strings.Contains(got, c.notWant) {
 				t.Fatalf("summary must not render %q for an unavailable leg: %q", c.notWant, got)
 			}

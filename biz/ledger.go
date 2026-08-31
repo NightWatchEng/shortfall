@@ -27,14 +27,18 @@ func (r LedgerRow) Validate() error {
 	default:
 		return fmt.Errorf("biz: ledger row outcome %q is not success/failed/deferred", r.Outcome)
 	}
+
 	if err := r.Money.Validate(); err != nil {
 		return fmt.Errorf("biz: ledger row money: %w", err)
 	}
+
 	if r.Count < 0 {
 		return fmt.Errorf("biz: ledger row count %d is negative", r.Count)
 	}
+
 	if r.Count == 0 && r.Money.Amount != 0 {
 		return fmt.Errorf("biz: ledger row has summed amount %d over zero records", r.Money.Amount)
 	}
+
 	return nil
 }

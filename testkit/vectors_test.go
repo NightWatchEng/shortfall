@@ -34,6 +34,7 @@ func loadVC(t *testing.T) VCVectors {
 	if err != nil {
 		t.Fatalf("load biz.vc vectors (regenerate with genvectors from the repo root): %v", err)
 	}
+
 	return v
 }
 
@@ -43,6 +44,7 @@ func loadRegistryVectors(t *testing.T) RegistryVectors {
 	if err != nil {
 		t.Fatalf("load registry vectors (regenerate with genvectors from the repo root): %v", err)
 	}
+
 	return v
 }
 
@@ -53,24 +55,30 @@ func TestVCVectorHeader(t *testing.T) {
 	if v.MaxEncodedBytes != biz.MaxEncodedBytes {
 		t.Errorf("vectors cap %d != biz.MaxEncodedBytes %d", v.MaxEncodedBytes, biz.MaxEncodedBytes)
 	}
+
 	if v.MemberKey != biz.MemberKey {
 		t.Errorf("vectors member key %q != biz.MemberKey %q", v.MemberKey, biz.MemberKey)
 	}
+
 	if len(v.FieldOrder) != 11 {
 		t.Fatalf("field order has %d fields, the version-1 wire form has 11: %v", len(v.FieldOrder), v.FieldOrder)
 	}
+
 	if v.Delimiter != "|" {
 		t.Errorf("delimiter %q, want |", v.Delimiter)
 	}
+
 	if len(v.Encode) == 0 {
 		t.Fatal("no encode vectors")
 	}
+
 	// The codec version is not an exported Go constant; it is observable
 	// as the leading field of any canonical encoding.
 	enc, err := biz.EncodeVC(v.Encode[0].VC.ValueContext())
 	if err != nil {
 		t.Fatalf("encode first vector: %v", err)
 	}
+
 	if got := strings.SplitN(enc, v.Delimiter, 2)[0]; got != v.CodecVersion {
 		t.Errorf("implementation emits version %q, vectors declare %q", got, v.CodecVersion)
 	}
@@ -86,19 +94,24 @@ func TestVCEncodeVectors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("encode: %v", err)
 			}
+
 			if got != vec.Encoded {
 				t.Fatalf("encoding drifted\n got %q\nwant %q", got, vec.Encoded)
 			}
+
 			if n := len(strings.Split(got, v.Delimiter)); n != len(v.FieldOrder) {
 				t.Fatalf("encoding has %d fields, header declares %d", n, len(v.FieldOrder))
 			}
+
 			if len(got) > v.MaxEncodedBytes {
 				t.Fatalf("encoding is %d bytes, past the %d cap", len(got), v.MaxEncodedBytes)
 			}
+
 			back, err := biz.DecodeVC(got)
 			if err != nil {
 				t.Fatalf("decode of own encoding: %v", err)
 			}
+
 			if VCOf(back) != vec.VC {
 				t.Fatalf("round trip drifted\n got %+v\nwant %+v", VCOf(back), vec.VC)
 			}
@@ -118,16 +131,20 @@ func TestVCDecodeVectors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decode %q: %v", vec.Encoded, err)
 			}
+
 			if VCOf(got) != vec.VC {
 				t.Fatalf("decoded context drifted\n got %+v\nwant %+v", VCOf(got), vec.VC)
 			}
+
 			canon, err := biz.EncodeVC(got)
 			if err != nil {
 				t.Fatalf("re-encode: %v", err)
 			}
+
 			if canon != vec.Canonical {
 				t.Fatalf("canonical form drifted\n got %q\nwant %q", canon, vec.Canonical)
 			}
+
 			if len(canon) > len(vec.Encoded) {
 				t.Fatalf("re-encoding grew (%d > %d bytes) — the size cap would not survive a hop",
 					len(canon), len(vec.Encoded))
@@ -146,10 +163,12 @@ func TestVCRejectVectors(t *testing.T) {
 			if vec.VC == nil {
 				t.Fatal("encode rejection vector carries no context")
 			}
+
 			_, err := biz.EncodeVC(vec.VC.ValueContext())
 			assertRejected(t, err, vec, classes)
 		})
 	}
+
 	for _, vec := range v.DecodeReject {
 		t.Run("decode/"+vec.Name, func(t *testing.T) {
 			_, err := biz.DecodeVC(vec.Encoded)
@@ -163,9 +182,11 @@ func assertRejected(t *testing.T, err error, vec RejectVector, classes map[strin
 	if err == nil {
 		t.Fatalf("accepted an input the contract rejects (class %s)", vec.Error)
 	}
+
 	if !classes[vec.Error] {
 		t.Fatalf("rejection class %q is not declared", vec.Error)
 	}
+
 	if err.Error() != vec.ReferenceMessage {
 		t.Fatalf("reference wording drifted\n got %q\nwant %q", err.Error(), vec.ReferenceMessage)
 	}
@@ -179,11 +200,13 @@ func TestVCVectorsAreNotVacuous(t *testing.T) {
 		t.Fatalf("vector counts collapsed: encode %d, decode %d, encode_reject %d, decode_reject %d",
 			len(v.Encode), len(v.Decode), len(v.EncodeReject), len(v.DecodeReject))
 	}
+
 	assertUniqueNames(t, v.Names())
 	used := map[string]bool{}
 	for _, vec := range append(append([]RejectVector{}, v.EncodeReject...), v.DecodeReject...) {
 		used[vec.Error] = true
 	}
+
 	for _, class := range VCErrorClasses {
 		if !used[class] {
 			t.Errorf("declared rejection class %q has no vector — a contract nothing exercises is a wish", class)
@@ -201,6 +224,7 @@ func TestRegistryAcceptVectors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("valid registry rejected: %v", err)
 			}
+
 			got := FactsOf(reg)
 			if !got.Equal(vec.Facts) {
 				t.Fatalf("derived facts drifted\n got %s\nwant %s", got, vec.Facts)
@@ -248,11 +272,13 @@ func TestRegistryDurationVectors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("rejected %q: %v", vec.Input, err)
 			}
+
 			if got := int64(d.Seconds()); got != vec.Seconds {
 				t.Fatalf("%q = %ds, want %ds", vec.Input, got, vec.Seconds)
 			}
 		})
 	}
+
 	for _, vec := range v.DurationReject {
 		t.Run("reject/"+vec.Name, func(t *testing.T) {
 			if _, err := registry.ParseISODuration(vec.Input); err == nil {
@@ -271,6 +297,7 @@ func TestRegistryVectorsAreNotVacuous(t *testing.T) {
 		t.Fatalf("vector counts collapsed: accept %d, reject %d, hosts %d, duration %d/%d",
 			len(v.Accept), len(v.Reject), len(v.HostAllowlist), len(v.Duration), len(v.DurationReject))
 	}
+
 	assertUniqueNames(t, v.Names())
 	// Both host verdicts must appear, or the fence vectors would pass an
 	// implementation that answers a constant.
@@ -282,13 +309,16 @@ func TestRegistryVectorsAreNotVacuous(t *testing.T) {
 			denied++
 		}
 	}
+
 	if allowed == 0 || denied == 0 {
 		t.Fatalf("host vectors are one-sided: %d allowed, %d denied", allowed, denied)
 	}
+
 	used := map[string]bool{}
 	for _, vec := range v.Reject {
 		used[vec.Error] = true
 	}
+
 	for _, class := range RegistryErrorClasses {
 		if !used[class] {
 			t.Errorf("declared rejection class %q has no vector", class)
@@ -305,6 +335,7 @@ func TestPortabilityDocMatchesVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v", portabilityDoc, err)
 	}
+
 	doc := string(raw)
 	vc := loadVC(t)
 	for _, class := range append(append([]string{}, VCErrorClasses...), RegistryErrorClasses...) {
@@ -312,6 +343,7 @@ func TestPortabilityDocMatchesVectors(t *testing.T) {
 			t.Errorf("%s does not name rejection class %q", portabilityDoc, class)
 		}
 	}
+
 	for _, want := range []string{
 		biz.MemberKey,
 		strconv.Itoa(biz.MaxEncodedBytes),
@@ -454,14 +486,17 @@ func TestRegistryFactsRenderingSurfacesItsError(t *testing.T) {
 	if _, err := bad.JSON(); err == nil {
 		t.Fatal("JSON reported no error for a fact set encoding/json cannot render")
 	}
+
 	if s := bad.String(); !strings.Contains(s, "unrenderable") {
 		t.Fatalf("String = %q, want it to name the rendering failure", s)
 	}
+
 	good := RegistryFacts{Version: 1, Segments: []string{"smb"}, Flows: map[string]FlowFact{}}
 	js, err := good.JSON()
 	if err != nil {
 		t.Fatalf("JSON errored on a renderable fact set: %v", err)
 	}
+
 	if js != good.String() {
 		t.Fatalf("String %q disagrees with JSON %q for a renderable fact set", good.String(), js)
 	}
@@ -472,6 +507,7 @@ func setOf(ss []string) map[string]bool {
 	for _, s := range ss {
 		m[s] = true
 	}
+
 	return m
 }
 
@@ -482,9 +518,11 @@ func assertUniqueNames(t *testing.T, names []string) {
 		if n == "" {
 			t.Error("a vector has an empty name")
 		}
+
 		if seen[n] {
 			t.Errorf("vector name %q is used twice — one of them is unreachable in a failure report", n)
 		}
+
 		seen[n] = true
 	}
 }

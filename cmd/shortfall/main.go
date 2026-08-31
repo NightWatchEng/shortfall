@@ -30,6 +30,7 @@ func run(args []string) int {
 		usage()
 		return 2
 	}
+
 	switch args[0] {
 	case "--version", "version":
 		fmt.Printf("shortfall %s (%s)\n", version, commit)
@@ -39,11 +40,13 @@ func run(args []string) int {
 			fmt.Fprintln(os.Stderr, "usage: shortfall validate <registry.yaml>")
 			return 2
 		}
+
 		reg, err := registry.Load(args[1])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
+
 		fmt.Printf("%s: ok — %d flow(s), %d segment(s)\n", args[1], len(reg.FlowNames()), len(reg.Segments))
 		return 0
 	case "impact":

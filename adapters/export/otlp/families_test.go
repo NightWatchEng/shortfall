@@ -35,18 +35,22 @@ func TestEveryFamilyMapsToItsKind(t *testing.T) {
 			if err != nil {
 				t.Fatalf("build: %v", err)
 			}
+
 			metrics := rm.ScopeMetrics[0].Metrics
 			if len(metrics) != 1 {
 				t.Fatalf("got %d metrics, want 1", len(metrics))
 			}
+
 			switch d := metrics[0].Data.(type) {
 			case metricdata.Sum[int64]:
 				if c.wantKind != "sum" {
 					t.Fatalf("%s mapped to a sum, want %s", c.family, c.wantKind)
 				}
+
 				if d.Temporality != metricdata.DeltaTemporality {
 					t.Errorf("%s temporality = %v, want delta — emit hands out deltas, not running totals", c.family, d.Temporality)
 				}
+
 				if !d.IsMonotonic {
 					t.Errorf("%s must be monotonic", c.family)
 				}
@@ -83,6 +87,7 @@ func TestAmountsNeverUseAFloatInstrument(t *testing.T) {
 			if err != nil {
 				t.Fatalf("build: %v", err)
 			}
+
 			for _, m := range rm.ScopeMetrics[0].Metrics {
 				switch d := m.Data.(type) {
 				case metricdata.Sum[float64], metricdata.Gauge[float64]:
@@ -115,13 +120,16 @@ func TestPointsKeepTheirObservationTime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
+
 	sum, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
 	if !ok {
 		t.Fatalf("biz_txn_total is not an int64 sum")
 	}
+
 	if len(sum.DataPoints) != 2 {
 		t.Fatalf("got %d points, want 2", len(sum.DataPoints))
 	}
+
 	if !sum.DataPoints[0].Time.Equal(earlier) || !sum.DataPoints[1].Time.Equal(at) {
 		t.Errorf("points restamped: got %v and %v, want %v and %v",
 			sum.DataPoints[0].Time, sum.DataPoints[1].Time, earlier, at)

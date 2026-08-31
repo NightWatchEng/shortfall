@@ -25,11 +25,13 @@ func TestOutcomeEventContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load vectors: %v", err)
 	}
+
 	problems := testkit.CheckOutcomeEvent(v, func(o biz.Outcome) (map[string]any, error) {
 		m := map[string]any{}
 		for _, kv := range outcomeAttrs(o) {
 			m[string(kv.Key)] = kv.Value.AsInterface()
 		}
+
 		return m, nil
 	}, biz.AttrTraceID)
 	for _, p := range problems {

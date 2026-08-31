@@ -42,6 +42,7 @@ func buildIncident(nEvents int) *memq.Querier {
 		if i%3 == 0 {
 			result = biz.ResultSuccess // a third recover / succeed
 		}
+
 		events = append(events, biz.Outcome{
 			At:    benchWindow.From.Add(time.Duration(i) * stride),
 			Stage: "capture", Result: result,
@@ -55,6 +56,7 @@ func buildIncident(nEvents int) *memq.Querier {
 			},
 		})
 	}
+
 	// In-flight gauge levels: one per (stage, bucket, currency) at the snapshot.
 	var metrics []emit.MetricPoint
 	for _, stage := range []string{"capture", "settle"} {
@@ -69,6 +71,7 @@ func buildIncident(nEvents int) *memq.Querier {
 			}
 		}
 	}
+
 	return memq.New(memq.WithEvents(events), memq.WithMetrics(metrics))
 }
 
@@ -92,6 +95,7 @@ func BenchmarkCompute(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	req := Request{Window: benchWindow, Flows: []string{"invoice.pay"}}
 	for _, n := range []int{50_000, 200_000} {
 		q := buildIncident(n)
@@ -102,6 +106,7 @@ func BenchmarkCompute(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
+
 				if len(rep.Realized.ByCurrency) == 0 {
 					b.Fatal("benchmark computed an empty realized leg — dataset wrong")
 				}

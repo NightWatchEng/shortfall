@@ -29,10 +29,12 @@ func ParseISODuration(s string) (time.Duration, error) {
 	if !ok || rest == "" {
 		return fail()
 	}
+
 	datePart, timePart, hasT := strings.Cut(rest, "T")
 	if hasT && timePart == "" {
 		return fail()
 	}
+
 	// All arithmetic in whole seconds, bounded at every step.
 	var totalSec int64
 	parseUnits := func(part string, units map[byte]int64, order string) error {
@@ -42,18 +44,22 @@ func ParseISODuration(s string) (time.Duration, error) {
 			for i < len(part) && part[i] >= '0' && part[i] <= '9' {
 				i++
 			}
+
 			if i == 0 || i >= len(part) {
 				return fmt.Errorf("bad")
 			}
+
 			unit := part[i]
 			perUnitSec, ok := units[unit]
 			if !ok {
 				return fmt.Errorf("bad")
 			}
+
 			idx := strings.IndexByte(order, unit)
 			if idx <= lastIdx {
 				return fmt.Errorf("bad")
 			}
+
 			lastIdx = idx
 			var n int64
 			for j := 0; j < i; j++ {
@@ -62,15 +68,19 @@ func ParseISODuration(s string) (time.Duration, error) {
 					return fmt.Errorf("bad")
 				}
 			}
+
 			if n > maxDurationSeconds/perUnitSec {
 				return fmt.Errorf("bad")
 			}
+
 			totalSec += n * perUnitSec
 			if totalSec > maxDurationSeconds {
 				return fmt.Errorf("bad")
 			}
+
 			part = part[i+1:]
 		}
+
 		return nil
 	}
 	if datePart != "" {
@@ -78,13 +88,16 @@ func ParseISODuration(s string) (time.Duration, error) {
 			return fail()
 		}
 	}
+
 	if hasT {
 		if err := parseUnits(timePart, map[byte]int64{'H': 3600, 'M': 60, 'S': 1}, "HMS"); err != nil {
 			return fail()
 		}
 	}
+
 	if totalSec <= 0 {
 		return fail()
 	}
+
 	return time.Duration(totalSec) * time.Second, nil
 }

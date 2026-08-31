@@ -49,20 +49,25 @@ func TestWriteImpactPayload(t *testing.T) {
 	if err := c.WriteImpact(context.Background(), "01INCIDENT", fixtureReport()); err != nil {
 		t.Fatal(err)
 	}
+
 	if gotPath != "POST /v2/incidents/01INCIDENT/actions/edit" {
 		t.Fatalf("path = %q", gotPath)
 	}
+
 	if gotAuth != "Bearer inc_test_key" || gotCT != "application/json" {
 		t.Fatalf("headers = %q / %q", gotAuth, gotCT)
 	}
+
 	if notify, ok := gotBody["notify_incident_channel"].(bool); !ok || notify {
 		t.Fatalf("notify_incident_channel = %v, want false", gotBody["notify_incident_channel"])
 	}
+
 	entries := gotBody["incident"].(map[string]any)["custom_field_entries"].([]any)
 	entry := entries[0].(map[string]any)
 	if entry["custom_field_id"] != "01CUSTOMFIELD" {
 		t.Fatalf("custom_field_id = %v", entry["custom_field_id"])
 	}
+
 	text := entry["values"].([]any)[0].(map[string]any)["value_text"].(string)
 	if !strings.Contains(text, "realized [deterministic] USD 16999") || !strings.Contains(text, "suggested SEV2") {
 		t.Fatalf("value_text = %q", text)

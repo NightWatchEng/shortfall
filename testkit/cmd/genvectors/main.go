@@ -39,10 +39,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "genvectors: run from the repo root")
 		os.Exit(2)
 	}
+
 	dir := filepath.Join("testkit", testkit.VectorsDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fail(err)
 	}
+
 	write(filepath.Join(dir, testkit.VCVectorsFile), buildVCVectors())
 	write(filepath.Join(dir, testkit.RegistryVectorsFile), buildRegistryVectors())
 	write(filepath.Join(dir, testkit.OutcomeEventVectorsFile), buildOutcomeEventVectors())
@@ -60,9 +62,11 @@ func write(path string, v any) {
 	if err != nil {
 		fail(err)
 	}
+
 	if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
 		fail(err)
 	}
+
 	fmt.Printf("wrote %s (%d bytes)\n", path, len(b)+1)
 }
 
@@ -73,6 +77,7 @@ func unixOf(rfc3339 string) int64 {
 	if err != nil {
 		fail(err)
 	}
+
 	return t.Unix()
 }
 
@@ -134,13 +139,16 @@ func buildVCVectors() testkit.VCVectors {
 		if err != nil {
 			failf("encode case %s was expected to encode: %v", c.name, err)
 		}
+
 		back, err := biz.DecodeVC(enc)
 		if err != nil {
 			failf("encode case %s does not round trip: %v", c.name, err)
 		}
+
 		if testkit.VCOf(back) != c.vc {
 			failf("encode case %s round-trips to a different context", c.name)
 		}
+
 		encode = append(encode, testkit.EncodeVector{Name: c.name, Note: c.note, VC: c.vc, Encoded: enc})
 	}
 
@@ -170,6 +178,7 @@ func buildVCVectors() testkit.VCVectors {
 		if err == nil {
 			failf("encode rejection case %s was accepted", c.name)
 		}
+
 		encodeReject = append(encodeReject, testkit.RejectVector{
 			Name: c.name, Note: c.note, VC: &vc,
 			Error: c.class, ReferenceMessage: err.Error(),
@@ -216,13 +225,16 @@ func buildVCVectors() testkit.VCVectors {
 		if err != nil {
 			failf("decode case %s was expected to decode: %v", c.name, err)
 		}
+
 		canon, err := biz.EncodeVC(vc)
 		if err != nil {
 			failf("decode case %s does not re-encode: %v", c.name, err)
 		}
+
 		if len(canon) > len(c.in) {
 			failf("decode case %s re-encodes longer than its input", c.name)
 		}
+
 		decode = append(decode, testkit.DecodeVector{
 			Name: c.name, Note: c.note, Encoded: c.in, VC: testkit.VCOf(vc), Canonical: canon,
 		})
@@ -232,6 +244,7 @@ func buildVCVectors() testkit.VCVectors {
 	if err != nil {
 		fail(err)
 	}
+
 	decodeRejectCases := []struct {
 		name, note, class, in string
 	}{
@@ -268,6 +281,7 @@ func buildVCVectors() testkit.VCVectors {
 		if err == nil {
 			failf("decode rejection case %s was accepted", c.name)
 		}
+
 		decodeReject = append(decodeReject, testkit.RejectVector{
 			Name: c.name, Note: c.note, Encoded: c.in,
 			Error: c.class, ReferenceMessage: err.Error(),
@@ -352,17 +366,21 @@ func sub(pairs ...string) string {
 	if len(pairs)%2 != 0 {
 		failf("sub: odd argument count")
 	}
+
 	out := baseYAML
 	for i := 0; i < len(pairs); i += 2 {
 		old, new := pairs[i], pairs[i+1]
 		if !strings.Contains(out, old) {
 			failf("sub: %q is not in the base registry", old)
 		}
+
 		if strings.Count(out, old) != 1 {
 			failf("sub: %q appears %d times in the base registry", old, strings.Count(out, old))
 		}
+
 		out = strings.Replace(out, old, new, 1)
 	}
+
 	return out
 }
 
@@ -384,6 +402,7 @@ func buildRegistryVectors() testkit.RegistryVectors {
 		if err != nil {
 			failf("acceptance case %s was rejected: %v", c.name, err)
 		}
+
 		accept = append(accept, testkit.RegistryAcceptVector{
 			Name: c.name, Note: c.note, YAML: c.yaml, Facts: testkit.FactsOf(reg),
 		})
@@ -443,6 +462,7 @@ func buildRegistryVectors() testkit.RegistryVectors {
 		if err == nil {
 			failf("rejection case %s was accepted", c.name)
 		}
+
 		reject = append(reject, testkit.RegistryRejectVector{
 			RejectVector: testkit.RejectVector{
 				Name: c.name, Note: c.note, Error: c.class, ReferenceMessage: err.Error(),
@@ -504,6 +524,7 @@ func buildRegistryVectors() testkit.RegistryVectors {
 		if err != nil {
 			failf("duration case %s was rejected: %v", d.Name, err)
 		}
+
 		if int64(got.Seconds()) != d.Seconds {
 			failf("duration case %s: implementation says %ds, the vector claims %ds", d.Name, int64(got.Seconds()), d.Seconds)
 		}

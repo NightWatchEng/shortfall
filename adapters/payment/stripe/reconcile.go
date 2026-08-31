@@ -75,20 +75,24 @@ func Reconcile(ctx context.Context, fetch PageFunc, since time.Time) (Ledger, er
 		if err := ctx.Err(); err != nil {
 			return Ledger{}, err
 		}
+
 		page, err := fetch(ctx, since, cursor)
 		if err != nil {
 			return Ledger{}, fmt.Errorf("stripe: reconcile page (after %q): %w", cursor, err)
 		}
+
 		for _, pi := range page.Intents {
 			if pi == nil {
 				continue
 			}
+
 			led.Scanned++
 			outcome, ok := classify(pi)
 			if !ok {
 				led.Skipped++
 				continue
 			}
+
 			currency := strings.ToUpper(string(pi.Currency))
 			k := key{flow: pi.Metadata[MetaFlow], currency: currency, outcome: outcome}
 			a := agg[k]
@@ -96,18 +100,22 @@ func Reconcile(ctx context.Context, fetch PageFunc, since time.Time) (Ledger, er
 				a = &acc{exponent: currencyExponent(currency)}
 				agg[k] = a
 			}
+
 			a.sum += pi.Amount // intended amount — see the Reconcile doc on the basis choice
 			a.count++
 		}
+
 		// Stop on the provider's signal, or defensively if a page claims more
 		// but cannot advance the cursor (empty page, or an id we already used).
 		if !page.HasMore || len(page.Intents) == 0 {
 			break
 		}
+
 		next := page.Intents[len(page.Intents)-1].ID
 		if next == "" || next == cursor {
 			break
 		}
+
 		cursor = next
 	}
 
@@ -120,14 +128,17 @@ func Reconcile(ctx context.Context, fetch PageFunc, since time.Time) (Ledger, er
 			Count:   a.count,
 		})
 	}
+
 	sort.Slice(led.Rows, func(i, j int) bool {
 		a, b := led.Rows[i], led.Rows[j]
 		if a.Flow != b.Flow {
 			return a.Flow < b.Flow
 		}
+
 		if a.Money.Currency != b.Money.Currency {
 			return a.Money.Currency < b.Money.Currency
 		}
+
 		return a.Outcome < b.Outcome
 	})
 	return led, nil
@@ -151,6 +162,7 @@ func classify(pi *stripe.PaymentIntent) (biz.Result, bool) {
 		if pi.LastPaymentError != nil {
 			return biz.ResultFailed, true
 		}
+
 		return "", false // in flight or a bare cancel — no terminal loss
 	default:
 		// requires_capture (authorized, awaiting capture) and any status not
@@ -173,17 +185,21 @@ func ListPageFunc(client *paymentintent.Client, limit int64) PageFunc {
 		if limit > 0 {
 			params.Limit = stripe.Int64(limit)
 		}
+
 		if startingAfter != "" {
 			params.StartingAfter = stripe.String(startingAfter)
 		}
+
 		iter := client.List(params)
 		page := PaymentIntentPage{}
 		for iter.Next() {
 			page.Intents = append(page.Intents, iter.PaymentIntent())
 		}
+
 		if err := iter.Err(); err != nil {
 			return PaymentIntentPage{}, err
 		}
+
 		page.HasMore = iter.PaymentIntentList().HasMore
 		return page, nil
 	}

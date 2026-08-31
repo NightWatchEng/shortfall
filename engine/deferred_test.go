@@ -33,6 +33,7 @@ func testRegistry(t *testing.T) *registry.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return &reg
 }
 
@@ -49,24 +50,30 @@ func TestDeferredByBucketAndCurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.ByCurrency["USD"] != 10500 || leg.ByCurrency["EUR"] != 700 {
 		t.Fatalf("ByCurrency = %v, want USD 10500 EUR 700", leg.ByCurrency)
 	}
+
 	if leg.ByAgeBucket["5m-30m"]["USD"] != 1000 || leg.ByAgeBucket["gt2h"]["USD"] != 9500 {
 		t.Fatalf("ByAgeBucket = %v", leg.ByAgeBucket)
 	}
+
 	// Projected-lost: capture breaches (30m boundary) where on_breach=lost.
 	// USD gt2h 500 + EUR 30m-2h 700; settle is at_risk (not lost) and the
 	// capture 5m-30m is not past the 30m deadline.
 	if leg.ProjectedLostMinor["USD"] != 500 || leg.ProjectedLostMinor["EUR"] != 700 {
 		t.Fatalf("ProjectedLostMinor = %v, want USD 500 EUR 700", leg.ProjectedLostMinor)
 	}
+
 	if leg.OldestAgeMinutes != 120 {
 		t.Fatalf("OldestAgeMinutes = %d, want 120 (gt2h floor)", leg.OldestAgeMinutes)
 	}
+
 	if leg.Evidence != EvidenceDeterministic {
 		t.Fatalf("evidence = %q", leg.Evidence)
 	}
+
 	// Counts are the honest gap.
 	if leg.SLABreaches != 0 || leg.Count != 0 || len(leg.Caveats) == 0 {
 		t.Fatalf("expected count gap with a caveat, got breaches=%d count=%d caveats=%v", leg.SLABreaches, leg.Count, leg.Caveats)
@@ -97,19 +104,23 @@ func TestDeferredExactCountsFromCountGauge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Count != 25 {
 		t.Fatalf("Count = %d, want 25 (10+5+7+3)", leg.Count)
 	}
+
 	// Breaches: capture gt2h (5) + capture 30m-2h (7) = 12; settle gt2h and
 	// capture 5m-30m are under their deadlines.
 	if leg.SLABreaches != 12 {
 		t.Fatalf("SLABreaches = %d, want 12 (all breaches, at_risk included)", leg.SLABreaches)
 	}
+
 	for _, c := range leg.Caveats {
 		if strings.Contains(c, "COUNT") {
 			t.Fatalf("count gauge present — the count-unavailable caveat must be gone: %v", leg.Caveats)
 		}
 	}
+
 	// Value legs still correct alongside the counts.
 	if leg.ByCurrency["USD"] != 10500 || leg.ProjectedLostMinor["EUR"] != 700 {
 		t.Fatalf("value legs wrong: ByCurrency=%v projectedLost=%v", leg.ByCurrency, leg.ProjectedLostMinor)
@@ -140,6 +151,7 @@ flows:
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	at := win.To.Add(-time.Minute)
 	hold := func(count, value int64, bucket string) []emit.MetricPoint {
 		lbl := map[string]string{"flow": "hold.flow", "stage": "hold", "age_bucket": bucket, "currency": "USD"}
@@ -156,12 +168,15 @@ flows:
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Count != 13 {
 		t.Fatalf("Count = %d, want 13 (4 + 9)", leg.Count)
 	}
+
 	if leg.SLABreaches != 4 {
 		t.Fatalf("SLABreaches = %d, want 4 (the at_risk breach counts)", leg.SLABreaches)
 	}
+
 	if len(leg.ProjectedLostMinor) != 0 {
 		t.Fatalf("at_risk breach is NOT projected loss, got %v", leg.ProjectedLostMinor)
 	}
@@ -177,9 +192,11 @@ func TestDeferredAtRiskIsNotProjectedLost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(leg.ProjectedLostMinor) != 0 {
 		t.Fatalf("at_risk/under-deadline value must not be projected-lost, got %v", leg.ProjectedLostMinor)
 	}
+
 	if leg.ByCurrency["USD"] != 9000 {
 		t.Fatalf("still counted as deferred value: %v", leg.ByCurrency)
 	}
@@ -193,9 +210,11 @@ func TestDeferredEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if leg.ByCurrency["USD"] != 500 {
 			t.Fatalf("value = %v, want 500", leg.ByCurrency)
 		}
+
 		if len(leg.ProjectedLostMinor) != 0 {
 			t.Fatalf("nil registry cannot know SLAs; projected-lost must be empty, got %v", leg.ProjectedLostMinor)
 		}
@@ -206,6 +225,7 @@ func TestDeferredEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if leg.ByCurrency["USD"] != 300 {
 			t.Fatalf("scope-only must still read the gauge, got %v", leg.ByCurrency)
 		}
@@ -216,6 +236,7 @@ func TestDeferredEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(leg.ByAgeBucket) != 0 || len(leg.ByCurrency) != 0 {
 			t.Fatalf("a zero level must not create entries, got buckets=%v cur=%v", leg.ByAgeBucket, leg.ByCurrency)
 		}
@@ -256,6 +277,7 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 	if !ok {
 		t.Fatal("registry missing invoice.pay")
 	}
+
 	capSLA := f.SLA["capture"]
 	capLost := capSLA.OnBreach == registry.BreachLost
 	localFloor := map[string]time.Duration{
@@ -268,6 +290,7 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 		if tx.State != checkout.StateAuthed || tx.AuthedAt.IsZero() || tx.AuthedAt.After(end) {
 			continue
 		}
+
 		bucket := emit.AgeBucketFor(end.Sub(tx.AuthedAt))
 		wantByCur[tx.Currency] += tx.AmountMinor
 		wantBucket[bucket] += tx.AmountMinor
@@ -275,6 +298,7 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 			wantProjLost[tx.Currency] += tx.AmountMinor
 		}
 	}
+
 	if wantByCur["USD"] == 0 {
 		t.Fatal("consumer-stall produced no in-flight capture value; adjust the scenario")
 	}
@@ -285,15 +309,18 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.ByCurrency["USD"] != wantByCur["USD"] {
 		t.Fatalf("deferred USD = %d, want %d", leg.ByCurrency["USD"], wantByCur["USD"])
 	}
+
 	for bucket, want := range wantBucket {
 		got := leg.ByAgeBucket[bucket]["USD"]
 		if got != want {
 			t.Fatalf("bucket %s USD = %d, want %d", bucket, got, want)
 		}
 	}
+
 	if leg.ProjectedLostMinor["USD"] != wantProjLost["USD"] {
 		t.Fatalf("projected-lost USD = %d, want %d", leg.ProjectedLostMinor["USD"], wantProjLost["USD"])
 	}

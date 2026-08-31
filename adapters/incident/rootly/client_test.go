@@ -49,16 +49,20 @@ func TestWriteImpactPayload(t *testing.T) {
 	if err := c.WriteImpact(context.Background(), "inc-42", fixtureReport()); err != nil {
 		t.Fatal(err)
 	}
+
 	if gotPath != "PUT /v1/incidents/inc-42" {
 		t.Fatalf("path = %q", gotPath)
 	}
+
 	if gotAuth != "Bearer rootly_key" || gotCT != "application/vnd.api+json" {
 		t.Fatalf("headers = %q / %q", gotAuth, gotCT)
 	}
+
 	data := gotBody["data"].(map[string]any)
 	if data["type"] != "incidents" {
 		t.Fatalf("data.type = %v", data["type"])
 	}
+
 	summary := data["attributes"].(map[string]any)["summary"].(string)
 	if !strings.Contains(summary, "realized [deterministic] USD 16999") {
 		t.Fatalf("summary = %q", summary)

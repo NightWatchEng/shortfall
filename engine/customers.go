@@ -53,6 +53,7 @@ func Customers(ctx context.Context, reg *registry.Registry, q query.Querier, req
 		if err != nil {
 			return CustomersLeg{}, fmt.Errorf("engine: customers query: %w", err)
 		}
+
 		for _, g := range groups {
 			id := g.Key["customer"]
 			a := accts[id]
@@ -60,6 +61,7 @@ func Customers(ctx context.Context, reg *registry.Registry, q query.Querier, req
 				a = &acct{segment: g.Key["segment"], byCur: map[string]int64{}}
 				accts[id] = a
 			}
+
 			a.byCur[g.Key["currency"]] += g.SumMinor
 		}
 	}
@@ -77,26 +79,31 @@ func Customers(ctx context.Context, reg *registry.Registry, q query.Querier, req
 	for id := range accts {
 		ids = append(ids, id)
 	}
+
 	sort.Slice(ids, func(i, j int) bool {
 		mi, mj := maxCurrency(accts[ids[i]].byCur), maxCurrency(accts[ids[j]].byCur)
 		if mi != mj {
 			return mi > mj
 		}
+
 		return ids[i] < ids[j]
 	})
 	if topN > 0 && len(ids) > topN {
 		ids = ids[:topN]
 	}
+
 	for _, id := range ids {
 		if topN <= 0 {
 			break
 		}
+
 		leg.TopN = append(leg.TopN, CustomerImpact{
 			CustomerID: id,
 			Segment:    accts[id].segment,
 			ByCurrency: accts[id].byCur,
 		})
 	}
+
 	return leg, nil
 }
 
@@ -110,5 +117,6 @@ func maxCurrency(byCur map[string]int64) int64 {
 			max, first = v, false
 		}
 	}
+
 	return max
 }

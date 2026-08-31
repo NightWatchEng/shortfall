@@ -91,6 +91,7 @@ func recordUnderBackend(b *testing.B, exp *loadExporter, bufSize int) {
 	if calls != int64(b.N) {
 		b.Fatalf("issued %d Record calls, b.N = %d", calls, b.N)
 	}
+
 	exported, dropped := exp.events.Load(), exp.dropTotal()+pendingDrops(em)
 	// Conservation: every call is either an exported outcome or a counted
 	// drop. Silent loss under backend pressure is the exact defect the
@@ -100,6 +101,7 @@ func recordUnderBackend(b *testing.B, exp *loadExporter, bufSize int) {
 		b.Fatalf("%d calls accounted for as %d exported + %d dropped — %d unaccounted",
 			calls, exported, dropped, calls-exported-dropped)
 	}
+
 	b.ReportMetric(100*float64(dropped)/float64(calls), "%dropped")
 	b.ReportMetric(float64(exp.batches.Load()), "batches")
 }
@@ -183,6 +185,7 @@ func BenchmarkTrackerTrackDoneUnderPublish(b *testing.B) {
 				return
 			default:
 			}
+
 			tr.Publish()
 			publishes.Add(1)
 			firstOnce.Do(func() { close(first) })
@@ -204,6 +207,7 @@ func BenchmarkTrackerTrackDoneUnderPublish(b *testing.B) {
 			tr.Done("invoice.pay", "capture", id)
 			local++
 		}
+
 		calls.Add(local) // once per goroutine, never inside the loop
 	})
 	b.StopTimer()
@@ -213,12 +217,15 @@ func BenchmarkTrackerTrackDoneUnderPublish(b *testing.B) {
 	if calls.Load() != int64(b.N) {
 		b.Fatalf("issued %d Track/Done pairs, b.N = %d", calls.Load(), b.N)
 	}
+
 	if publishes.Load() < 1 {
 		b.Fatal("no publish completed: the contention this benchmark exists to measure was absent")
 	}
+
 	if n := trackerItemCount(tr); n != seeded {
 		b.Fatalf("%d items in flight, want the %d seeded — every benchmark Track was paired with a Done", n, seeded)
 	}
+
 	b.ReportMetric(float64(publishes.Load()), "publishes")
 }
 
@@ -229,6 +236,7 @@ func (l *loadExporter) dropTotal() int64 {
 	for _, v := range l.drops {
 		n += v
 	}
+
 	return n
 }
 
@@ -260,6 +268,7 @@ func BenchmarkRecordParallel(b *testing.B) {
 	if err := em.Close(context.Background()); err != nil {
 		b.Fatalf("close: %v", err)
 	}
+
 	// Conservation: every call took the accept path and every accepted
 	// outcome reached the sink. A shortfall here means the run silently
 	// measured suppression or overflow instead of acceptance, which would
@@ -268,6 +277,7 @@ func BenchmarkRecordParallel(b *testing.B) {
 	if calls != int64(b.N) {
 		b.Fatalf("issued %d Record calls, b.N = %d", calls, b.N)
 	}
+
 	if got := exp.events.Load(); got != calls {
 		b.Fatalf("exported %d events for %d accepted Record calls (drops=%d pending=%d): "+
 			"the benchmark stopped measuring the accept path",
@@ -328,6 +338,7 @@ func BenchmarkRecordParallelSuppressed(b *testing.B) {
 			em.Record(ctxs[0], "capture", biz.ResultFailed)
 			local++
 		}
+
 		calls.Add(local)
 	})
 	b.StopTimer()
@@ -335,9 +346,11 @@ func BenchmarkRecordParallelSuppressed(b *testing.B) {
 	if err := em.Close(context.Background()); err != nil {
 		b.Fatalf("close: %v", err)
 	}
+
 	if calls.Load() != int64(b.N) {
 		b.Fatalf("issued %d Record calls, b.N = %d", calls.Load(), b.N)
 	}
+
 	// Exactly the priming outcome reaches the sink: anything more means a
 	// call was accepted and this stopped being the suppression path.
 	if got := exp.events.Load(); got != 1 {
@@ -356,8 +369,10 @@ func trackerIDs(slots, perSlot int) [][]string {
 		for i := range block {
 			block[i] = fmt.Sprintf("m%03d_%04d", s, i)
 		}
+
 		ids[s] = block
 	}
+
 	return ids
 }
 
@@ -391,6 +406,7 @@ func BenchmarkTrackerTrackDoneParallel(b *testing.B) {
 			tr.Done("invoice.pay", "capture", id)
 			local++
 		}
+
 		calls.Add(local)
 	})
 	b.StopTimer()
@@ -398,9 +414,11 @@ func BenchmarkTrackerTrackDoneParallel(b *testing.B) {
 	if calls.Load() != int64(b.N) {
 		b.Fatalf("issued %d Track/Done pairs, b.N = %d", calls.Load(), b.N)
 	}
+
 	if n := trackerItemCount(tr); n != 0 {
 		b.Fatalf("%d items left in flight after %d paired Track/Done calls", n, calls.Load())
 	}
+
 	if tr.Overflowed() != 0 || tr.Rejected() != 0 {
 		b.Fatalf("tracker overflowed=%d rejected=%d: the measured path was not the accept path",
 			tr.Overflowed(), tr.Rejected())

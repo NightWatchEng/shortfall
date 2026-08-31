@@ -33,17 +33,20 @@ func seedSQLite(t *testing.T, rows [][]any) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = db.Close() }()
 	if _, err := db.Exec(`CREATE TABLE biz_outcomes (
 		flow TEXT, stage TEXT, outcome TEXT, currency TEXT, segment TEXT,
 		kind TEXT, customer_id TEXT, entity_id TEXT, amount_minor INTEGER, at INTEGER)`); err != nil {
 		t.Fatal(err)
 	}
+
 	for _, r := range rows {
 		if _, err := db.Exec(`INSERT INTO biz_outcomes VALUES (?,?,?,?,?,?,?,?,?,?)`, r...); err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	return path
 }
 
@@ -72,20 +75,24 @@ func TestImpactEndToEndSQLite(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d, stderr:\n%s", code, errb.String())
 	}
+
 	got := out.String()
 
 	// Realized: two failed USD txns, 15000 minor units.
 	if !strings.Contains(got, "REALIZED") || !strings.Contains(got, "USD 15000") {
 		t.Fatalf("missing realized USD 15000:\n%s", got)
 	}
+
 	// Customers computed from events (2 distinct failed).
 	if !strings.Contains(got, "CUSTOMERS") || !strings.Contains(got, "2 distinct") {
 		t.Fatalf("missing customers:\n%s", got)
 	}
+
 	// Deferred needs metrics; an events-only backend marks it unavailable.
 	if !strings.Contains(got, "DEFERRED") {
 		t.Fatalf("missing deferred line:\n%s", got)
 	}
+
 	// Evidence tags present.
 	if !strings.Contains(got, "deterministic") {
 		t.Fatalf("missing evidence tag:\n%s", got)
@@ -105,6 +112,7 @@ func TestImpactJSONFormat(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
+
 	if !strings.HasPrefix(strings.TrimSpace(out.String()), "{") {
 		t.Fatalf("json output expected, got:\n%s", out.String())
 	}
@@ -145,6 +153,7 @@ func TestImpactPrometheusPath(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
+
 	// Metrics-only backend: customers leg is honestly unavailable.
 	if !strings.Contains(out.String(), "CUSTOMERS  unavailable") {
 		t.Fatalf("metrics-only run must mark customers unavailable:\n%s", out.String())

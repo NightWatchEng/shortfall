@@ -69,10 +69,12 @@ func EncodeVC(vc ValueContext) (string, error) {
 			return "", fmt.Errorf("biz: deadline %v outside the encodable domain (1970, 3000]", vc.Deadline)
 		}
 	}
+
 	flags := int64(0)
 	if vc.Estimated {
 		flags = 1
 	}
+
 	var b strings.Builder
 	b.Grow(96)
 	b.WriteString(codecVersion)
@@ -80,6 +82,7 @@ func EncodeVC(vc ValueContext) (string, error) {
 		b.WriteByte('|')
 		escapeInto(&b, f)
 	}
+
 	b.WriteByte('|')
 	b.WriteString(strconv.FormatInt(vc.Money.Amount, 10))
 	b.WriteByte('|')
@@ -97,6 +100,7 @@ func EncodeVC(vc ValueContext) (string, error) {
 	if len(s) > MaxEncodedBytes {
 		return "", &OversizeError{Size: len(s)}
 	}
+
 	return s, nil
 }
 
@@ -108,41 +112,52 @@ func DecodeVC(s string) (ValueContext, error) {
 	if len(s) > MaxEncodedBytes {
 		return vc, fmt.Errorf("biz: biz.vc value %d bytes exceeds the %d cap", len(s), MaxEncodedBytes)
 	}
+
 	fields := strings.Split(s, "|")
 	if len(fields) != 11 {
 		return vc, fmt.Errorf("biz: biz.vc has %d fields, want 11", len(fields))
 	}
+
 	if fields[0] != codecVersion {
 		return vc, fmt.Errorf("biz: unknown biz.vc version %q", fields[0])
 	}
+
 	var err error
 	if vc.Flow, err = unescape(fields[1]); err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc flow: %w", err)
 	}
+
 	if vc.EntityID, err = unescape(fields[2]); err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc entity: %w", err)
 	}
+
 	if vc.CustomerID, err = unescape(fields[3]); err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc customer: %w", err)
 	}
+
 	if vc.Segment, err = unescape(fields[4]); err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc segment: %w", err)
 	}
+
 	if vc.Money.Amount, err = strconv.ParseInt(fields[5], 10, 64); err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc amount %q", fields[5])
 	}
+
 	if vc.Money.Currency, err = unescape(fields[6]); err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc currency: %w", err)
 	}
+
 	exp, err := strconv.ParseInt(fields[7], 10, 8)
 	if err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc exponent %q", fields[7])
 	}
+
 	vc.Money.Exponent = int8(exp)
 	kind, err := unescape(fields[8])
 	if err != nil {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc kind: %w", err)
 	}
+
 	vc.Kind = Kind(kind)
 	switch fields[9] {
 	case "0":
@@ -151,13 +166,16 @@ func DecodeVC(s string) (ValueContext, error) {
 	default:
 		return ValueContext{}, fmt.Errorf("biz: biz.vc flags %q not defined in version 1", fields[9])
 	}
+
 	deadline, err := strconv.ParseInt(fields[10], 10, 64)
 	if err != nil || deadline < 0 || deadline > maxDeadlineUnix {
 		return ValueContext{}, fmt.Errorf("biz: biz.vc deadline %q outside [0, %d]", fields[10], int64(maxDeadlineUnix))
 	}
+
 	if deadline > 0 {
 		vc.Deadline = time.Unix(deadline, 0).UTC()
 	}
+
 	return vc, nil
 }
 
@@ -168,14 +186,17 @@ func WithValueContext(ctx context.Context, vc ValueContext) (context.Context, er
 	if err != nil {
 		return ctx, err
 	}
+
 	member, err := baggage.NewMemberRaw(MemberKey, enc)
 	if err != nil {
 		return ctx, fmt.Errorf("biz: baggage member: %w", err)
 	}
+
 	bag, err := baggage.FromContext(ctx).SetMember(member)
 	if err != nil {
 		return ctx, fmt.Errorf("biz: baggage set: %w", err)
 	}
+
 	return baggage.ContextWithBaggage(ctx, bag), nil
 }
 
@@ -191,10 +212,12 @@ func FromContext(ctx context.Context) (ValueContext, bool, error) {
 	if member.Key() == "" {
 		return ValueContext{}, false, nil
 	}
+
 	vc, err := DecodeVC(member.Value())
 	if err != nil {
 		return ValueContext{}, false, err
 	}
+
 	return vc, true, nil
 }
 
@@ -208,6 +231,7 @@ func needsEscape(c byte) bool {
 	case '|', '%', '"', ',', ';', '\\', ' ':
 		return true
 	}
+
 	return c < 0x21 || c > 0x7E
 }
 
@@ -220,6 +244,7 @@ func escapeInto(b *strings.Builder, s string) {
 			b.WriteByte(hexDigits[c&0x0F])
 			continue
 		}
+
 		b.WriteByte(c)
 	}
 }
@@ -241,9 +266,11 @@ func unescape(s string) (string, error) {
 			break
 		}
 	}
+
 	if clean {
 		return s, nil
 	}
+
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
@@ -252,19 +279,24 @@ func unescape(s string) (string, error) {
 			if needsEscape(c) {
 				return "", fmt.Errorf("raw byte %q must be %%XX-escaped in canonical biz.vc", c)
 			}
+
 			b.WriteByte(c)
 			continue
 		}
+
 		if i+2 >= len(s) {
 			return "", fmt.Errorf("truncated %% escape")
 		}
+
 		hi, lo := hexVal(s[i+1]), hexVal(s[i+2])
 		if hi < 0 || lo < 0 {
 			return "", fmt.Errorf("bad %% escape %q", s[i:min(i+3, len(s))])
 		}
+
 		b.WriteByte(byte(hi<<4 | lo))
 		i += 2
 	}
+
 	return b.String(), nil
 }
 
@@ -275,5 +307,6 @@ func hexVal(c byte) int {
 	case c >= 'A' && c <= 'F':
 		return int(c-'A') + 10
 	}
+
 	return -1
 }

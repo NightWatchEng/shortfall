@@ -35,6 +35,7 @@ flows:
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return &reg
 }
 
@@ -96,12 +97,15 @@ flows:
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if s := SuggestSeverity(&noLadder, reportWith(map[string]int64{"USD": 9_999_999}, nil)); s != "" {
 		t.Fatalf("no ladder must give no suggestion, got %q", s)
 	}
+
 	if s := SuggestSeverity(nil, reportWith(map[string]int64{"USD": 9_999_999}, nil)); s != "" {
 		t.Fatalf("nil registry must give no suggestion, got %q", s)
 	}
+
 	// Zero-length window -> no rate -> no suggestion.
 	zero := Report{
 		Request:  Request{Window: query.TimeRange{From: time.Unix(0, 0), To: time.Unix(0, 0)}},

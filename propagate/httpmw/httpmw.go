@@ -48,14 +48,17 @@ func recoverMembers(h http.Header) (members map[string]baggage.Member, hadError 
 		if line == "" {
 			continue
 		}
+
 		bag, err := baggage.Parse(line)
 		if err != nil {
 			hadError = true
 		}
+
 		for _, m := range bag.Members() {
 			members[m.Key()] = m
 		}
 	}
+
 	return members, hadError
 }
 
@@ -66,14 +69,17 @@ func writeMembers(h http.Header, members map[string]baggage.Member) error {
 		h.Del(baggageHeader)
 		return nil
 	}
+
 	list := make([]baggage.Member, 0, len(members))
 	for _, m := range members {
 		list = append(list, m)
 	}
+
 	bag, err := baggage.New(list...)
 	if err != nil {
 		return err
 	}
+
 	h.Set(baggageHeader, bag.String())
 	return nil
 }
@@ -113,6 +119,7 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 	for _, o := range opts {
 		o(&cfg)
 	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -120,11 +127,13 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 			if hadErr {
 				cfg.logger.Warn("httpmw: malformed member(s) in inbound baggage dropped; valid members kept")
 			}
+
 			if len(members) > 0 {
 				list := make([]baggage.Member, 0, len(members))
 				for _, m := range members {
 					list = append(list, m)
 				}
+
 				if bag, err := baggage.New(list...); err == nil {
 					ctx = baggage.ContextWithBaggage(ctx, bag)
 				}
@@ -134,6 +143,7 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 				if decErr != nil {
 					cfg.logger.Warn("httpmw: corrupt biz.vc on the wire — dropped loudly", "error", decErr)
 				}
+
 				if cfg.ingress != nil {
 					if vc, stamp := cfg.ingress(r); stamp {
 						vc = estimate(reg, vc)
@@ -150,6 +160,7 @@ func Middleware(reg *registry.Registry, opts ...MWOption) func(http.Handler) htt
 					}
 				}
 			}
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -167,13 +178,16 @@ func estimate(reg *registry.Registry, vc biz.ValueContext) biz.ValueContext {
 	if !vc.Estimated || vc.Money.Amount != 0 || reg == nil {
 		return vc
 	}
+
 	f, ok := reg.Flow(vc.Flow)
 	if !ok {
 		return vc
 	}
+
 	if m, ok := f.EstimateMoney(vc.Segment, vc.Money.Currency); ok {
 		vc.Money = m
 	}
+
 	return vc
 }
 
@@ -206,10 +220,12 @@ func NewTransport(reg *registry.Registry, base http.RoundTripper, opts ...Transp
 	if base == nil {
 		base = http.DefaultTransport
 	}
+
 	t := &Transport{reg: reg, base: base, logger: slog.Default()}
 	for _, o := range opts {
 		o(t)
 	}
+
 	return t
 }
 
@@ -265,5 +281,6 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		t.logger.Warn("httpmw: could not rebuild outbound baggage; sending no baggage header", "error", err)
 		clone.Header.Del(baggageHeader)
 	}
+
 	return t.base.RoundTrip(clone)
 }

@@ -31,6 +31,7 @@ func startPrometheus(t *testing.T) (string, func()) {
 	if os.Getenv("SHORTFALL_GOLDEN") == "" {
 		t.Skip("set SHORTFALL_GOLDEN=1 (and have Docker) to run the live Prometheus golden harness")
 	}
+
 	// SHORTFALL_GOLDEN is an explicit demand to run the parity gate (the golden
 	// CI job sets it). Docker being absent here is a hard failure, never a skip:
 	// a skip would exit 0 and let the required-looking parity gate go green
@@ -38,9 +39,11 @@ func startPrometheus(t *testing.T) (string, func()) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Fatal("SHORTFALL_GOLDEN is set but docker is not on PATH; the parity gate cannot run")
 	}
+
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Fatalf("SHORTFALL_GOLDEN is set but the docker daemon is not running; the parity gate cannot run: %v", err)
 	}
+
 	// Pull the image explicitly first. On a cold runner (CI) `docker run -d`
 	// would otherwise interleave image-pull progress with the container id on
 	// its output, so the id we parse below would be the whole blob and every
@@ -48,6 +51,7 @@ func startPrometheus(t *testing.T) (string, func()) {
 	if out, err := exec.Command("docker", "pull", promImage).CombinedOutput(); err != nil {
 		t.Fatalf("docker pull %s: %v: %s", promImage, err, out)
 	}
+
 	run := exec.Command("docker", "run", "-d", "--rm", "-p", "9090",
 		promImage,
 		"--config.file=/etc/prometheus/prometheus.yml",
@@ -60,10 +64,12 @@ func startPrometheus(t *testing.T) (string, func()) {
 	if err != nil {
 		t.Fatalf("docker run: %v: %s", err, out)
 	}
+
 	id := strings.TrimSpace(string(out))
 	if fields := strings.Fields(id); len(fields) > 0 {
 		id = fields[len(fields)-1]
 	}
+
 	cleanup := func() { _ = exec.Command("docker", "rm", "-f", id).Run() }
 
 	// The published host port may not be queryable the instant `docker run -d`
@@ -77,8 +83,10 @@ func startPrometheus(t *testing.T) (string, func()) {
 				break
 			}
 		}
+
 		time.Sleep(200 * time.Millisecond)
 	}
+
 	if hostPort == "" {
 		// Surface why: container status + logs make a CI-only failure debuggable.
 		status, _ := exec.Command("docker", "inspect", "-f", "{{.State.Status}} {{.State.Error}}", id).CombinedOutput()
@@ -86,6 +94,7 @@ func startPrometheus(t *testing.T) (string, func()) {
 		cleanup()
 		t.Fatalf("could not resolve the published Prometheus port (id=%q status=%q logs=%s)", id, strings.TrimSpace(string(status)), logs)
 	}
+
 	base := "http://127.0.0.1:" + hostPort
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -94,6 +103,7 @@ func startPrometheus(t *testing.T) (string, func()) {
 		cleanup()
 		t.Fatalf("prometheus not ready: %v", err)
 	}
+
 	return base, cleanup
 }
 
@@ -122,6 +132,7 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 				faults[i].From = start.Add(10 * time.Minute)
 				faults[i].To = start.Add(35 * time.Minute)
 			}
+
 			// A flat arrival curve makes the harness time-of-day
 			// independent: the scenario window is rebased near now, and the
 			// default hour-of-week curve's night trough once concentrated
@@ -131,6 +142,7 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 			for i := range flat {
 				flat[i] = 4.0
 			}
+
 			res := checkout.Run(checkout.Config{Seed: 5, Start: start, End: end, Faults: faults, Curve: &flat})
 			// Snapshot the in-flight gauge one minute before the window closes.
 			// A sample stamped exactly at To (MetricsFromResult's default, the
@@ -150,6 +162,7 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 			if err := remoteWrite(ctx, base, cumulativeForPrometheus(points)); err != nil {
 				t.Fatalf("remote_write: %v", err)
 			}
+
 			// Give Prometheus a moment to commit the remote-write batch to its head.
 			mq := memq.New(memq.WithMetrics(points))
 			pq := promql.New(base)
@@ -165,25 +178,30 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 				if err != nil {
 					t.Fatalf("query %d memq: %v", i, err)
 				}
+
 				// The gauge parity must never be silently vacuous (empty ==
 				// empty proves nothing): the stall scenario guarantees a
 				// capture-queue backlog, so its in-flight gauge is non-empty.
 				if qy.Metric == "biz_inflight_value" && name == "queue-stall" && len(want) == 0 {
 					t.Fatalf("query %d gauge parity is vacuous: memq returned no biz_inflight_value series for the stall scenario", i)
 				}
+
 				got, err := pq.QueryMetric(ctx, qy)
 				if err != nil {
 					t.Fatalf("query %d promql: %v", i, err)
 				}
+
 				if !sameSeries(want, got) {
 					t.Fatalf("query %d (%s) parity mismatch:\n memq=%v\nprom=%v", i, qy.Metric, want, got)
 				}
 			}
+
 			for i, qy := range steppedQueries(window) {
 				want, err := mq.QueryMetric(ctx, qy)
 				if err != nil {
 					t.Fatalf("stepped query %d memq: %v", i, err)
 				}
+
 				// The stepped parity must not degenerate into the window
 				// case: wherever the scenario guarantees counter data —
 				// biz_txn_total always, the failed value sum in api-5xx
@@ -199,14 +217,17 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 							multi = true
 						}
 					}
+
 					if !multi {
 						t.Fatalf("stepped query %d (%s) is vacuous: no memq series has more than one bucket", i, qy.Metric)
 					}
 				}
+
 				got, err := pq.QueryMetric(ctx, qy)
 				if err != nil {
 					t.Fatalf("stepped query %d promql: %v", i, err)
 				}
+
 				if !samePointSeries(want, got) {
 					t.Fatalf("stepped query %d (%s) per-bucket parity mismatch:\n memq=%v\nprom=%v", i, qy.Metric, want, got)
 				}

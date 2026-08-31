@@ -50,12 +50,15 @@ func (f *fakeExporter) ExportMetrics(_ context.Context, b []emit.MetricPoint) er
 	if len(b) == 0 {
 		return nil
 	}
+
 	if !f.cfg.caps.Metrics && !f.cfg.dishonestMetrics {
 		return nil // honest incapable: no-op
 	}
+
 	if f.cfg.errOnExport && f.cfg.caps.Metrics {
 		return errors.New("metric backend down")
 	}
+
 	if f.closed {
 		switch {
 		case f.cfg.absorbAfterShutdown:
@@ -68,10 +71,12 @@ func (f *fakeExporter) ExportMetrics(_ context.Context, b []emit.MetricPoint) er
 		}
 		// eager: pull-collected, stays functional after Shutdown
 	}
+
 	if f.cfg.buffer {
 		f.bufM += len(b)
 		return nil
 	}
+
 	f.be.metrics += len(b)
 	return nil
 }
@@ -80,12 +85,15 @@ func (f *fakeExporter) ExportEvents(_ context.Context, b []biz.Outcome) error {
 	if len(b) == 0 {
 		return nil
 	}
+
 	if !f.cfg.caps.Events && !f.cfg.dishonestEvents {
 		return nil
 	}
+
 	if f.cfg.errOnExport && f.cfg.caps.Events {
 		return errors.New("log backend down")
 	}
+
 	if f.closed {
 		switch {
 		case f.cfg.absorbAfterShutdown:
@@ -97,10 +105,12 @@ func (f *fakeExporter) ExportEvents(_ context.Context, b []biz.Outcome) error {
 			return errors.New("exporter is shut down")
 		}
 	}
+
 	if f.cfg.buffer {
 		f.bufE += len(b)
 		return nil
 	}
+
 	f.be.events += len(b)
 	return nil
 }
@@ -109,10 +119,12 @@ func (f *fakeExporter) Shutdown(context.Context) error {
 	if f.closed && f.cfg.errOnRepeatShutdown {
 		return errors.New("exporter is shutdown")
 	}
+
 	if f.cfg.buffer && !f.cfg.dropOnShutdown {
 		f.be.metrics += f.bufM
 		f.be.events += f.bufE
 	}
+
 	f.bufM, f.bufE = 0, 0
 	f.closed = true
 	return nil
@@ -130,6 +142,7 @@ func resultsByName(rs []Result) map[string]Result {
 	for _, r := range rs {
 		m[r.Name] = r
 	}
+
 	return m
 }
 
@@ -237,14 +250,17 @@ func TestSuiteVerdicts(t *testing.T) {
 				if !ok {
 					t.Fatalf("expected invariant %q to run, but it was absent (got %v)", n, keys(got))
 				}
+
 				if r.Err == "" {
 					t.Fatalf("expected invariant %q to FAIL, but it passed", n)
 				}
 			}
+
 			for name, r := range got {
 				if wantFail[name] || r.Skipped {
 					continue
 				}
+
 				if r.Err != "" {
 					t.Fatalf("invariant %q unexpectedly failed: %s", name, r.Err)
 				}
@@ -258,6 +274,7 @@ func keys(m map[string]Result) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+
 	return out
 }
 
@@ -282,6 +299,7 @@ func TestSampleReasonsMatchADR0002(t *testing.T) {
 	if len(adr0002DropReasons) != len(want) {
 		t.Fatalf("adr0002DropReasons = %v, want ADR-0002's enum %v", adr0002DropReasons, want)
 	}
+
 	for i, r := range want {
 		if adr0002DropReasons[i] != r {
 			t.Fatalf("adr0002DropReasons[%d] = %q, want %q (ADR-0002's enum %v)", i, adr0002DropReasons[i], r, want)

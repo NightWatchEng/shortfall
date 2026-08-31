@@ -143,16 +143,19 @@ func (r Registry) Flow(name string) (Flow, bool) {
 	if !ok {
 		return Flow{}, false
 	}
+
 	out := f
 	out.Currencies = append([]string(nil), f.Currencies...)
 	out.Stages = make([]Stage, len(f.Stages))
 	for i, st := range f.Stages {
 		out.Stages[i] = Stage{Name: st.Name, Signals: append([]string(nil), st.Signals...)}
 	}
+
 	out.SLA = make(map[string]SLA, len(f.SLA))
 	for k, v := range f.SLA {
 		out.SLA[k] = v
 	}
+
 	if f.Estimator != nil {
 		est := Estimator{
 			DefaultMinor: f.Estimator.DefaultMinor,
@@ -162,8 +165,10 @@ func (r Registry) Flow(name string) (Flow, bool) {
 		for k, v := range f.Estimator.BySegment {
 			est.BySegment[k] = v
 		}
+
 		out.Estimator = &est
 	}
+
 	return out, true
 }
 
@@ -173,6 +178,7 @@ func (r Registry) FlowNames() []string {
 	for n := range r.flows {
 		names = append(names, n)
 	}
+
 	return names
 }
 
@@ -197,9 +203,11 @@ func (f Flow) ValueStage() string {
 	if f.Reconcile.Stage != "" {
 		return f.Reconcile.Stage
 	}
+
 	if n := len(f.Stages); n > 0 {
 		return f.Stages[n-1].Name
 	}
+
 	return ""
 }
 
@@ -210,9 +218,11 @@ func (f Flow) EstimateMinor(segment string) (int64, bool) {
 	if f.Estimator == nil {
 		return 0, false
 	}
+
 	if v, ok := f.Estimator.BySegment[segment]; ok {
 		return v, true
 	}
+
 	return f.Estimator.DefaultMinor, true
 }
 
@@ -225,6 +235,7 @@ func (f Flow) EstimateMoney(segment, currency string) (biz.Money, bool) {
 	if !ok {
 		return biz.Money{}, false
 	}
+
 	return biz.Money{Amount: amt, Currency: currency, Exponent: f.Estimator.Exponent}, true
 }
 
@@ -240,17 +251,21 @@ func (p Propagation) HostAllowed(host string) bool {
 	if !validHostShape(host) {
 		return false
 	}
+
 	for _, pat := range p.AllowHosts {
 		if wild, ok := strings.CutPrefix(pat, "*."); ok {
 			if strings.HasSuffix(host, "."+wild) && len(host) > len(wild)+1 {
 				return true
 			}
+
 			continue
 		}
+
 		if host == pat {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -262,10 +277,12 @@ func validHostShape(host string) bool {
 	if host == "" || len(host) > 253 {
 		return false
 	}
+
 	for _, label := range strings.Split(host, ".") {
 		if label == "" || len(label) > 63 {
 			return false
 		}
+
 		for i := 0; i < len(label); i++ {
 			c := label[i]
 			ok := c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-'
@@ -274,6 +291,7 @@ func validHostShape(host string) bool {
 			}
 		}
 	}
+
 	return true
 }
 
@@ -350,10 +368,12 @@ func Load(path string) (Registry, error) {
 	if err != nil {
 		return Registry{}, fmt.Errorf("registry %s: %w", path, err)
 	}
+
 	r, err := Parse(raw)
 	if err != nil {
 		return Registry{}, fmt.Errorf("registry %s: %w", path, err)
 	}
+
 	return r, nil
 }
 
@@ -366,12 +386,14 @@ func Parse(raw []byte) (Registry, error) {
 	if err := dec.Decode(&doc); err != nil {
 		return Registry{}, fmt.Errorf("parse: %w", err)
 	}
+
 	// A second document after '---' would otherwise be silently ignored —
 	// and a silently ignored document is a silently ignored typo.
 	var extra any
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return Registry{}, fmt.Errorf("parse: registry must be a single YAML document (content found after ---)")
 	}
+
 	if doc.Version != 1 {
 		return Registry{}, fmt.Errorf("version %d is not supported (want 1)", doc.Version)
 	}
@@ -384,15 +406,19 @@ func Parse(raw []byte) (Registry, error) {
 	if len(doc.Segments) == 0 {
 		return Registry{}, fmt.Errorf("at least one segment must be declared — the enumeration is the metric-cardinality fence (ADR-0004)")
 	}
+
 	for _, s := range doc.Segments {
 		if err := token(s, 32); err != nil {
 			return Registry{}, fmt.Errorf("segment %q: %w", s, err)
 		}
+
 		if _, dup := r.segmentSet[s]; dup {
 			return Registry{}, fmt.Errorf("segment %q declared twice", s)
 		}
+
 		r.segmentSet[s] = struct{}{}
 	}
+
 	// Defensive copy: Segments is exported and must not alias the doc.
 	r.Segments = append([]string(nil), doc.Segments...)
 
@@ -405,8 +431,10 @@ func Parse(raw []byte) (Registry, error) {
 		if h == "*" || h == "*." || bare == "" || !validHostShape(bare) {
 			return Registry{}, fmt.Errorf("propagation.allow_hosts[%d] %q is not a bare lowercase DNS name or *.domain pattern", i, h)
 		}
+
 		hosts = append(hosts, h)
 	}
+
 	r.Propagation = Propagation{AllowHosts: hosts}
 
 	// Severity thresholds (optional): a $/min-at-risk ladder, most-severe first.
@@ -427,9 +455,11 @@ func Parse(raw []byte) (Registry, error) {
 				sd.Sev,
 			)
 		}
+
 		if _, dup := seen[sd.Sev]; dup {
 			return Registry{}, fmt.Errorf("severity[%d]: sev %q declared twice", i, sd.Sev)
 		}
+
 		seen[sd.Sev] = struct{}{}
 		if sd.MinPerMinute <= 0 {
 			return Registry{}, fmt.Errorf(
@@ -439,6 +469,7 @@ func Parse(raw []byte) (Registry, error) {
 				sd.MinPerMinute,
 			)
 		}
+
 		if i > 0 && sd.MinPerMinute >= doc.Severity[i-1].MinPerMinute {
 			return Registry{}, fmt.Errorf(
 				"severity[%d] (%s): min_per_minute %d must be strictly less than the previous threshold %d (order most-severe first)",
@@ -448,19 +479,23 @@ func Parse(raw []byte) (Registry, error) {
 				doc.Severity[i-1].MinPerMinute,
 			)
 		}
+
 		r.Severity = append(r.Severity, SeverityThreshold{Sev: sd.Sev, MinPerMinuteMinor: sd.MinPerMinute})
 	}
 
 	if len(doc.Flows) == 0 {
 		return Registry{}, fmt.Errorf("no flows declared")
 	}
+
 	for name, fd := range doc.Flows {
 		f, err := buildFlow(name, fd, r.segmentSet)
 		if err != nil {
 			return Registry{}, err
 		}
+
 		r.flows[name] = f
 	}
+
 	return r, nil
 }
 
@@ -471,10 +506,12 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 	if err := token(name, 64); err != nil {
 		return Flow{}, fmt.Errorf("flow name %q: %w", name, err)
 	}
+
 	kind := biz.Kind(fd.Money.Kind)
 	if !kind.Valid() {
 		return fail("money.kind %q is not one of gmv, net_revenue, fee, take_rate", fd.Money.Kind)
 	}
+
 	if len(fd.Stages) == 0 {
 		return fail("at least one stage is required")
 	}
@@ -493,56 +530,71 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 			strings.ContainsFunc(c, func(r rune) bool { return r < 'A' || r > 'Z' }) {
 			return fail("currencies entry %q is not an ISO 4217 code", c)
 		}
+
 		if _, dup := seenCur[c]; dup {
 			return fail("currencies entry %q declared twice", c)
 		}
+
 		seenCur[c] = struct{}{}
 	}
+
 	for i, sd := range fd.Stages {
 		if err := token(sd.Name, 32); err != nil {
 			return fail("stages[%d] name %q: %v", i, sd.Name, err)
 		}
+
 		if _, dup := f.stageSet[sd.Name]; dup {
 			return fail("stage %q declared twice", sd.Name)
 		}
+
 		if len(sd.Signals) == 0 {
 			return fail("stage %q declares no signals", sd.Name)
 		}
+
 		for j, sig := range sd.Signals {
 			if strings.TrimSpace(sig) == "" {
 				return fail("stage %q signals[%d] is empty", sd.Name, j)
 			}
 		}
+
 		f.stageSet[sd.Name] = struct{}{}
 		f.Stages = append(f.Stages, Stage(sd))
 	}
+
 	for stage, sd := range fd.SLA {
 		if !f.StageValid(stage) {
 			return fail("sla names unknown stage %q", stage)
 		}
+
 		d, err := ParseISODuration(sd.Deadline)
 		if err != nil {
 			return fail("sla %s deadline: %v", stage, err)
 		}
+
 		switch Breach(sd.OnBreach) {
 		case BreachLost, BreachAtRisk:
 		default:
 			return fail("sla %s on_breach %q is not lost or at_risk", stage, sd.OnBreach)
 		}
+
 		f.SLA[stage] = SLA{Deadline: d, OnBreach: Breach(sd.OnBreach)}
 	}
+
 	if fd.Estimator != nil {
 		if fd.Estimator.DefaultMinor <= 0 {
 			return fail("estimator default_minor %d must be positive minor units", fd.Estimator.DefaultMinor)
 		}
+
 		for seg, v := range fd.Estimator.BySegment {
 			if _, ok := segments[seg]; !ok {
 				return fail("estimator by_segment names %q, which is outside the declared segment enumeration", seg)
 			}
+
 			if v <= 0 {
 				return fail("estimator by_segment[%s] %d must be positive minor units", seg, v)
 			}
 		}
+
 		exponent := int8(2)
 		if fd.Estimator.Exponent != nil {
 			exponent = *fd.Estimator.Exponent
@@ -550,18 +602,22 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 				return fail("estimator exponent %d outside [0, 4]", exponent)
 			}
 		}
+
 		f.Estimator = &Estimator{
 			DefaultMinor: fd.Estimator.DefaultMinor,
 			Exponent:     exponent,
 			BySegment:    fd.Estimator.BySegment,
 		}
 	}
+
 	if fd.Baseline.Seasonality != "hour_of_week" {
 		return fail("baseline seasonality %q is not supported (hour_of_week)", fd.Baseline.Seasonality)
 	}
+
 	if fd.Baseline.LookbackWeeks < 1 {
 		return fail("baseline lookback_weeks %d must be >= 1", fd.Baseline.LookbackWeeks)
 	}
+
 	f.Baseline = Baseline{
 		Seasonality:   fd.Baseline.Seasonality,
 		LookbackWeeks: fd.Baseline.LookbackWeeks,
@@ -571,6 +627,7 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 	if fd.Recovery.Model != "usage_loss_curve" {
 		return fail("recovery model %q is not supported (usage_loss_curve)", fd.Recovery.Model)
 	}
+
 	// Finiteness is checked before the bound, not folded into it: NaN fails
 	// BOTH halves of a < 0 || > 1 pair, so a bound expressed only as two
 	// comparisons admits it — and NaN then fails the > 0 test below too, so
@@ -580,40 +637,48 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 	if math.IsNaN(fd.Recovery.RecoveredFraction) || math.IsInf(fd.Recovery.RecoveredFraction, 0) {
 		return fail("recovery recovered_fraction %v is not a finite number", fd.Recovery.RecoveredFraction)
 	}
+
 	if fd.Recovery.RecoveredFraction < 0 || fd.Recovery.RecoveredFraction > 1 {
 		return fail("recovery recovered_fraction %v outside [0, 1]", fd.Recovery.RecoveredFraction)
 	}
+
 	rec := Recovery{Model: fd.Recovery.Model, RecoveredFraction: fd.Recovery.RecoveredFraction}
 	switch {
 	case fd.Recovery.RecoveredFraction > 0:
 		if fd.Recovery.Within == "" {
 			return fail("recovery recovered_fraction is set but within is missing")
 		}
+
 		d, err := ParseISODuration(fd.Recovery.Within)
 		if err != nil {
 			return fail("recovery within: %v", err)
 		}
+
 		rec.Within = d
 	case fd.Recovery.Within != "":
 		// The iff holds in both directions: a within with no fraction is
 		// a typo, and typos fail loudly here.
 		return fail("recovery within %q is set but recovered_fraction is 0 — remove one or set both", fd.Recovery.Within)
 	}
+
 	f.Recovery = rec
 
 	src := strings.TrimSpace(fd.Reconcile.Source)
 	if src == "" {
 		return fail("reconcile source is required — coverage is how Finance comes to trust the numbers")
 	}
+
 	scheme, _, ok := strings.Cut(src, ":")
 	if !ok || (scheme != "sql" && scheme != "stripe") {
 		return fail("reconcile source %q must use a known scheme (sql: or stripe:)", src)
 	}
+
 	if s := fd.Reconcile.Stage; s != "" {
 		if _, ok := f.stageSet[s]; !ok {
 			return fail("reconcile stage %q is not a declared stage", s)
 		}
 	}
+
 	f.Reconcile = Reconcile{Source: src, Stage: fd.Reconcile.Stage}
 
 	return f, nil
@@ -624,6 +689,7 @@ func token(s string, maxLen int) error {
 	if s == "" || len(s) > maxLen {
 		return fmt.Errorf("length %d outside [1, %d]", len(s), maxLen)
 	}
+
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
@@ -631,5 +697,6 @@ func token(s string, maxLen int) error {
 			return fmt.Errorf("character %q not in [a-z0-9._-]", r)
 		}
 	}
+
 	return nil
 }

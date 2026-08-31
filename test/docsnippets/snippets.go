@@ -56,6 +56,7 @@ func extractFences(path string) ([]fence, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = f.Close() }()
 
 	var (
@@ -77,22 +78,27 @@ func extractFences(path string) ([]fence, error) {
 					ref: prevMarker == refMarker, cont: prevMarker == contMarker}
 				indent = m[1]
 			}
+
 			prevMarker = strings.TrimSpace(line)
 			continue
 		}
+
 		if strings.TrimSpace(line) == "```" {
 			fences = append(fences, *cur)
 			cur = nil
 			prevMarker = "" // a closing fence line is never a marker
 			continue
 		}
+
 		cur.body += strings.TrimPrefix(line, indent) + "\n"
 	}
+
 	if cur != nil {
 		// Fail closed: a fence that loses its closing marker must not
 		// silently exit governance.
 		return nil, fmt.Errorf("%s:%d: fence opened and never closed", cur.doc, cur.line)
 	}
+
 	return fences, sc.Err()
 }
 
@@ -105,8 +111,10 @@ func fileLevel(body string) bool {
 		if t == "" || strings.HasPrefix(t, "//") {
 			continue
 		}
+
 		return decl.MatchString(l)
 	}
+
 	return false
 }
 
@@ -150,11 +158,14 @@ func stripPackageClause(body string) string {
 		if t == "" || strings.HasPrefix(t, "//") {
 			continue
 		}
+
 		if strings.HasPrefix(t, "package ") {
 			return strings.Join(lines[i+1:], "\n")
 		}
+
 		break
 	}
+
 	return body
 }
 
@@ -173,11 +184,14 @@ func splitLeadingImports(body string) (specs []string, rest string) {
 			i++
 			continue
 		}
+
 		break
 	}
+
 	if i >= len(lines) {
 		return nil, body
 	}
+
 	switch t := strings.TrimSpace(lines[i]); {
 	case t == "import (":
 		for j := i + 1; j < len(lines); j++ {
@@ -185,14 +199,17 @@ func splitLeadingImports(body string) (specs []string, rest string) {
 			if s == ")" {
 				return specs, strings.Join(lines[j+1:], "\n")
 			}
+
 			if s != "" {
 				specs = append(specs, s)
 			}
 		}
+
 		return nil, body // unclosed block: leave it to the compiler to name
 	case strings.HasPrefix(t, "import "):
 		return []string{strings.TrimPrefix(t, "import ")}, strings.Join(lines[i+1:], "\n")
 	}
+
 	return nil, body
 }
 
@@ -204,6 +221,7 @@ func importSpecPath(spec string) string {
 			return spec[i+1 : i+1+j]
 		}
 	}
+
 	return ""
 }
 
@@ -228,11 +246,13 @@ func synthesize(f fence, n int, discard []string) string {
 			used[p] = true // the fence's own spec wins; don't auto-add it again
 		}
 	}
+
 	if len(ownSpecs) > 0 {
 		b.WriteString("import (\n")
 		for _, s := range ownSpecs {
 			b.WriteString("\t" + s + "\n")
 		}
+
 		b.WriteString(")\n\n")
 	}
 
@@ -246,17 +266,20 @@ func synthesize(f fence, n int, discard []string) string {
 			used[path] = true
 		}
 	}
+
 	for _, s := range ownSpecs {
 		if p := importSpecPath(s); p != "" {
 			delete(used, p) // already emitted above; keep it out of the generated block
 		}
 	}
+
 	if len(used) > 0 {
 		b.WriteString("import (\n")
 		paths := make([]string, 0, len(used))
 		for p := range used {
 			paths = append(paths, p)
 		}
+
 		// deterministic order keeps failures reproducible
 		for i := 0; i < len(paths); i++ {
 			for j := i + 1; j < len(paths); j++ {
@@ -265,6 +288,7 @@ func synthesize(f fence, n int, discard []string) string {
 				}
 			}
 		}
+
 		for _, p := range paths {
 			alias := ""
 			switch p {
@@ -273,8 +297,10 @@ func synthesize(f fence, n int, discard []string) string {
 			case "github.com/NightWatchEng/shortfall/adapters/query/sql":
 				alias = "sqlq "
 			}
+
 			fmt.Fprintf(&b, "\t%s%q\n", alias, p)
 		}
+
 		b.WriteString(")\n\n")
 	}
 
@@ -285,11 +311,14 @@ func synthesize(f fence, n int, discard []string) string {
 		for _, l := range strings.Split(strings.TrimRight(f.body, "\n"), "\n") {
 			b.WriteString("\t" + l + "\n")
 		}
+
 		for _, id := range discard {
 			fmt.Fprintf(&b, "\t_ = %s // declared for the reader; the prose picks it up\n", id)
 		}
+
 		b.WriteString("}\n")
 	}
+
 	return b.String()
 }
 
@@ -352,11 +381,13 @@ func compileGoFences(root, tmp string, fences []fence, stubs string) error {
 		[]byte(strings.ReplaceAll(tempModTemplate, "ROOT", root)), 0o644); err != nil {
 		return err
 	}
+
 	if stubs != "" {
 		if err := os.WriteFile(filepath.Join(tmp, "stubs.go"), []byte(stubs), 0o644); err != nil {
 			return err
 		}
 	}
+
 	discards := make([][]string, len(fences))
 	var lastErr error
 	// One retry per fence with unused idents would do; 4 rounds bounds
@@ -368,6 +399,7 @@ func compileGoFences(root, tmp string, fences []fence, stubs string) error {
 				return err
 			}
 		}
+
 		lastErr = nil
 		for _, args := range [][]string{{"mod", "tidy"}, {"build", "./..."}} {
 			cmd := exec.Command("go", args...)
@@ -378,9 +410,11 @@ func compileGoFences(root, tmp string, fences []fence, stubs string) error {
 				break
 			}
 		}
+
 		if lastErr == nil {
 			return nil
 		}
+
 		grew := false
 		for _, m := range unusedIdent.FindAllStringSubmatch(lastErr.Error(), -1) {
 			i, err := strconv.Atoi(m[1])
@@ -389,10 +423,12 @@ func compileGoFences(root, tmp string, fences []fence, stubs string) error {
 				grew = true
 			}
 		}
+
 		if !grew {
 			return lastErr
 		}
 	}
+
 	return lastErr
 }
 
@@ -402,6 +438,7 @@ func slicesContains(s []string, v string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

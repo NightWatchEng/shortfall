@@ -146,6 +146,7 @@ func (v VC) ValueContext() biz.ValueContext {
 	if v.DeadlineUnix != 0 {
 		vc.Deadline = time.Unix(v.DeadlineUnix, 0).UTC()
 	}
+
 	return vc
 }
 
@@ -165,6 +166,7 @@ func VCOf(vc biz.ValueContext) VC {
 	if !vc.Deadline.IsZero() {
 		out.DeadlineUnix = vc.Deadline.Unix()
 	}
+
 	return out
 }
 
@@ -219,15 +221,19 @@ func (v VCVectors) Names() []string {
 	for _, e := range v.Encode {
 		names = append(names, "encode/"+e.Name)
 	}
+
 	for _, d := range v.Decode {
 		names = append(names, "decode/"+d.Name)
 	}
+
 	for _, r := range v.EncodeReject {
 		names = append(names, "encode_reject/"+r.Name)
 	}
+
 	for _, r := range v.DecodeReject {
 		names = append(names, "decode_reject/"+r.Name)
 	}
+
 	return names
 }
 
@@ -237,9 +243,11 @@ func LoadVCVectors(path string) (VCVectors, error) {
 	if err := readJSON(path, &v); err != nil {
 		return VCVectors{}, err
 	}
+
 	if v.VectorsVersion != VectorsVersion {
 		return VCVectors{}, fmt.Errorf("%s: vectors_version %d, this build understands %d", path, v.VectorsVersion, VectorsVersion)
 	}
+
 	return v, nil
 }
 
@@ -326,11 +334,13 @@ func FactsOf(r registry.Registry) RegistryFacts {
 	for _, s := range r.Severity {
 		f.Severity = append(f.Severity, SeverityFact{Sev: s.Sev, MinPerMinuteMinor: s.MinPerMinuteMinor})
 	}
+
 	for _, name := range r.FlowNames() {
 		flow, ok := r.Flow(name)
 		if !ok {
 			continue
 		}
+
 		ff := FlowFact{
 			Kind:       string(flow.Money.Kind),
 			Currencies: slices.Clone(flow.Currencies),
@@ -350,6 +360,7 @@ func FactsOf(r registry.Registry) RegistryFacts {
 		for _, st := range flow.Stages {
 			ff.Stages = append(ff.Stages, StageFact{Name: st.Name, Signals: slices.Clone(st.Signals)})
 		}
+
 		if len(flow.SLA) > 0 {
 			ff.SLA = map[string]SLAFact{}
 			for stage, sla := range flow.SLA {
@@ -359,6 +370,7 @@ func FactsOf(r registry.Registry) RegistryFacts {
 				}
 			}
 		}
+
 		if flow.Estimator != nil {
 			ff.Estimator = &EstimatorFact{
 				DefaultMinor: flow.Estimator.DefaultMinor,
@@ -366,8 +378,10 @@ func FactsOf(r registry.Registry) RegistryFacts {
 				BySegment:    maps.Clone(flow.Estimator.BySegment),
 			}
 		}
+
 		f.Flows[name] = ff
 	}
+
 	return f
 }
 
@@ -401,10 +415,12 @@ func (f RegistryFacts) Equal(other RegistryFacts) bool {
 	if err != nil {
 		return false
 	}
+
 	b, err := other.JSON()
 	if err != nil {
 		return false
 	}
+
 	return a == b
 }
 
@@ -415,6 +431,7 @@ func (f RegistryFacts) JSON() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return string(b), nil
 }
 
@@ -425,6 +442,7 @@ func (f RegistryFacts) String() string {
 	if err != nil {
 		return fmt.Sprintf("<unrenderable facts: %v>", err)
 	}
+
 	return s
 }
 
@@ -484,18 +502,23 @@ func (v RegistryVectors) Names() []string {
 	for _, a := range v.Accept {
 		names = append(names, "accept/"+a.Name)
 	}
+
 	for _, r := range v.Reject {
 		names = append(names, "reject/"+r.Name)
 	}
+
 	for _, h := range v.HostAllowlist {
 		names = append(names, "host/"+h.Name)
 	}
+
 	for _, d := range v.Duration {
 		names = append(names, "duration/"+d.Name)
 	}
+
 	for _, d := range v.DurationReject {
 		names = append(names, "duration_reject/"+d.Name)
 	}
+
 	return names
 }
 
@@ -505,9 +528,11 @@ func LoadRegistryVectors(path string) (RegistryVectors, error) {
 	if err := readJSON(path, &v); err != nil {
 		return RegistryVectors{}, err
 	}
+
 	if v.VectorsVersion != VectorsVersion {
 		return RegistryVectors{}, fmt.Errorf("%s: vectors_version %d, this build understands %d", path, v.VectorsVersion, VectorsVersion)
 	}
+
 	return v, nil
 }
 
@@ -518,11 +543,13 @@ func readJSON(path string, into any) error {
 	if err != nil {
 		return err
 	}
+
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(into); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
+
 	return nil
 }
 
@@ -595,6 +622,7 @@ func (v OutcomeEventVectors) Names() []string {
 	for _, c := range v.Cases {
 		names = append(names, "case/"+c.Name)
 	}
+
 	return names
 }
 
@@ -604,9 +632,11 @@ func LoadOutcomeEventVectors(path string) (OutcomeEventVectors, error) {
 	if err := readJSON(path, &v); err != nil {
 		return OutcomeEventVectors{}, err
 	}
+
 	if v.VectorsVersion != VectorsVersion {
 		return OutcomeEventVectors{}, fmt.Errorf("%s: vectors_version %d, this build understands %d", path, v.VectorsVersion, VectorsVersion)
 	}
+
 	return v, nil
 }
 
@@ -634,7 +664,9 @@ func (in OutcomeEventInput) Outcome() (biz.Outcome, error) {
 		if err != nil {
 			return biz.Outcome{}, fmt.Errorf("deadline %q: %w", in.Deadline, err)
 		}
+
 		o.VC.Deadline = d
 	}
+
 	return o, nil
 }

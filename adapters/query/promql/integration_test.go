@@ -27,6 +27,7 @@ func TestAgainstRealPrometheus(t *testing.T) {
 	if base == "" {
 		t.Skip("set PROMETHEUS_URL to run against a real Prometheus")
 	}
+
 	q := New(base)
 	// A trivial always-present series proves the wire path; scenario parity is
 	// asserted by the shared golden harness in CI.
@@ -38,5 +39,6 @@ func TestAgainstRealPrometheus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query real prometheus: %v", err)
 	}
+
 	_ = series // presence, not value, is asserted here
 }

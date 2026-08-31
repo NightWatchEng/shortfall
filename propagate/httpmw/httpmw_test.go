@@ -22,6 +22,7 @@ func testRegistry(t *testing.T) *registry.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return &r
 }
 
@@ -42,6 +43,7 @@ func encodedVC(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return enc
 }
 
@@ -77,10 +79,12 @@ func TestMiddlewareExtractsValueContext(t *testing.T) {
 			if c.header != "" {
 				req.Header.Set("baggage", c.header)
 			}
+
 			mw.ServeHTTP(httptest.NewRecorder(), req)
 			if h.ok != c.wantOK {
 				t.Fatalf("ok = %v, want %v (err %v)", h.ok, c.wantOK, h.err)
 			}
+
 			if c.wantOK && h.vc.EntityID != c.wantEntity {
 				t.Fatalf("entity %q", h.vc.EntityID)
 			}
@@ -93,6 +97,7 @@ func TestMiddlewareIngressStamping(t *testing.T) {
 		if r.URL.Path == "/pay" {
 			return vcFixture(), true
 		}
+
 		return biz.ValueContext{}, false
 	}
 	cases := []struct {
@@ -114,10 +119,12 @@ func TestMiddlewareIngressStamping(t *testing.T) {
 			if c.header != "" {
 				req.Header.Set("baggage", c.header)
 			}
+
 			mw.ServeHTTP(httptest.NewRecorder(), req)
 			if h.ok != c.wantOK {
 				t.Fatalf("ok = %v, want %v", h.ok, c.wantOK)
 			}
+
 			if c.wantOK && h.vc.EntityID != c.entity {
 				t.Fatalf("entity %q, want %q", h.vc.EntityID, c.entity)
 			}
@@ -133,6 +140,7 @@ func mustEncode(t *testing.T, entity string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return enc
 }
 
@@ -167,13 +175,16 @@ func bagMembers(t *testing.T, header string) map[string]bool {
 	if header == "" {
 		return out
 	}
+
 	bag, err := baggage.Parse(header)
 	if err != nil {
 		t.Fatalf("outbound baggage unparsable: %v", err)
 	}
+
 	for _, m := range bag.Members() {
 		out[m.Key()] = true
 	}
+
 	return out
 }
 
@@ -182,6 +193,7 @@ func TestTransportEgressAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cases := []struct {
 		name       string
 		url        string
@@ -206,16 +218,20 @@ func TestTransportEgressAllowlist(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if c.preBaggage != "" {
 				req.Header.Set("baggage", c.preBaggage)
 			}
+
 			if _, err := tr.RoundTrip(req); err != nil {
 				t.Fatal(err)
 			}
+
 			members := bagMembers(t, rec.got.Header.Get("baggage"))
 			if members["biz.vc"] != c.wantBizVC {
 				t.Fatalf("biz.vc present=%v, want %v (header %q)", members["biz.vc"], c.wantBizVC, rec.got.Header.Get("baggage"))
 			}
+
 			for _, m := range c.wantOthers {
 				if !members[m] {
 					t.Fatalf("foreign member %q lost: %q", m, rec.got.Header.Get("baggage"))
@@ -230,18 +246,22 @@ func TestTransportDoesNotMutateTheOriginalRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	rec := &headerRecorder{}
 	tr := NewTransport(testRegistry(t), rec)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.example.com/pay", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := tr.RoundTrip(req); err != nil {
 		t.Fatal(err)
 	}
+
 	if req.Header.Get("baggage") != "" {
 		t.Fatal("RoundTrip mutated the caller's request — net/http forbids it")
 	}
+
 	if rec.got.Header.Get("baggage") == "" {
 		t.Fatal("clone lost the injection")
 	}
@@ -281,14 +301,17 @@ flows:
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, workerSrv.URL+"/consume", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_ = resp.Body.Close()
 	if !worker.ok || worker.vc.EntityID != "inv_777" {
 		t.Fatalf("worker did not receive the ValueContext: ok=%v vc=%+v", worker.ok, worker.vc)
@@ -321,12 +344,15 @@ func TestEgressFenceFailsClosed(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			for _, l := range c.lines {
 				req.Header.Add("baggage", l)
 			}
+
 			if _, err := tr.RoundTrip(req); err != nil {
 				t.Fatal(err)
 			}
+
 			// Inspect every outbound baggage line, not just the first.
 			outLines := rec.got.Header.Values("baggage")
 			hasVC := false
@@ -342,6 +368,7 @@ func TestEgressFenceFailsClosed(t *testing.T) {
 					}
 				}
 			}
+
 			// Belt and suspenders: no raw substring of the encoded vc may
 			// survive toward a disallowed host, even unparsed.
 			if !c.wantVC {
@@ -351,9 +378,11 @@ func TestEgressFenceFailsClosed(t *testing.T) {
 					}
 				}
 			}
+
 			if hasVC != c.wantVC {
 				t.Fatalf("biz.vc present=%v, want %v (lines %v)", hasVC, c.wantVC, outLines)
 			}
+
 			for _, m := range c.wantFor {
 				if !foreign[m] {
 					t.Fatalf("foreign member %q lost: %v", m, outLines)
@@ -401,24 +430,29 @@ func TestRedirectAcrossTrustBoundaryStrips(t *testing.T) {
 	if allowedHost == disallowedHost {
 		t.Skip("both httptest servers share a host; cannot exercise cross-boundary redirect")
 	}
+
 	regYAML := "version: 1\nsegments: [smb]\npropagation:\n  allow_hosts: [\"" + allowedHost + "\"]\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    stages:\n      - { name: auth, signals: [\"http:POST /pay\"] }\n    baseline: { seasonality: hour_of_week, lookback_weeks: 8 }\n    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n    reconcile: { source: \"sql:ledger.payments\" }\n"
 	reg, err := registry.Parse([]byte(regYAML))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	client := &http.Client{Transport: NewTransport(&reg, http.DefaultTransport)}
 	ctx, err := biz.WithValueContext(context.Background(), vcFixture())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, allowed.URL+"/pay", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_ = resp.Body.Close()
 	for _, l := range secondHopBaggage {
 		if strings.Contains(l, "biz.vc") || strings.Contains(l, "inv_777") {
@@ -466,9 +500,11 @@ func TestIngressEstimatorStampsUnknownAmounts(t *testing.T) {
 			if !h.ok {
 				t.Fatalf("stamp did not reach downstream")
 			}
+
 			if h.vc.Money.Amount != c.wantAmount {
 				t.Fatalf("amount = %d, want %d", h.vc.Money.Amount, c.wantAmount)
 			}
+
 			if h.vc.Estimated != c.wantEst {
 				t.Fatalf("estimated = %v, want %v", h.vc.Estimated, c.wantEst)
 			}
@@ -498,6 +534,7 @@ flows:
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	hook := func(r *http.Request) (biz.ValueContext, bool) {
 		return biz.ValueContext{
 			Flow: "jpy.pay", EntityID: "c1", CustomerID: "h:c", Segment: "smb",
@@ -522,6 +559,7 @@ func TestEstimatorDoesNotOverrideWireContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	hook := func(r *http.Request) (biz.ValueContext, bool) {
 		t.Fatal("hook must not run when wire context is present")
 		return biz.ValueContext{}, false

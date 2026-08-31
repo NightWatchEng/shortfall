@@ -98,6 +98,7 @@ func (f *fakeBigQuery) querier(t *testing.T, opts ...Option) *Querier {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+
 	return q
 }
 
@@ -108,6 +109,7 @@ func (f *fakeBigQuery) handle(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, f.failBody)
 		return
 	}
+
 	switch {
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/queries"):
 		f.handleInsert(w, r)
@@ -123,11 +125,13 @@ func (f *fakeBigQuery) handleInsert(w http.ResponseWriter, r *http.Request) {
 	if want := "/bigquery/v2/projects/my-project/queries"; r.URL.Path != want {
 		f.t.Errorf("insert path = %q, want %q", r.URL.Path, want)
 	}
+
 	raw, _ := io.ReadAll(r.Body)
 	var body map[string]any
 	if err := json.Unmarshal(raw, &body); err != nil {
 		f.t.Errorf("insert body: %v", err)
 	}
+
 	f.queries++
 	f.lastBody = body
 	f.lastQuery, _ = body["query"].(string)
@@ -141,6 +145,7 @@ func (f *fakeBigQuery) handleInsert(w http.ResponseWriter, r *http.Request) {
 			f.lastParams["@"+name] = s
 		}
 	}
+
 	f.served = f.resolve()
 
 	if f.stallOnce && !f.stalled {
@@ -151,6 +156,7 @@ func (f *fakeBigQuery) handleInsert(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
 	f.writePage(w, 0)
 }
 
@@ -162,6 +168,7 @@ func (f *fakeBigQuery) handleGetResults(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			f.t.Errorf("bad pageToken %q", tok)
 		}
+
 		from = n
 		if f.incompleteOnPage {
 			f.writeJSON(w, map[string]any{
@@ -171,6 +178,7 @@ func (f *fakeBigQuery) handleGetResults(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
+
 	f.writePage(w, from)
 }
 
@@ -221,12 +229,14 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 		f.t.Errorf("fake cannot parse the statement — extend the interpreter or the adapter drifted:\n%s", f.lastQuery)
 		return stmtPlan{}, false
 	}
+
 	plan := stmtPlan{table: m[1]}
 	limit, err := strconv.Atoi(m[3])
 	if err != nil {
 		f.t.Errorf("bad LIMIT %q", m[3])
 		return stmtPlan{}, false
 	}
+
 	plan.limit = limit
 
 	ok := true
@@ -236,6 +246,7 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 			f.t.Errorf("statement references %s but no such parameter was bound", name)
 			ok = false
 		}
+
 		return v
 	}
 	ts := func(name string) time.Time {
@@ -244,6 +255,7 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 			f.t.Errorf("parameter %s = %q is not a BigQuery TIMESTAMP literal: %v", name, f.lastParams[name], err)
 			ok = false
 		}
+
 		return t
 	}
 	for _, clause := range strings.Split(m[2], " AND ") {
@@ -263,10 +275,12 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 			ok = false
 		}
 	}
+
 	if plan.from.IsZero() || plan.to.IsZero() {
 		f.t.Errorf("statement bound no window: %s", f.lastQuery)
 		ok = false
 	}
+
 	// Two labels on one JSONPath is a drifted payloadPaths entry, not a
 	// legitimate statement: the adapter has emitted two contradictory
 	// equalities on one key, which real BigQuery answers with zero rows.
@@ -279,8 +293,10 @@ func (f *fakeBigQuery) planStatement() (stmtPlan, bool) {
 				"which real BigQuery answers with zero rows:\n%s", p.key, prev, p.value, f.lastQuery)
 			ok = false
 		}
+
 		seen[p.key] = p.value
 	}
+
 	return plan, ok
 }
 
@@ -291,6 +307,7 @@ func (f *fakeBigQuery) resolve() []fakeRow {
 	if !ok {
 		return nil
 	}
+
 	// The view varies (WithView), the project and dataset do not.
 	if !strings.HasPrefix(plan.table, "my-project.logs_analytics.") {
 		f.t.Errorf("statement table = %q, want the my-project.logs_analytics dataset", plan.table)
@@ -301,12 +318,15 @@ func (f *fakeBigQuery) resolve() []fakeRow {
 		if f.evaluate && !matchesPlan(row, plan) {
 			continue
 		}
+
 		out = append(out, row)
 	}
+
 	sort.SliceStable(out, func(i, j int) bool { return out[i].micros < out[j].micros })
 	if plan.limit > 0 && len(out) > plan.limit {
 		out = out[:plan.limit]
 	}
+
 	return out
 }
 
@@ -318,20 +338,24 @@ func matchesPlan(row fakeRow, plan stmtPlan) bool {
 	if at.Before(plan.from) || !at.Before(plan.to) {
 		return false
 	}
+
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(row.payload), &payload); err != nil {
 		// A non-JSON line has no json_payload at all: every JSON_VALUE
 		// predicate over it is NULL, so it matches nothing.
 		return false
 	}
+
 	if plan.marker != "" && jsonValue(payload, "event") != plan.marker {
 		return false
 	}
+
 	for _, p := range plan.filters {
 		if jsonValue(payload, p.key) != p.value {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -343,6 +367,7 @@ func jsonValue(payload map[string]any, key string) string {
 	if !ok || v == nil {
 		return ""
 	}
+
 	switch t := v.(type) {
 	case string:
 		return t
@@ -363,6 +388,7 @@ func (f *fakeBigQuery) writePage(w http.ResponseWriter, from int) {
 	if end > len(f.served) {
 		end = len(f.served)
 	}
+
 	rows := make([]any, 0, end-from)
 	for _, row := range f.served[from:end] {
 		rows = append(rows, map[string]any{"f": []any{
@@ -370,6 +396,7 @@ func (f *fakeBigQuery) writePage(w http.ResponseWriter, from int) {
 			map[string]any{"v": row.payload},
 		}})
 	}
+
 	resp := map[string]any{
 		"kind":         "bigquery#queryResponse",
 		"jobComplete":  true,
@@ -388,6 +415,7 @@ func (f *fakeBigQuery) writePage(w http.ResponseWriter, from int) {
 			resp["pageToken"] = strconv.Itoa(end)
 		}
 	}
+
 	f.writeJSON(w, resp)
 }
 
@@ -397,6 +425,7 @@ func (f *fakeBigQuery) writeJSON(w http.ResponseWriter, v any) {
 		f.t.Errorf("marshal: %v", err)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(b); err != nil {
 		f.t.Errorf("write: %v", err)
@@ -418,6 +447,7 @@ func rawQuerier(t *testing.T, body string) *Querier {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+
 	return q
 }
 

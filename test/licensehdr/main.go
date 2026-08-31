@@ -38,12 +38,14 @@ func trackedGoFiles(root string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
+
 	var files []string
 	for _, f := range bytes.Split(out, []byte{0}) {
 		if len(f) > 0 {
 			files = append(files, filepath.Join(root, string(f)))
 		}
 	}
+
 	return files, nil
 }
 
@@ -53,6 +55,7 @@ func needsHeader(content []byte) bool {
 	if generatedRE.Match(content) {
 		return false
 	}
+
 	return !headerRE.Match(content)
 }
 
@@ -70,15 +73,18 @@ func run(root string, fix bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var missing []string
 	for _, f := range files {
 		content, err := os.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
+
 		if !needsHeader(content) {
 			continue
 		}
+
 		missing = append(missing, f)
 		if fix {
 			if err := os.WriteFile(f, withHeader(content), 0o644); err != nil {
@@ -86,6 +92,7 @@ func run(root string, fix bool) ([]string, error) {
 			}
 		}
 	}
+
 	return missing, nil
 }
 
@@ -98,14 +105,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, "licensehdr:", err)
 		os.Exit(2)
 	}
+
 	if *fix {
 		fmt.Printf("licensehdr: added the header to %d file(s)\n", len(missing))
 		return
 	}
+
 	if len(missing) > 0 {
 		for _, f := range missing {
 			fmt.Println(f)
 		}
+
 		fmt.Fprintf(os.Stderr, "licensehdr: %d file(s) missing the Apache-2.0 header (run: go run ./test/licensehdr -fix)\n", len(missing))
 		os.Exit(1)
 	}

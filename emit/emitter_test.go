@@ -38,6 +38,7 @@ func (c *captureExporter) ExportMetrics(_ context.Context, batch []MetricPoint) 
 	if c.failAll {
 		return errors.New("backend down")
 	}
+
 	c.metrics = append(c.metrics, batch...)
 	return nil
 }
@@ -47,6 +48,7 @@ func (c *captureExporter) ExportEvents(_ context.Context, batch []biz.Outcome) e
 	if c.failAll {
 		return errors.New("backend down")
 	}
+
 	c.events = append(c.events, batch...)
 	return nil
 }
@@ -74,6 +76,7 @@ func testRegistry(t *testing.T) *registry.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return &r
 }
 
@@ -85,6 +88,7 @@ func newTestEmitter(t *testing.T, exp Exporter) *Std {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	return em
 }
@@ -95,6 +99,7 @@ func ctxWithVC(t *testing.T, vc biz.ValueContext) context.Context {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return ctx
 }
 
@@ -115,6 +120,7 @@ func flushAndSnapshot(t *testing.T, em *Std, exp *captureExporter) ([]MetricPoin
 	if err := em.Flush(context.Background()); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
+
 	return exp.snapshot()
 }
 
@@ -123,6 +129,7 @@ func metricsByName(points []MetricPoint) map[string][]MetricPoint {
 	for _, p := range points {
 		out[p.Name] = append(out[p.Name], p)
 	}
+
 	return out
 }
 
@@ -135,6 +142,7 @@ func TestRecordHappyPath(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("events = %d, want 1", len(events))
 	}
+
 	ev := events[0]
 	cases := []struct {
 		name string
@@ -161,6 +169,7 @@ func TestRecordHappyPath(t *testing.T) {
 	if len(value) != 1 || len(txn) != 1 {
 		t.Fatalf("metric families: %d value, %d txn (want 1 each); all=%v", len(value), len(txn), metrics)
 	}
+
 	labelCases := []struct {
 		name   string
 		labels map[string]string
@@ -180,6 +189,7 @@ func TestRecordHappyPath(t *testing.T) {
 			if len(c.labels) != len(c.want) {
 				t.Fatalf("label set %v, want exactly %v", c.labels, c.want)
 			}
+
 			for k, v := range c.want {
 				if c.labels[k] != v {
 					t.Fatalf("label %s = %q, want %q", k, c.labels[k], v)
@@ -187,9 +197,11 @@ func TestRecordHappyPath(t *testing.T) {
 			}
 		})
 	}
+
 	if value[0].Value != 14900 || txn[0].Value != 1 {
 		t.Fatalf("values %d/%d, want 14900/1", value[0].Value, txn[0].Value)
 	}
+
 	if !value[0].At.Equal(testClock) {
 		t.Fatalf("metric At %v, want clock time", value[0].At)
 	}
@@ -220,6 +232,7 @@ func TestRecordDropsAreLoudNeverSilent(t *testing.T) {
 			if len(events) != 0 {
 				t.Fatalf("dropped outcome still exported: %v", events)
 			}
+
 			drops := metricsByName(metrics)["biz_dropped_events_total"]
 			if len(drops) != 1 || drops[0].Labels["reason"] != c.wantReason || drops[0].Value != 1 {
 				t.Fatalf("drop counter = %v, want one %s", drops, c.wantReason)
@@ -251,12 +264,15 @@ func TestLabelFallbacks(t *testing.T) {
 			if len(value) != 1 {
 				t.Fatalf("value points: %v", metrics)
 			}
+
 			if got := value[0].Labels["flow"]; got != c.wantFlow {
 				t.Fatalf("flow label %q, want %q", got, c.wantFlow)
 			}
+
 			if got := value[0].Labels["segment"]; got != c.wantSegment {
 				t.Fatalf("segment label %q, want %q", got, c.wantSegment)
 			}
+
 			// The event always keeps the raw truth for diagnosis.
 			if len(events) != 1 || events[0].VC.Flow == "unregistered" {
 				t.Fatalf("event must keep raw flow: %v", events)
@@ -291,11 +307,13 @@ func TestDedupKeyIncludesResult(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("events = %d, want 2 (failed once, success once)", len(events))
 	}
+
 	txn := metricsByName(metrics)["biz_txn_total"]
 	var total int64
 	for _, p := range txn {
 		total += p.Value
 	}
+
 	if total != 2 {
 		t.Fatalf("txn count %d, want 2", total)
 	}
@@ -309,6 +327,7 @@ func TestOverflowDropsAreCounted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	ctx := ctxWithVC(t, emitterVC())
 	// Unique entities so de-dup never intervenes; buffer of 2 must
@@ -318,6 +337,7 @@ func TestOverflowDropsAreCounted(t *testing.T) {
 		vc.EntityID = "inv_" + string(rune('a'+i))
 		em.Record(ctxWithVC(t, vc), "capture", biz.ResultFailed)
 	}
+
 	_ = ctx
 	metrics, events := flushAndSnapshot(t, em, exp)
 	drops := metricsByName(metrics)["biz_dropped_events_total"]
@@ -327,12 +347,15 @@ func TestOverflowDropsAreCounted(t *testing.T) {
 			dropped += p.Value
 		}
 	}
+
 	if int64(len(events))+dropped != 10 {
 		t.Fatalf("events %d + overflow drops %d != 10", len(events), dropped)
 	}
+
 	if dropped == 0 {
 		t.Fatal("expected overflow drops with a buffer of 2")
 	}
+
 	// Atomic drop: an overflowed observation contributes no metric
 	// increments — sums and events cannot diverge through overflow.
 	txn := metricsByName(metrics)["biz_txn_total"]
@@ -340,6 +363,7 @@ func TestOverflowDropsAreCounted(t *testing.T) {
 	for _, p := range txn {
 		txnTotal += p.Value
 	}
+
 	if txnTotal != int64(len(events)) {
 		t.Fatalf("txn metric total %d != exported events %d — overflow must drop atomically", txnTotal, len(events))
 	}
@@ -356,6 +380,7 @@ func TestOverflowDropDoesNotPoisonRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 
 	first := emitterVC()
@@ -366,6 +391,7 @@ func TestOverflowDropDoesNotPoisonRetry(t *testing.T) {
 	if err := em.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	em.Record(ctxWithVC(t, second), "capture", biz.ResultFailed) // retry must emit
 	_, events := flushAndSnapshot(t, em, exp)
 	found := false
@@ -374,6 +400,7 @@ func TestOverflowDropDoesNotPoisonRetry(t *testing.T) {
 			found = true
 		}
 	}
+
 	if !found {
 		t.Fatal("retry after overflow was dedup-suppressed — the event is lost in-process")
 	}
@@ -386,6 +413,7 @@ func TestExportFailureCountsDrops(t *testing.T) {
 	if err := em.Flush(context.Background()); err == nil {
 		t.Fatal("failing export must surface through Flush")
 	}
+
 	// Let the exporter recover, then flush again: the drop counter for
 	// the failed export must reach the backend.
 	exp.mu.Lock()
@@ -400,6 +428,7 @@ func TestExportFailureCountsDrops(t *testing.T) {
 			exportDrops += p.Value
 		}
 	}
+
 	if exportDrops == 0 {
 		t.Fatal("export failure left no visible drop count")
 	}
@@ -415,23 +444,28 @@ func TestSetInFlightEmitsGauge(t *testing.T) {
 	if len(g) != 1 {
 		t.Fatalf("gauge points: %v", metrics)
 	}
+
 	want := map[string]string{"flow": "invoice.pay", "stage": "capture", "age_bucket": Age5mTo30m, "currency": "USD"}
 	for k, v := range want {
 		if g[0].Labels[k] != v {
 			t.Fatalf("gauge label %s = %q, want %q", k, g[0].Labels[k], v)
 		}
 	}
+
 	if len(g[0].Labels) != len(want) {
 		t.Fatalf("gauge label set %v, want exactly %v", g[0].Labels, want)
 	}
+
 	if g[0].Value != 5568661 {
 		t.Fatalf("gauge value %d", g[0].Value)
 	}
+
 	// The companion count gauge (ADR-0012) rides the same labels.
 	c := byName["biz_inflight_count"]
 	if len(c) != 1 || c[0].Value != 42 {
 		t.Fatalf("count gauge = %v, want one point value 42", c)
 	}
+
 	for k, v := range want {
 		if c[0].Labels[k] != v {
 			t.Fatalf("count label %s = %q, want %q", k, c[0].Labels[k], v)
@@ -447,6 +481,7 @@ func TestSetInFlightRejectsNegativeCount(t *testing.T) {
 	if g := metricsByName(metrics)["biz_inflight_value"]; len(g) != 0 {
 		t.Fatalf("a negative count must reject the whole sample: %v", g)
 	}
+
 	drops := metricsByName(metrics)["biz_dropped_events_total"]
 	if len(drops) != 1 || drops[0].Labels["reason"] != "invalid" {
 		t.Fatalf("negative count must count as invalid: %v", drops)
@@ -461,6 +496,7 @@ func TestSetInFlightRejectsUnknownBucket(t *testing.T) {
 	if g := metricsByName(metrics)["biz_inflight_value"]; len(g) != 0 {
 		t.Fatalf("typo bucket minted a series: %v", g)
 	}
+
 	drops := metricsByName(metrics)["biz_dropped_events_total"]
 	if len(drops) != 1 || drops[0].Labels["reason"] != "invalid" {
 		t.Fatalf("unknown bucket must count as invalid: %v", drops)
@@ -473,14 +509,17 @@ func TestCloseFlushesAndShutsDown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	em.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed)
 	if err := em.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	m, e := exp.snapshot()
 	if len(e) != 1 || len(m) == 0 {
 		t.Fatalf("Close lost buffered signals: %d metrics, %d events", len(m), len(e))
 	}
+
 	if !exp.closed {
 		t.Fatal("Close did not shut the exporter down")
 	}
@@ -518,6 +557,7 @@ func TestRecordOptionOverrides(t *testing.T) {
 			if len(events) != 1 {
 				t.Fatalf("events = %d", len(events))
 			}
+
 			c.check(t, events[0])
 		})
 	}
@@ -535,6 +575,7 @@ func TestRecordLinksTraceID(t *testing.T) {
 	if len(events) != 1 || events[0].TraceID != "4bf92f3577b34da6a3ce929d0e0e4736" {
 		t.Fatalf("trace link missing: %+v", events)
 	}
+
 	// And without a span: empty, valid.
 	em2exp := &captureExporter{}
 	em2 := newTestEmitter(t, em2exp)
@@ -565,6 +606,7 @@ func TestSetInFlightFencesFlowAndStage(t *testing.T) {
 			if len(g) != 1 {
 				t.Fatalf("gauge points: %v", metrics)
 			}
+
 			if g[0].Labels["flow"] != c.wantFlow || g[0].Labels["stage"] != c.wantStage {
 				t.Fatalf("labels %v, want flow=%s stage=%s — no caller string may mint a series", g[0].Labels, c.wantFlow, c.wantStage)
 			}
@@ -580,10 +622,12 @@ func TestMetricBufferIsBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	for i := 0; i < 100; i++ {
 		em.SetInFlight("invoice.pay", "capture", AgeLt1m, biz.Money{Amount: int64(i + 1), Currency: "USD", Exponent: 2}, 1)
 	}
+
 	metrics, _ := flushAndSnapshot(t, em, exp)
 	if len(metrics) > 8 {
 		t.Fatalf("metric buffer exceeded its bound: %d points", len(metrics))
@@ -621,6 +665,7 @@ func TestConcurrentRecordFlushClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var wg sync.WaitGroup
 	for g := 0; g < 8; g++ {
 		wg.Add(1)
@@ -634,6 +679,7 @@ func TestConcurrentRecordFlushClose(t *testing.T) {
 					t.Error(err)
 					return
 				}
+
 				em.Record(ctx, "capture", biz.ResultFailed)
 				if i%50 == 0 {
 					_ = em.Flush(context.Background())
@@ -641,17 +687,21 @@ func TestConcurrentRecordFlushClose(t *testing.T) {
 			}
 		}(g)
 	}
+
 	wg.Wait()
 	if err := em.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := em.Close(context.Background()); err != nil {
 		t.Fatal("second Close must be idempotent and return the first result")
 	}
+
 	_, events := exp.snapshot()
 	if len(events) != 8*200 {
 		t.Fatalf("events = %d, want %d (nothing lost, nothing doubled)", len(events), 8*200)
 	}
+
 	if !exp.closed {
 		t.Fatal("exporter not shut down")
 	}
@@ -663,6 +713,7 @@ func TestBackgroundFlushDelivers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	em.Record(ctxWithVC(t, emitterVC()), "capture", biz.ResultFailed)
 	deadline := time.Now().Add(2 * time.Second)
@@ -670,8 +721,10 @@ func TestBackgroundFlushDelivers(t *testing.T) {
 		if _, events := exp.snapshot(); len(events) == 1 {
 			return
 		}
+
 		time.Sleep(2 * time.Millisecond)
 	}
+
 	t.Fatal("background flusher never delivered")
 }
 
@@ -681,10 +734,12 @@ func BenchmarkRecordAccept(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	em, err := New(&reg, exp, WithBufferSize(1<<22), WithFlushInterval(0))
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	defer func() { _ = em.Close(context.Background()) }()
 	ctxs := make([]context.Context, 4096)
 	for i := range ctxs {
@@ -695,6 +750,7 @@ func BenchmarkRecordAccept(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+
 	stages := [...]string{"auth", "capture", "settle"}
 	results := [...]biz.Result{biz.ResultFailed, biz.ResultSuccess, biz.ResultDeferred, biz.ResultUnknown}
 	// delivered totals what actually reached the sink, so the conservation
@@ -734,6 +790,7 @@ func BenchmarkRecordAccept(b *testing.B) {
 			b.StartTimer()
 		}
 	}
+
 	b.StopTimer()
 	drain()
 
@@ -753,15 +810,18 @@ func BenchmarkRecordSuppressed(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	em, err := New(&reg, exp, WithFlushInterval(0))
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	defer func() { _ = em.Close(context.Background()) }()
 	ctx, err := biz.WithValueContext(context.Background(), emitterVC())
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	em.Record(ctx, "capture", biz.ResultFailed) // prime the dedup
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -781,9 +841,11 @@ func TestEstimatedOutcomeStaysOutOfValueMetric(t *testing.T) {
 	if len(byName["biz_value_total"]) != 0 {
 		t.Fatalf("estimated value leaked into biz_value_total: %v", byName["biz_value_total"])
 	}
+
 	if len(byName["biz_txn_total"]) != 1 {
 		t.Fatalf("estimated outcome should still count: %v", byName["biz_txn_total"])
 	}
+
 	if len(events) != 1 || !events[0].VC.Estimated {
 		t.Fatalf("estimated outcome must still ride the event: %+v", events)
 	}
@@ -798,18 +860,22 @@ func TestRecordProviderCallEmitsCounter(t *testing.T) {
 	if len(pts) != 1 {
 		t.Fatalf("provider-call points: %v", metrics)
 	}
+
 	want := map[string]string{"provider": "stripe", "op": "capture", "outcome": ProviderCallFailed}
 	for k, v := range want {
 		if pts[0].Labels[k] != v {
 			t.Fatalf("label %s = %q, want %q", k, pts[0].Labels[k], v)
 		}
 	}
+
 	if len(pts[0].Labels) != len(want) {
 		t.Fatalf("label set %v, want exactly the ADR-0004 set %v", pts[0].Labels, want)
 	}
+
 	if pts[0].Value != 1 {
 		t.Fatalf("counter delta %d, want 1", pts[0].Value)
 	}
+
 	if !pts[0].At.Equal(testClock) {
 		t.Fatalf("At = %v, want the emitter clock %v", pts[0].At, testClock)
 	}
@@ -843,6 +909,7 @@ func TestRecordProviderCallRejectsUnboundedLabels(t *testing.T) {
 			if pts := metricsByName(metrics)["biz_provider_calls_total"]; len(pts) != 0 {
 				t.Fatalf("a rejected call minted a series: %v", pts)
 			}
+
 			drops := metricsByName(metrics)["biz_dropped_events_total"]
 			if len(drops) != 1 || drops[0].Labels["reason"] != "invalid" {
 				t.Fatalf("rejection must be loud on biz_dropped_events_total{reason=invalid}, got %v", drops)
@@ -859,6 +926,7 @@ func TestRecordProviderCallCapsDistinctPairs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 
 	// Two distinct pairs fit under the cap and keep their own labels.
@@ -874,16 +942,20 @@ func TestRecordProviderCallCapsDistinctPairs(t *testing.T) {
 	if len(pts) != 3 {
 		t.Fatalf("every call must still be counted: %v", pts)
 	}
+
 	seen := map[string]int{}
 	for _, p := range pts {
 		seen[p.Labels["provider"]+"/"+p.Labels["op"]]++
 	}
+
 	if seen["stripe/capture"] != 1 || seen["stripe/refund"] != 1 {
 		t.Fatalf("pairs under the cap must keep their labels: %v", seen)
 	}
+
 	if seen[ProviderOther+"/"+ProviderOther] != 1 {
 		t.Fatalf("a pair past the cap must collapse to the %q sentinel, got %v", ProviderOther, seen)
 	}
+
 	if seen["stripe/unbounded-per-request-op"] != 0 {
 		t.Fatalf("a pair past the cap minted a series: %v", seen)
 	}
@@ -897,6 +969,7 @@ func TestRecordProviderCallCapsDistinctPairs(t *testing.T) {
 	for _, p := range metricsByName(metrics2)["biz_provider_calls_total"] {
 		after[p.Labels["provider"]+"/"+p.Labels["op"]]++
 	}
+
 	if after[ProviderOther+"/"+ProviderOther] != 2 || after["stripe/capture"] != 2 {
 		t.Fatalf("sentinel must be stable and admitted pairs must survive the cap: %v", after)
 	}
@@ -926,6 +999,7 @@ func (h *lockProbeHandler) Handle(ctx context.Context, r slog.Record) error {
 	} else {
 		h.em.mu.Unlock()
 	}
+
 	return nil
 }
 
@@ -945,6 +1019,7 @@ func TestRecordProviderCallLogsWithTheLockReleased(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	probe.em = em
 
@@ -1001,17 +1076,20 @@ func TestDroppedEventsCountSurvivesAMetricExportFailure(t *testing.T) {
 	for _, p := range byName["biz_dropped_events_total"] {
 		got[p.Labels["reason"]] += p.Value
 	}
+
 	want := map[string]int64{"invalid": 1, "export": 1}
 	if !maps.Equal(got, want) {
 		t.Errorf("biz_dropped_events_total after a failed export = %v, want %v — "+
 			"a backend outage must not destroy the record of the library's own damage, "+
 			"and nothing but that record may be re-credited", got, want)
 	}
+
 	// The transaction families are NOT re-credited: re-queuing them past a
 	// partial write is how a counter double-counts.
 	if pts := byName["biz_txn_total"]; len(pts) != 0 {
 		t.Errorf("biz_txn_total came back after a failed export (%d points) — only the drop counters are re-credited", len(pts))
 	}
+
 	if pts := byName["biz_value_total"]; len(pts) != 0 {
 		t.Errorf("biz_value_total came back after a failed export (%d points)", len(pts))
 	}

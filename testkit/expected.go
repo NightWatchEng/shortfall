@@ -108,12 +108,14 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 				e.Realized.ValueMinor += txn.AmountMinor
 				customers[txn.CustomerID] = struct{}{}
 			}
+
 			continue
 		case checkout.StateAbandoned:
 			if inWindow(txn.CreatedAt) {
 				e.Unrealized.AbandonedCount++
 				e.Unrealized.AbandonedValueMinor += txn.AmountMinor
 			}
+
 			continue
 		}
 
@@ -121,11 +123,13 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 		if txn.AuthedAt.IsZero() || txn.AuthedAt.After(snapshot) {
 			continue
 		}
+
 		inCapture := txn.CapturedAt.IsZero() || txn.CapturedAt.After(snapshot)
 		inSettle := !inCapture && (txn.SettledAt.IsZero() || txn.SettledAt.After(snapshot))
 		if !inCapture && !inSettle {
 			continue // settled by the snapshot
 		}
+
 		e.Deferred.Count++
 		e.Deferred.ValueMinor += txn.AmountMinor
 		customers[txn.CustomerID] = struct{}{}
@@ -140,6 +144,7 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 			e.Deferred.InSettleCount++
 			age = snapshot.Sub(txn.CapturedAt)
 		}
+
 		if m := int(age.Minutes()); m > e.Deferred.OldestAgeMin {
 			e.Deferred.OldestAgeMin = m
 		}
@@ -150,6 +155,7 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 			e.Unrealized.SuppressedCount += s.Count
 		}
 	}
+
 	// Recoveries are counted by attribution: a recovered txn belongs to
 	// the blackout that originally suppressed it (RecoveredFrom), so the
 	// subtraction is window-coherent even with multiple blackouts in one
@@ -160,12 +166,14 @@ func ComputeExpected(name string, res checkout.Result, g checkout.GoldenWindow) 
 			e.Unrealized.RecoveredCount++
 		}
 	}
+
 	e.Unrealized.NetLostCount = e.Unrealized.SuppressedCount - e.Unrealized.RecoveredCount
 	if e.Unrealized.NetLostCount < 0 {
 		// Unreachable under the attribution invariant; kept as a loud
 		// guard rather than a silent clamp.
 		panic("testkit: recovered exceeds suppressed for the same window — attribution invariant broken")
 	}
+
 	e.Unrealized.MeanAmountMinorForEst = trueMeanAmountMinor(res.Config.EnterpriseFraction)
 	e.Unrealized.NetLostValueMinorEst = int64(e.Unrealized.NetLostCount) *
 		e.Unrealized.MeanAmountMinorForEst

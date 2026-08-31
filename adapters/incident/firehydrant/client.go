@@ -55,6 +55,7 @@ func New(token string, opts ...Option) *Client {
 	for _, o := range opts {
 		o(c)
 	}
+
 	return c
 }
 
@@ -73,6 +74,7 @@ func (c *Client) WriteImpact(ctx context.Context, incidentID string, r engine.Re
 	} else {
 		body = map[string]any{"customer_impact_summary": summary}
 	}
+
 	return c.call(ctx, http.MethodPatch, fmt.Sprintf("/v1/incidents/%s", neturl.PathEscape(incidentID)), body, "update")
 }
 
@@ -84,6 +86,7 @@ func (c *Client) AttachCustomersCSV(ctx context.Context, incidentID string, r en
 	if err != nil {
 		return fmt.Errorf("firehydrant: %w", err)
 	}
+
 	body := map[string]any{
 		"body": "shortfall customers (top accounts, minor units):\n```\n" + string(csv) + "```",
 	}
@@ -95,21 +98,25 @@ func (c *Client) call(ctx context.Context, method, path string, body map[string]
 	if err != nil {
 		return err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("firehydrant: %s: %w", op, err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("firehydrant: %s: status %d: %s", op, resp.StatusCode, snippet)
 	}
+
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }

@@ -56,9 +56,11 @@ func (s *sumEmitter) totals() (minor, count int64, exponents map[int8]bool) {
 			exponents[exp] = true
 		}
 	}
+
 	for _, v := range s.counts {
 		count += v
 	}
+
 	return minor, count, exponents
 }
 
@@ -80,6 +82,7 @@ func TestTrackerBoundExactUnderConcurrentTracks(t *testing.T) {
 			}
 		}(w)
 	}
+
 	wg.Wait()
 
 	// The bound is documented as the worst-case resident footprint, so it
@@ -88,11 +91,13 @@ func TestTrackerBoundExactUnderConcurrentTracks(t *testing.T) {
 	if got := tr.Overflowed(); got != workers*perWorker-bound {
 		t.Fatalf("Overflowed() = %d, want %d", got, workers*perWorker-bound)
 	}
+
 	tr.Publish()
 	minor, count, _ := em.totals()
 	if count != bound {
 		t.Fatalf("published in-flight count = %d, want exactly the bound %d", count, bound)
 	}
+
 	if minor != bound {
 		t.Fatalf("published in-flight minor units = %d, want %d", minor, bound)
 	}
@@ -117,6 +122,7 @@ func TestTrackerExponentPinRaceHasOneWinner(t *testing.T) {
 			}
 		}(w)
 	}
+
 	wg.Wait()
 
 	// Whichever exponent was seen first is pinned; every Track carrying
@@ -127,10 +133,12 @@ func TestTrackerExponentPinRaceHasOneWinner(t *testing.T) {
 	if len(exponents) != 1 {
 		t.Fatalf("published %d distinct exponents for one currency, want 1: %v", len(exponents), exponents)
 	}
+
 	if got := tr.Rejected(); got != workers*perWorker-count {
 		t.Fatalf("Rejected() = %d, published count = %d; together they must account for all %d tracks",
 			got, count, workers*perWorker)
 	}
+
 	if count != workers*perWorker/2 {
 		t.Fatalf("published count = %d, want %d (exactly the winning half)", count, workers*perWorker/2)
 	}
@@ -169,11 +177,13 @@ func TestTrackerStormReconciles(t *testing.T) {
 				tr.Track("invoice.pay", "capture", id, usd(3), now)
 				tr.Done("invoice.pay", "capture", id)
 			}
+
 			for i := 0; i < held; i++ {
 				tr.Track("invoice.pay", "capture", fmt.Sprintf("w%d-held-%d", w, i), usd(7), now)
 			}
 		}(w)
 	}
+
 	wg.Wait()
 	close(stopPublishing)
 	pub.Wait()
@@ -181,6 +191,7 @@ func TestTrackerStormReconciles(t *testing.T) {
 	if tr.Overflowed() != 0 || tr.Rejected() != 0 {
 		t.Fatalf("overflowed=%d rejected=%d: the storm was not the accept path", tr.Overflowed(), tr.Rejected())
 	}
+
 	// Quiesced, the final publish must report exactly the held set: no
 	// pair leaked into the in-flight sums, no held id lost or doubled.
 	fresh := newSumEmitter()
@@ -190,6 +201,7 @@ func TestTrackerStormReconciles(t *testing.T) {
 	if count != workers*held {
 		t.Fatalf("final in-flight count = %d, want %d", count, workers*held)
 	}
+
 	if minor != int64(workers*held*7) {
 		t.Fatalf("final in-flight minor units = %d, want %d", minor, workers*held*7)
 	}

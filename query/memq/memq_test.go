@@ -87,16 +87,20 @@ func TestQueryMetricAggregation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if len(series) != 1 {
 				t.Fatalf("series = %d, want 1", len(series))
 			}
+
 			got := make([]float64, len(series[0].Points))
 			for i, p := range series[0].Points {
 				got[i] = p.Value
 			}
+
 			if len(got) != len(c.want) {
 				t.Fatalf("points = %v, want %v", got, c.want)
 			}
+
 			for i := range c.want {
 				if got[i] != c.want[i] {
 					t.Fatalf("point[%d] = %v, want %v (all %v)", i, got[i], c.want[i], got)
@@ -131,19 +135,23 @@ func TestGaugeCarriesForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(series) != 1 {
 		t.Fatalf("series = %d, want 1", len(series))
 	}
+
 	// 5 one-minute buckets. Bucket 0 (00:00-01:00): carries the pre-window
 	// 200. Buckets 1-4: after the 800 sample at 01:30, all carry 800.
 	got := make([]float64, len(series[0].Points))
 	for i, p := range series[0].Points {
 		got[i] = p.Value
 	}
+
 	want := []float64{200, 800, 800, 800, 800}
 	if len(got) != len(want) {
 		t.Fatalf("points = %v, want %v", got, want)
 	}
+
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("bucket[%d] = %v, want %v (all %v)", i, got[i], want[i], got)
@@ -180,9 +188,11 @@ func TestGaugeSumsCollapsedSeries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(series) != 1 {
 		t.Fatalf("series = %d, want 1 (one age_bucket/currency group)", len(series))
 	}
+
 	if got := series[0].Points[0].Value; got != 1000 {
 		t.Fatalf("collapsed gauge value = %v, want 1000 (300 capture + 700 settle)", got)
 	}
@@ -207,13 +217,16 @@ func TestQueryMetricGroupsByLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(series) != 2 {
 		t.Fatalf("series = %d, want 2 (failed, success)", len(series))
 	}
+
 	byOutcome := map[string]float64{}
 	for _, s := range series {
 		byOutcome[s.Labels["outcome"]] = s.Points[0].Value
 	}
+
 	if byOutcome["failed"] != 3 || byOutcome["success"] != 1 {
 		t.Fatalf("grouped values = %v", byOutcome)
 	}
@@ -258,12 +271,15 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(groups) != 2 {
 			t.Fatalf("groups = %d, want 2", len(groups))
 		}
+
 		if groups[0].Key["currency"] != "USD" || groups[0].SumMinor != 15000 || groups[0].Count != 2 {
 			t.Fatalf("top group = %+v, want USD sum 15000 count 2", groups[0])
 		}
+
 		if groups[1].Key["currency"] != "EUR" || groups[1].SumMinor != 5000 {
 			t.Fatalf("second group = %+v", groups[1])
 		}
@@ -278,6 +294,7 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(groups) != 1 || groups[0].SumMinor != 15000 {
 			t.Fatalf("groups = %+v", groups)
 		}
@@ -293,6 +310,7 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		// h:c1 has two USD failures (14900, 100): Count 2, SumMinor 15000, MaxMinor 14900.
 		if len(groups) != 1 || groups[0].Count != 2 || groups[0].SumMinor != 15000 ||
 			groups[0].MaxMinor != 14900 {
@@ -339,6 +357,7 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(groups) != 1 || groups[0].MaxMinor != -100 {
 			t.Fatalf("group = %+v, want MaxMinor -100 (not the 0 seed)", groups[0])
 		}
@@ -353,6 +372,7 @@ func TestQueryEventsGroupsSumsAndCurrencyInvariant(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if groups[0].MaxMinor != 0 {
 			t.Fatalf("MaxMinor = %d, want 0 for EventAggGroups", groups[0].MaxMinor)
 		}
@@ -377,6 +397,7 @@ func TestQueryEventsOrderLimitAndDistinct(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(groups) != 1 || groups[0].Key["customer"] != "h:c2" || groups[0].SumMinor != 950 {
 			t.Fatalf("top = %+v, want h:c2 sum 950", groups)
 		}
@@ -399,6 +420,7 @@ func TestQueryEventsOrderLimitAndDistinct(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(groups) != 1 || groups[0].Count != 2 {
 			t.Fatalf("distinct = %+v, want count 2", groups)
 		}

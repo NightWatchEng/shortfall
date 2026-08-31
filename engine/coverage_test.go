@@ -28,18 +28,22 @@ func ledgerFromResult(res checkout.Result) []biz.LedgerRow {
 		if tx.State != checkout.StateSettled {
 			continue
 		}
+
 		r := byCur[tx.Currency]
 		if r == nil {
 			r = &biz.LedgerRow{Flow: "invoice.pay", Outcome: biz.ResultSuccess, Money: biz.Money{Currency: tx.Currency, Exponent: 2}}
 			byCur[tx.Currency] = r
 		}
+
 		r.Money.Amount += tx.AmountMinor
 		r.Count++
 	}
+
 	out := make([]biz.LedgerRow, 0, len(byCur))
 	for _, r := range byCur {
 		out = append(out, *r)
 	}
+
 	return out
 }
 
@@ -55,8 +59,10 @@ func dropSettled(res checkout.Result, keepEvery int) checkout.Result {
 				continue // dropped by the failing exporter
 			}
 		}
+
 		kept = append(kept, tx)
 	}
+
 	return checkout.Result{Ledger: checkout.Ledger{Txns: kept}}
 }
 
@@ -77,6 +83,7 @@ func TestCoverageHarnessReports100(t *testing.T) {
 	if len(ledger) == 0 {
 		t.Fatal("scenario produced no settled transactions")
 	}
+
 	q := testkit.QuerierFromResult(res) // telemetry sees exactly what settled
 	leg, slices, err := Coverage(
 		context.Background(),
@@ -89,15 +96,19 @@ func TestCoverageHarnessReports100(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Unavailable != "" {
 		t.Fatalf("coverage unexpectedly unavailable: %s", leg.Unavailable)
 	}
+
 	if leg.Ratio != 1.0 {
 		t.Fatalf("full telemetry must reconcile to 100%%, got %.4f (slices %+v)", leg.Ratio, slices)
 	}
+
 	if leg.Evidence != EvidenceTrust {
 		t.Fatalf("evidence = %q, want trust", leg.Evidence)
 	}
+
 	for _, s := range slices {
 		if s.TelemetryMinor != s.LedgerMinor {
 			t.Fatalf("slice %s/%s: telemetry %d != ledger %d at 100%%", s.Flow, s.Currency, s.TelemetryMinor, s.LedgerMinor)
@@ -123,9 +134,11 @@ func TestCoverageDroppedExporterUnder100WithDelta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !(leg.Ratio > 0 && leg.Ratio < 1) {
 		t.Fatalf("dropped-exporter coverage must be strictly between 0 and 1, got %.4f", leg.Ratio)
 	}
+
 	// Attribution: a slice must show telemetry below ledger by the dropped value.
 	found := false
 	for _, s := range slices {
@@ -136,6 +149,7 @@ func TestCoverageDroppedExporterUnder100WithDelta(t *testing.T) {
 			}
 		}
 	}
+
 	if !found {
 		t.Fatalf("dropped exporter must produce an under-covered slice: %+v", slices)
 	}
@@ -147,6 +161,7 @@ func TestCoverageNoLedgerUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Unavailable == "" || leg.Ratio != 0 || slices != nil {
 		t.Fatalf("no ledger must be Unavailable with no fabricated ratio, got %+v", leg)
 	}
@@ -170,6 +185,7 @@ func TestCoverageOverTelemetryClampedToFull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Ratio != 1.0 || slices[0].Ratio != 1.0 {
 		t.Fatalf("telemetry > ledger must clamp to 1.0, got headline %.4f slice %.4f", leg.Ratio, slices[0].Ratio)
 	}
@@ -192,9 +208,11 @@ func TestCoverageZeroValueSliceSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Ratio != 1.0 {
 		t.Fatalf("a $0 slice must be skipped, not tank the headline; got %.4f (slices %+v)", leg.Ratio, slices)
 	}
+
 	for _, s := range slices {
 		if s.Currency == "EUR" {
 			t.Fatalf("zero-value EUR slice must be skipped, not emitted: %+v", s)
@@ -217,9 +235,11 @@ func TestCoverageAllZeroLedgerUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Unavailable == "" || leg.Ratio != 0 || len(slices) != 0 {
 		t.Fatalf("all-zero ledger must be Unavailable with no ratio/slices, got %+v (slices %+v)", leg, slices)
 	}
+
 	if !strings.Contains(leg.Unavailable, "value") {
 		t.Fatalf("message should name the zero-value cause, got %q", leg.Unavailable)
 	}
@@ -243,6 +263,7 @@ func TestCoverageWorstSliceIsHeadline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Ratio != 0.5 {
 		t.Fatalf("headline must be the worst slice (EUR 0.5), got %.4f (slices %+v)", leg.Ratio, slices)
 	}
@@ -332,15 +353,18 @@ flows:
 			if err := os.WriteFile(path, []byte(regYAML(c.reconcile)), 0o600); err != nil {
 				t.Fatal(err)
 			}
+
 			reg, err := registry.Load(path)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			q := memq.New(memq.WithMetrics(c.points), memq.WithCaps(query.Caps{Metrics: true}))
 			leg, _, err := Coverage(context.Background(), &reg, q, Request{Window: window, Flows: []string{"invoice.pay"}}, ledger, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if leg.Ratio != c.wantRatio {
 				t.Fatalf("ratio = %.4f, want %.4f", leg.Ratio, c.wantRatio)
 			}
@@ -357,6 +381,7 @@ func TestCoverageUnknownFlowFailsLoudly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	q := memq.New(memq.WithMetrics(nil), memq.WithCaps(query.Caps{Metrics: true}))
 	ledger := []biz.LedgerRow{{
 		Flow: "invoice.pya", Outcome: biz.ResultSuccess, // ledger/registry name drift

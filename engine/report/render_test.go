@@ -78,16 +78,19 @@ func TestGoldenRenders(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			golden := filepath.Join("testdata", c.file)
 			if *update {
 				if err := os.WriteFile(golden, got, 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}
+
 			want, err := os.ReadFile(golden)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if !bytes.Equal(got, want) {
 				t.Fatalf("%s mismatch.\n--- got ---\n%s\n--- want ---\n%s", c.name, got, want)
 			}
@@ -107,6 +110,7 @@ func TestNoRendererSumsRealizedWithEstimate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	renders["json"] = string(j)
 
 	// Forbidden sums derived FROM the fixture (not hardcoded), so the guard
@@ -123,6 +127,7 @@ func TestNoRendererSumsRealizedWithEstimate(t *testing.T) {
 				t.Fatalf("%s renderer contains %q — realized must never be summed with an estimate", name, sum)
 			}
 		}
+
 		// Sanity: the separate figures are present. Use the realized value and
 		// the estimate low/high (2000/8000) — values that are not substrings
 		// of any other rendered number, so a dropped estimate leg is caught
@@ -131,6 +136,7 @@ func TestNoRendererSumsRealizedWithEstimate(t *testing.T) {
 		if !strings.Contains(out, "15000") {
 			t.Fatalf("%s renderer missing the realized figure 15000", name)
 		}
+
 		if !strings.Contains(out, "2000") || !strings.Contains(out, "8000") {
 			t.Fatalf("%s renderer missing the estimate range 2000…8000", name)
 		}
@@ -157,6 +163,7 @@ func TestComputedEventsOnlyReportStatesDeferredGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	q := memq.New(memq.WithCaps(query.Caps{Events: true, EventHistoryWeeks: 520}))
 	rep, err := engine.Compute(context.Background(), &reg, q, engine.Request{
 		Window: query.TimeRange{
@@ -168,11 +175,13 @@ func TestComputedEventsOnlyReportStatesDeferredGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for name, out := range map[string]string{"text": RenderText(rep), "markdown": RenderMarkdown(rep)} {
 		if !strings.Contains(out, "biz_inflight_value") {
 			t.Fatalf("%s render of an events-only report must state the deferred leg's missing metric source, got:\n%s", name, out)
 		}
 	}
+
 	s := Summary(rep)
 	for _, marker := range []string{"deferred n/a", "unrealized n/a"} {
 		if !strings.Contains(s, marker) {
@@ -228,6 +237,7 @@ func TestNotAvailableAndUnavailableRendered(t *testing.T) {
 		if !strings.Contains(out, "backend serves no events") {
 			t.Fatalf("%s must render the customers NotAvailableReason", name)
 		}
+
 		if !strings.Contains(out, "no reconciliation has run") {
 			t.Fatalf("%s must render the coverage Unavailable reason", name)
 		}

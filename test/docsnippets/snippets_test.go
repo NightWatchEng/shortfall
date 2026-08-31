@@ -100,6 +100,7 @@ func repoRoot(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return root
 }
 
@@ -114,15 +115,18 @@ func TestDocGoFencesCompile(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			var goFences []fence
 			for _, f := range fences {
 				if f.lang == "go" && !f.ref {
 					goFences = append(goFences, f)
 				}
 			}
+
 			if len(goFences) == 0 {
 				t.Fatalf("%s: no Go fences found — governed docs must have some, or leave the map", doc)
 			}
+
 			if err := compileGoFences(root, t.TempDir(), goFences, stubs); err != nil {
 				t.Fatalf("%s: %v", doc, err)
 			}
@@ -157,21 +161,25 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			for _, f := range fences {
 				if !registryFence(f) {
 					continue
 				}
+
 				found++
 				p := filepath.Join(t.TempDir(), "registry.yaml")
 				if err := os.WriteFile(p, []byte(f.body), 0o644); err != nil {
 					t.Fatal(err)
 				}
+
 				if _, err := registry.Load(p); err != nil {
 					t.Errorf("%s:%d registry fence fails validation: %v", doc, f.line, err)
 				}
 			}
 		})
 	}
+
 	if found == 0 {
 		t.Fatal("no registry fences found anywhere — the validator would be vacuous")
 	}
@@ -219,23 +227,29 @@ func TestExtractFences(t *testing.T) {
 			if err := os.WriteFile(p, []byte(c.src), 0o644); err != nil {
 				t.Fatal(err)
 			}
+
 			fences, err := extractFences(p)
 			if c.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 					t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			var langs []string
 			for _, f := range fences {
 				langs = append(langs, f.lang)
 			}
+
 			if strings.Join(langs, ",") != strings.Join(c.wantLangs, ",") {
 				t.Fatalf("langs = %v, want %v", langs, c.wantLangs)
 			}
+
 			if fences[0].body != c.wantBody {
 				t.Fatalf("body = %q, want %q", fences[0].body, c.wantBody)
 			}
@@ -257,10 +271,12 @@ func TestGovernanceMarkers(t *testing.T) {
 		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
 			t.Fatal(err)
 		}
+
 		fences, err := extractFences(p)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return fences
 	}
 
@@ -343,12 +359,14 @@ func TestCheckerCatchesBroken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	byLine := func(line int) fence {
 		for _, f := range fences {
 			if f.line == line {
 				return f
 			}
 		}
+
 		t.Fatalf("fixture fence at line %d not found", line)
 		return fence{}
 	}
@@ -374,10 +392,12 @@ func TestCheckerCatchesBroken(t *testing.T) {
 				if !registryFence(f) {
 					t.Fatal("fixture registry fence not recognized")
 				}
+
 				p := filepath.Join(t.TempDir(), "registry.yaml")
 				if err := os.WriteFile(p, []byte(f.body), 0o644); err != nil {
 					return err
 				}
+
 				_, err := registry.Load(p)
 				return err
 			},
@@ -390,6 +410,7 @@ func TestCheckerCatchesBroken(t *testing.T) {
 			if err == nil {
 				t.Fatal("broken fixture passed — the checker is vacuous")
 			}
+
 			if !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("error %q does not name the defect (%q)", err, c.wantErr)
 			}

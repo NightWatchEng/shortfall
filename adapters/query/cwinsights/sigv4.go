@@ -43,27 +43,33 @@ func signV4svc(req *http.Request, body []byte, creds credentials, region, servic
 	if v := req.Header.Get("Content-Type"); v != "" {
 		headers["content-type"] = v
 	}
+
 	if v := req.Header.Get("X-Amz-Target"); v != "" {
 		headers["x-amz-target"] = v
 	}
+
 	if headers["host"] == "" {
 		headers["host"] = req.URL.Host
 	}
+
 	names := make([]string, 0, len(headers))
 	for k := range headers {
 		names = append(names, k)
 	}
+
 	sort.Strings(names)
 	var canonHeaders strings.Builder
 	for _, k := range names {
 		canonHeaders.WriteString(k + ":" + strings.TrimSpace(headers[k]) + "\n")
 	}
+
 	signedHeaders := strings.Join(names, ";")
 
 	path := req.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
+
 	canonical := strings.Join([]string{
 		req.Method,
 		path,

@@ -43,6 +43,7 @@ func EventsFromResult(res checkout.Result) []biz.Outcome {
 		if !visible {
 			continue
 		}
+
 		vc := biz.ValueContext{
 			Flow:       "invoice.pay",
 			EntityID:   txn.ID,
@@ -53,6 +54,7 @@ func EventsFromResult(res checkout.Result) []biz.Outcome {
 		}
 		events = append(events, biz.Outcome{At: at, VC: vc, Stage: stage, Result: result, Source: "harness"})
 	}
+
 	return events
 }
 
@@ -103,10 +105,12 @@ func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPo
 				At:    txn.AuthedAt,
 			})
 		}
+
 		stage, result, at, visible := telemetryOutcome(txn)
 		if !visible {
 			continue
 		}
+
 		common := map[string]string{
 			"flow": "invoice.pay", "stage": stage, "outcome": string(result),
 			"currency": txn.Currency, "segment": string(txn.Segment),
@@ -124,6 +128,7 @@ func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPo
 			At:     at,
 		})
 	}
+
 	// In-flight (deferred) value snapshot — the level the deferred leg reads.
 	// Appended as biz_inflight_value gauge points stamped at gaugeAt.
 	metrics = append(metrics, InFlightPointsAt(res, gaugeAt)...)
@@ -146,6 +151,7 @@ func InFlightPointsAt(res checkout.Result, at time.Time) []emit.MetricPoint {
 		if acc[stage][bucket] == nil {
 			acc[stage][bucket] = map[string]int64{}
 		}
+
 		acc[stage][bucket][currency] += v
 	}
 	for _, txn := range res.Ledger.Txns {
@@ -160,6 +166,7 @@ func InFlightPointsAt(res checkout.Result, at time.Time) []emit.MetricPoint {
 			}
 		}
 	}
+
 	var points []emit.MetricPoint
 	for stage, buckets := range acc {
 		for bucket, byCur := range buckets {
@@ -174,6 +181,7 @@ func InFlightPointsAt(res checkout.Result, at time.Time) []emit.MetricPoint {
 			}
 		}
 	}
+
 	return points
 }
 
@@ -206,8 +214,10 @@ func firstNonZero(times ...time.Time) time.Time {
 			return t
 		}
 	}
+
 	if len(times) == 0 {
 		return time.Time{}
 	}
+
 	return times[len(times)-1]
 }

@@ -25,16 +25,19 @@ func CustomersCSV(r engine.Report) ([]byte, error) {
 	if reason := r.Customers.NotAvailableReason; reason != "" {
 		return nil, fmt.Errorf("report: customers leg unavailable: %s", reason)
 	}
+
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if err := w.Write([]string{"customer_id", "segment", "currency", "amount_minor"}); err != nil {
 		return nil, err
 	}
+
 	for _, c := range r.Customers.TopN {
 		curs := make([]string, 0, len(c.ByCurrency))
 		for cur := range c.ByCurrency {
 			curs = append(curs, cur)
 		}
+
 		sort.Strings(curs)
 		for _, cur := range curs {
 			if err := w.Write([]string{
@@ -44,6 +47,7 @@ func CustomersCSV(r engine.Report) ([]byte, error) {
 			}
 		}
 	}
+
 	w.Flush()
 	return buf.Bytes(), w.Error()
 }

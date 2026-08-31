@@ -100,6 +100,7 @@ func New(reg *registry.Registry, exp Exporter, opts ...EmitterOption) (*Std, err
 	if reg == nil || exp == nil {
 		return nil, fmt.Errorf("emit: registry and exporter are required")
 	}
+
 	s := &Std{
 		reg:             reg,
 		exp:             exp,
@@ -116,18 +117,22 @@ func New(reg *registry.Registry, exp Exporter, opts ...EmitterOption) (*Std, err
 	for _, o := range opts {
 		o(s)
 	}
+
 	if s.bufSize < 1 {
 		return nil, fmt.Errorf("emit: buffer size %d < 1", s.bufSize)
 	}
+
 	if s.providerPairCap < 1 {
 		return nil, fmt.Errorf("emit: provider pair cap %d < 1", s.providerPairCap)
 	}
+
 	s.metricsCap = 8 * s.bufSize
 	s.loopCtx, s.loopCancel = context.WithCancel(context.Background())
 	if s.interval > 0 {
 		s.wg.Add(1)
 		go s.loop()
 	}
+
 	return s, nil
 }
 
@@ -158,14 +163,17 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 		s.dropInvalid("record without usable ValueContext", decErr)
 		return
 	}
+
 	var cfg RecordConfig
 	for _, o := range opts {
 		o(&cfg)
 	}
+
 	at := cfg.At
 	if at.IsZero() {
 		at = s.clock()
 	}
+
 	out := biz.Outcome{
 		At:     at,
 		VC:     vc,
@@ -177,6 +185,7 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 	if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
 		out.TraceID = sc.TraceID().String()
 	}
+
 	if err := out.Validate(); err != nil {
 		s.dropInvalid("outcome failed validation", err)
 		return
@@ -195,10 +204,12 @@ func (s *Std) Record(ctx context.Context, stage string, result biz.Result, opts 
 		s.mu.Unlock()
 		return
 	}
+
 	if s.dedup.seen(key) {
 		s.mu.Unlock()
 		return
 	}
+
 	s.events = append(s.events, out)
 	s.mu.Unlock()
 
@@ -245,6 +256,7 @@ func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money, count 
 			break
 		}
 	}
+
 	if !valid || money.Validate() != nil || count < 0 {
 		s.dropInvalid(
 			"in-flight gauge rejected",
@@ -252,6 +264,7 @@ func (s *Std) SetInFlight(flow, stage, ageBucket string, money biz.Money, count 
 		)
 		return
 	}
+
 	flowLabel, stageLabel := s.flowStageLabels(flow, stage)
 	lbls := func() map[string]string {
 		return map[string]string{
@@ -296,6 +309,7 @@ func (s *Std) RecordProviderCall(provider, op, outcome string) {
 		)
 		return
 	}
+
 	providerLabel, opLabel, capped := s.providerPairLabels(provider, op)
 	if capped {
 		// Logged after the lock is released: this branch fires on every
@@ -305,6 +319,7 @@ func (s *Std) RecordProviderCall(provider, op, outcome string) {
 		s.logger.Warn("emit: provider pair cap reached; labels collapsed",
 			"provider", provider, "op", op, "cap", s.providerPairCap)
 	}
+
 	s.appendMetrics(MetricPoint{
 		Name:   "biz_provider_calls_total",
 		Labels: map[string]string{"provider": providerLabel, "op": opLabel, "outcome": outcome},
@@ -320,6 +335,7 @@ func validProviderOutcome(outcome string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -338,11 +354,13 @@ func boundedProviderLabel(v string) bool {
 	if strings.TrimSpace(v) == "" || len(v) > maxProviderLabelLen || !utf8.ValidString(v) {
 		return false
 	}
+
 	for _, r := range v {
 		if unicode.IsControl(r) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -358,9 +376,11 @@ func (s *Std) providerPairLabels(provider, op string) (labelProvider, labelOp st
 	if _, ok := s.providerPairs[key]; ok {
 		return provider, op, false
 	}
+
 	if len(s.providerPairs) >= s.providerPairCap {
 		return ProviderOther, ProviderOther, true
 	}
+
 	s.providerPairs[key] = struct{}{}
 	return provider, op, false
 }
@@ -381,6 +401,7 @@ func (s *Std) Flush(ctx context.Context) error {
 		s.logger.Warn("emit: metric buffer overflowed; points dropped", "points", s.metricOverflow)
 		s.metricOverflow = 0
 	}
+
 	for reason, n := range s.dropCounts {
 		metrics = append(metrics, MetricPoint{
 			Name:   "biz_dropped_events_total",
@@ -389,6 +410,7 @@ func (s *Std) Flush(ctx context.Context) error {
 			At:     s.clock(),
 		})
 	}
+
 	s.dropCounts = map[string]int64{}
 	s.mu.Unlock()
 
@@ -406,11 +428,13 @@ func (s *Std) Flush(ctx context.Context) error {
 			s.mu.Unlock()
 		}
 	}
+
 	if len(metrics) > 0 {
 		if err := s.exp.ExportMetrics(ctx, metrics); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
+
 			s.logger.Warn("emit: metric export failed; batch dropped", "error", err, "points", len(metrics))
 			// Preserve the drop counters: they are the record of damage
 			// and never left the process, so re-crediting cannot
@@ -421,9 +445,11 @@ func (s *Std) Flush(ctx context.Context) error {
 					s.dropCounts[p.Labels["reason"]] += p.Value
 				}
 			}
+
 			s.mu.Unlock()
 		}
 	}
+
 	return firstErr
 }
 
@@ -456,6 +482,7 @@ func (s *Std) appendMetrics(points ...MetricPoint) {
 			s.metricOverflow++
 			continue
 		}
+
 		s.metrics = append(s.metrics, p)
 	}
 }
@@ -484,6 +511,7 @@ func (s *Std) flowStageLabels(flow, stage string) (flowLabel, stageLabel string)
 	} else {
 		s.logger.Warn("emit: flow not in registry; metrics use fallback", "flow", flow)
 	}
+
 	return flowLabel, stageLabel
 }
 
@@ -492,9 +520,11 @@ func (s *Std) segmentLabel(segment string) string {
 	if segment == "" {
 		return ""
 	}
+
 	if s.reg.SegmentValid(segment) {
 		return segment
 	}
+
 	s.logger.Warn("emit: segment outside enumeration; label dropped", "segment", segment)
 	return ""
 }
@@ -519,9 +549,11 @@ func (t *twoGenSet) seen(key string) bool {
 	if _, ok := t.cur[key]; ok {
 		return true
 	}
+
 	if _, ok := t.prev[key]; ok {
 		return true
 	}
+
 	if len(t.cur) >= t.cap {
 		old := t.prev
 		t.prev = t.cur
@@ -532,6 +564,7 @@ func (t *twoGenSet) seen(key string) bool {
 			t.cur = make(map[string]struct{}, t.cap)
 		}
 	}
+
 	t.cur[key] = struct{}{}
 	return false
 }

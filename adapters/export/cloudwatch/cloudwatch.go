@@ -104,12 +104,15 @@ func New(opts ...func(*Options)) *Exporter {
 	for _, f := range opts {
 		f(&o)
 	}
+
 	if o.namespace == "" {
 		o.namespace = defaultNamespace
 	}
+
 	if o.unit == "" {
 		o.unit = "None"
 	}
+
 	return &Exporter{
 		namespace: o.namespace,
 		unit:      o.unit,
@@ -134,6 +137,7 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 	if len(batch) == 0 {
 		return nil
 	}
+
 	if e.putter != nil {
 		// After the empty-batch return, never before: an empty batch drops
 		// nothing, so there is nothing to be loud about.
@@ -143,8 +147,10 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 		if closed {
 			return ErrShutdown
 		}
+
 		return e.putMetricData(ctx, batch)
 	}
+
 	return e.writeMetricRecords(batch)
 }
 
@@ -154,15 +160,18 @@ func (e *Exporter) writeMetricRecords(batch []emit.MetricPoint) error {
 	if e.closed {
 		return ErrShutdown
 	}
+
 	for _, p := range batch {
 		rec, err := buildMetricRecord(e.namespace, e.unit, p)
 		if err != nil {
 			return err
 		}
+
 		if err := e.writeLine(rec); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -176,6 +185,7 @@ func (e *Exporter) putMetricData(ctx context.Context, batch []emit.MetricPoint) 
 		if dims == nil {
 			return &unknownFamilyError{name: p.Name}
 		}
+
 		d := cwtypes.MetricDatum{
 			MetricName: aws.String(p.Name),
 			Value:      aws.Float64(float64(p.Value)),
@@ -188,13 +198,16 @@ func (e *Exporter) putMetricData(ctx context.Context, batch []emit.MetricPoint) 
 				Value: aws.String(p.Labels[name]),
 			})
 		}
+
 		datums = append(datums, d)
 	}
+
 	for start := 0; start < len(datums); start += maxDatums {
 		end := start + maxDatums
 		if end > len(datums) {
 			end = len(datums)
 		}
+
 		if _, err := e.putter.PutMetricData(ctx, &cloudwatch.PutMetricDataInput{
 			Namespace:  aws.String(e.namespace),
 			MetricData: datums[start:end],
@@ -202,6 +215,7 @@ func (e *Exporter) putMetricData(ctx context.Context, batch []emit.MetricPoint) 
 			return fmt.Errorf("cloudwatch: put metric data: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -210,20 +224,24 @@ func (e *Exporter) ExportEvents(_ context.Context, batch []biz.Outcome) error {
 	if len(batch) == 0 {
 		return nil
 	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.closed {
 		return ErrShutdown
 	}
+
 	for _, o := range batch {
 		rec, err := buildEventRecord(o)
 		if err != nil {
 			return err
 		}
+
 		if err := e.writeLine(rec); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -233,9 +251,11 @@ func (e *Exporter) writeLine(rec []byte) error {
 	if _, err := e.w.Write(rec); err != nil {
 		return fmt.Errorf("cloudwatch: write: %w", err)
 	}
+
 	if err := e.w.WriteByte('\n'); err != nil {
 		return fmt.Errorf("cloudwatch: write: %w", err)
 	}
+
 	return nil
 }
 
@@ -250,5 +270,6 @@ func (e *Exporter) Shutdown(context.Context) error {
 	if err := e.w.Flush(); err != nil {
 		return fmt.Errorf("cloudwatch: flush: %w", err)
 	}
+
 	return nil
 }

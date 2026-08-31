@@ -54,6 +54,7 @@ func TestCapabilitiesAreHonest(t *testing.T) {
 			if caps.Metrics {
 				t.Error("Metrics = true — this exporter has no metric path; OTLP is the GCP metrics path")
 			}
+
 			if !caps.Events {
 				t.Error("Events = false, want true")
 			}
@@ -76,9 +77,11 @@ func TestMetricExportIsAnHonestNoOp(t *testing.T) {
 	if err := e.ExportMetrics(context.Background(), []emit.MetricPoint{pt}); err != nil {
 		t.Fatalf("metric export on an events-only exporter: %v", err)
 	}
+
 	if err := e.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
+
 	if buf.Len() != 0 {
 		t.Errorf("metric data reached the log writer: %q — an events-only exporter ships no metrics", buf.String())
 	}
@@ -162,15 +165,18 @@ func TestEventRecordCarriesTheMoneyFields(t *testing.T) {
 			if err != nil {
 				t.Fatalf("build: %v", err)
 			}
+
 			var got map[string]any
 			if err := json.Unmarshal(rec, &got); err != nil {
 				t.Fatalf("record is not valid JSON: %v", err)
 			}
+
 			for k, want := range c.want {
 				if got[k] != want {
 					t.Errorf("%s = %#v, want %#v", k, got[k], want)
 				}
 			}
+
 			for _, k := range c.absent {
 				if _, present := got[k]; present {
 					t.Errorf("%s should be absent, got %#v", k, got[k])
@@ -191,10 +197,12 @@ func TestEventRecordTimeIsObservationTime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
+
 	var got map[string]any
 	if err := json.Unmarshal(rec, &got); err != nil {
 		t.Fatal(err)
 	}
+
 	const want = "2026-08-28T14:30:15.5Z"
 	if got["time"] != want {
 		t.Errorf("time = %v, want %v", got["time"], want)
@@ -220,16 +228,20 @@ func TestEventsAreLineDelimitedAndFlushOnShutdown(t *testing.T) {
 			for range c.count {
 				batch = append(batch, sampleOutcome())
 			}
+
 			if err := e.ExportEvents(context.Background(), batch); err != nil {
 				t.Fatalf("export: %v", err)
 			}
+
 			if err := e.Shutdown(context.Background()); err != nil {
 				t.Fatalf("shutdown: %v", err)
 			}
+
 			lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
 			if len(lines) != c.count {
 				t.Fatalf("got %d lines, want %d", len(lines), c.count)
 			}
+
 			for i, line := range lines {
 				var m map[string]any
 				if err := json.Unmarshal([]byte(line), &m); err != nil {
@@ -248,12 +260,15 @@ func TestEmptyBatchesAreNoOps(t *testing.T) {
 	if err := e.ExportEvents(context.Background(), nil); err != nil {
 		t.Fatalf("empty event batch: %v", err)
 	}
+
 	if err := e.ExportMetrics(context.Background(), nil); err != nil {
 		t.Fatalf("empty metric batch: %v", err)
 	}
+
 	if err := e.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
+
 	if buf.Len() != 0 {
 		t.Errorf("wrote %q for empty batches, want nothing", buf.String())
 	}
@@ -267,6 +282,7 @@ func TestShutdownSurfacesFlushErrors(t *testing.T) {
 		// Buffered: the small record fits, so the error surfaces at flush.
 		t.Fatalf("export: %v", err)
 	}
+
 	if err := e.Shutdown(context.Background()); err == nil {
 		t.Fatal("want a flush error, got nil — dropped outcome data must be visible")
 	}
@@ -308,22 +324,28 @@ func TestWithProjectDrivesTraceCorrelation(t *testing.T) {
 			if err := e.ExportEvents(context.Background(), []biz.Outcome{o}); err != nil {
 				t.Fatalf("export: %v", err)
 			}
+
 			if err := e.Shutdown(context.Background()); err != nil {
 				t.Fatalf("shutdown: %v", err)
 			}
+
 			var got map[string]any
 			if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got); err != nil {
 				t.Fatalf("record is not valid JSON: %v", err)
 			}
+
 			if got["trace.id"] != traceID {
 				t.Errorf("trace.id = %#v, want %q", got["trace.id"], traceID)
 			}
+
 			if c.want == nil {
 				if v, present := got["logging.googleapis.com/trace"]; present {
 					t.Errorf("correlation key present without a project: %#v", v)
 				}
+
 				return
 			}
+
 			if got["logging.googleapis.com/trace"] != c.want {
 				t.Errorf("logging.googleapis.com/trace = %#v, want %#v", got["logging.googleapis.com/trace"], c.want)
 			}
@@ -341,16 +363,20 @@ func TestPostShutdownExportRefused(t *testing.T) {
 	if err := e.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
+
 	flushed := buf.Len()
 	if err := e.ExportEvents(context.Background(), []biz.Outcome{sampleOutcome()}); !errors.Is(err, ErrShutdown) {
 		t.Fatalf("post-shutdown ExportEvents err = %v, want ErrShutdown", err)
 	}
+
 	if err := e.Shutdown(context.Background()); err != nil {
 		t.Fatalf("second shutdown: %v", err)
 	}
+
 	if buf.Len() != flushed {
 		t.Fatalf("post-shutdown export reached the writer: %d bytes appeared", buf.Len()-flushed)
 	}
+
 	// Empty batches stay a no-op even after Shutdown: nothing to refuse.
 	if err := e.ExportEvents(context.Background(), nil); err != nil {
 		t.Fatalf("post-shutdown empty batch errored: %v", err)

@@ -63,6 +63,7 @@ flows:
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("realized: %d txns, USD minor %d (%s)\n",
 		report.Realized.Count, report.Realized.ByCurrency["USD"], report.Realized.Evidence)
 	// Output: realized: 2 txns, USD minor 16999 (deterministic)

@@ -48,12 +48,15 @@ func TestLineTagsMatchTheWireContract(t *testing.T) {
 			if f.Name != "SourceSys" {
 				t.Errorf("field %s carries tag %q but is not in the contract map — add it to biz or to the exemption", f.Name, f.Tag.Get("json"))
 			}
+
 			continue
 		}
+
 		if got := f.Tag.Get("json"); got != w {
 			t.Errorf("field %s decodes %q, the exporters write %q — the decoder has drifted from the wire contract", f.Name, got, w)
 		}
 	}
+
 	for name := range want {
 		if _, ok := rt.FieldByName(name); !ok {
 			t.Errorf("contract names %s but the decoder has no such field", name)
@@ -75,10 +78,12 @@ func TestDeadlineRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
+
 	want := time.Date(2026, 1, 2, 3, 34, 5, 0, time.UTC)
 	if !o.VC.Deadline.Equal(want) {
 		t.Errorf("Deadline = %v, want %v — a deadline on the wire must survive the round trip", o.VC.Deadline, want)
 	}
+
 	// A line without one leaves it zero rather than erroring.
 	noDeadline := `{"event":"biz.outcome","biz.flow":"f","biz.stage":"s","biz.outcome":"success",` +
 		`"biz.entity.id":"e","biz.customer.id":"h:c","biz.amount.minor":1,"biz.amount.currency":"USD",` +
@@ -87,6 +92,7 @@ func TestDeadlineRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse without deadline: %v", err)
 	}
+
 	if !o2.VC.Deadline.IsZero() {
 		t.Errorf("Deadline = %v for a line that carries none, want zero", o2.VC.Deadline)
 	}

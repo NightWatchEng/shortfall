@@ -77,6 +77,7 @@ func WrapBackend(inner stripe.Backend, opts ...BackendOption) *Backend {
 	for _, o := range opts {
 		o(b)
 	}
+
 	return b
 }
 
@@ -93,6 +94,7 @@ func (b *Backend) Call(method, path, key string, params stripe.ParamsContainer, 
 	if b.onCall != nil {
 		b.onCall(ProviderCall{Op: op, Outcome: outcome, StatusCode: status, Latency: latency, Err: err})
 	}
+
 	if b.onAuth != nil && outcome == "failed" && isAuthOp(op) {
 		if vc, ok := authVC(params); ok {
 			b.onAuth(biz.Outcome{
@@ -101,6 +103,7 @@ func (b *Backend) Call(method, path, key string, params stripe.ParamsContainer, 
 			})
 		}
 	}
+
 	return err
 }
 
@@ -110,10 +113,12 @@ func statusOf(err error) int {
 	if err == nil {
 		return 200
 	}
+
 	var se *stripe.Error
 	if errors.As(err, &se) {
 		return se.HTTPStatusCode
 	}
+
 	return 0
 }
 
@@ -123,9 +128,11 @@ func providerOutcome(status int, err error) string {
 	if err == nil {
 		return "success"
 	}
+
 	if status >= 400 && status < 500 && status != 429 {
 		return "success" // Stripe answered with a business/client error
 	}
+
 	return "failed"
 }
 
@@ -142,6 +149,7 @@ func authVC(params stripe.ParamsContainer) (biz.ValueContext, bool) {
 	if !ok || pi == nil {
 		return biz.ValueContext{}, false
 	}
+
 	// PaymentIntentParams carries its own (non-deprecated) Metadata field,
 	// which is where WithStripeMetadata's AddMetadata wrote and what Stripe
 	// serializes — read it directly, not the embedded base Params.Metadata.
@@ -150,14 +158,17 @@ func authVC(params stripe.ParamsContainer) (biz.ValueContext, bool) {
 	if flow == "" {
 		return biz.ValueContext{}, false
 	}
+
 	var amount int64
 	var currency string
 	if pi.Amount != nil {
 		amount = *pi.Amount
 	}
+
 	if pi.Currency != nil {
 		currency = strings.ToUpper(*pi.Currency)
 	}
+
 	return biz.ValueContext{
 		Flow: flow, EntityID: md[MetaEntity], CustomerID: md[MetaCustomer],
 		Money: biz.Money{Amount: amount, Currency: currency, Exponent: currencyExponent(currency)},
@@ -196,6 +207,7 @@ func deriveOp(method, path string) string {
 			segs = append(segs, s)
 		}
 	}
+
 	if len(segs) == 0 {
 		return strings.ToLower(method)
 	}
@@ -222,6 +234,7 @@ func deriveOp(method, path string) string {
 			if s := segs[i]; !isIDShaped(s) { // backstop: never keep an id-shaped token
 				parts = append(parts, s)
 			}
+
 			i, endedAtID = i+1, false
 		}
 	}
@@ -252,6 +265,7 @@ func deriveOp(method, path string) string {
 			return base + ".delete"
 		}
 	}
+
 	return base + "." + strings.ToLower(method)
 }
 
@@ -266,11 +280,13 @@ func isIDShaped(s string) bool {
 	if i <= 0 || i == len(s)-1 {
 		return false
 	}
+
 	for _, r := range s[i+1:] {
 		if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -280,9 +296,11 @@ func truncErr(err error) string {
 	if err == nil {
 		return ""
 	}
+
 	s := err.Error()
 	if len(s) > 480 {
 		s = s[:480]
 	}
+
 	return s
 }

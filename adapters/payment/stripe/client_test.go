@@ -89,6 +89,7 @@ func TestProviderOutcomeClassification(t *testing.T) {
 			if st := statusOf(c.err); st != c.wantSt {
 				t.Fatalf("statusOf = %d, want %d", st, c.wantSt)
 			}
+
 			if o := providerOutcome(statusOf(c.err), c.err); o != c.want {
 				t.Fatalf("outcome = %q, want %q", o, c.want)
 			}
@@ -101,6 +102,7 @@ func piParams(amount int64, currency string, withMeta bool) *stripe.PaymentInten
 	if withMeta {
 		WithStripeMetadata(p, biz.ValueContext{Flow: "invoice.pay", EntityID: "inv_1", CustomerID: "h:c1"})
 	}
+
 	return p
 }
 
@@ -125,9 +127,11 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 	if len(calls) != 1 || calls[0].Op != "payment_intents.create" || calls[0].Outcome != "failed" {
 		t.Fatalf("provider call = %+v", calls)
 	}
+
 	if len(auths) != 1 {
 		t.Fatalf("want 1 auth outcome, got %d", len(auths))
 	}
+
 	if auths[0].Stage != "auth" || auths[0].Result != biz.ResultFailed ||
 		auths[0].VC.Money.Amount != 14900 || auths[0].VC.Money.Currency != "USD" ||
 		auths[0].VC.Flow != "invoice.pay" || auths[0].Source != ClientSource || !auths[0].At.Equal(clk) {
@@ -141,6 +145,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 	if len(calls) != 1 || calls[0].Outcome != "success" {
 		t.Fatalf("success call = %+v", calls)
 	}
+
 	if len(auths) != 0 {
 		t.Fatal("a successful call must emit no auth failure")
 	}
@@ -153,6 +158,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 	if len(calls) != 1 || calls[0].Outcome != "success" {
 		t.Fatalf("402 call = %+v", calls)
 	}
+
 	if len(auths) != 0 {
 		t.Fatal("a 402 decline is answered by Stripe, not a provider-infra auth failure")
 	}
@@ -164,6 +170,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 	if len(calls) != 1 || calls[0].Op != "charges.list" {
 		t.Fatalf("charges call = %+v", calls)
 	}
+
 	if len(auths) != 0 {
 		t.Fatal("a non-auth op must not emit an auth outcome")
 	}
@@ -176,6 +183,7 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("call = %+v", calls)
 	}
+
 	if len(auths) != 0 {
 		t.Fatal("no biz metadata -> no groundable auth outcome")
 	}

@@ -78,20 +78,25 @@ func TestRealizedLegEventsPath(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if leg.Count != c.wantCount {
 				t.Fatalf("count = %d, want %d", leg.Count, c.wantCount)
 			}
+
 			if leg.Evidence != EvidenceDeterministic {
 				t.Fatalf("evidence = %q, want deterministic", leg.Evidence)
 			}
+
 			if len(leg.Caveats) != 0 {
 				t.Fatalf("events path must carry no caveat, got %v", leg.Caveats)
 			}
+
 			for cur, want := range c.wantByCur {
 				if leg.ByCurrency[cur] != want {
 					t.Fatalf("ByCurrency[%s] = %d, want %d", cur, leg.ByCurrency[cur], want)
 				}
 			}
+
 			if len(leg.ByCurrency) != len(c.wantByCur) {
 				t.Fatalf("ByCurrency = %v, want %v", leg.ByCurrency, c.wantByCur)
 			}
@@ -119,17 +124,21 @@ func TestRealizedLegDeDupsDuplicatesExactly(t *testing.T) {
 			for i, amt := range c.amounts {
 				events = append(events, evAt(i+1, "invoice.pay", "inv_1", biz.ResultFailed, amt, "USD"))
 			}
+
 			q := memq.New(memq.WithEvents(events))
 			leg, err := RealizedLeg(context.Background(), nil, q, Request{Window: win, Flows: []string{"invoice.pay"}})
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if len(leg.Caveats) != 0 {
 				t.Fatalf("exact de-dup must not caveat, got %v", leg.Caveats)
 			}
+
 			if leg.Count != 1 {
 				t.Fatalf("count = %d, want 1 (still one entity)", leg.Count)
 			}
+
 			if leg.ByCurrency["USD"] != c.want {
 				t.Fatalf("USD = %d, want %d (max representative)", leg.ByCurrency["USD"], c.want)
 			}
@@ -150,6 +159,7 @@ func TestRealizedLegScopeDoesNotOverrideOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// outcome=failed still wins, so only the failed 500 is realized.
 	if leg.ByCurrency["USD"] != 500 {
 		t.Fatalf("USD = %d, want 500 (scope must not override outcome)", leg.ByCurrency["USD"])
@@ -178,12 +188,15 @@ func TestRealizedLegMetricsOnlyCarriesCaveat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.ByCurrency["USD"] != 15000 {
 		t.Fatalf("USD = %d, want 15000", leg.ByCurrency["USD"])
 	}
+
 	if len(leg.Caveats) == 0 {
 		t.Fatal("metrics-only path must carry a caveat in the Leg struct")
 	}
+
 	if leg.Evidence != EvidenceDeterministic {
 		t.Fatalf("evidence = %q, want deterministic", leg.Evidence)
 	}
@@ -220,6 +233,7 @@ func TestRealizedLegMatchesGoldenScenario(t *testing.T) {
 			succeeded[tx.ID] = true
 		}
 	}
+
 	wantUSD := int64(0)
 	seen := map[string]bool{}
 	for _, tx := range res.Ledger.Txns {
@@ -228,6 +242,7 @@ func TestRealizedLegMatchesGoldenScenario(t *testing.T) {
 			wantUSD += tx.AmountMinor
 		}
 	}
+
 	if wantUSD == 0 {
 		t.Fatal("scenario produced no realized loss; pick a fault that fails transactions")
 	}
@@ -238,6 +253,7 @@ func TestRealizedLegMatchesGoldenScenario(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// The events path is an exact integer sum, so it must match ground truth
 	// exactly. This test covers the sum/feeder/memq integration on realistic
 	// data; the de-dup and recovery-exclusion branches (which the harness

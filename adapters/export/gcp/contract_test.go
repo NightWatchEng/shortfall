@@ -21,15 +21,18 @@ func TestOutcomeEventContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load vectors: %v", err)
 	}
+
 	problems := testkit.CheckOutcomeEvent(v, func(o biz.Outcome) (map[string]any, error) {
 		b, err := buildEventRecord("", o)
 		if err != nil {
 			return nil, err
 		}
+
 		var m map[string]any
 		if err := json.Unmarshal(b, &m); err != nil {
 			return nil, err
 		}
+
 		return m, nil
 	})
 	for _, p := range problems {

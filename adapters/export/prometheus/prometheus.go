@@ -99,6 +99,7 @@ func New(opts ...func(*Options)) (*Exporter, error) {
 	for _, f := range opts {
 		f(&o)
 	}
+
 	if o.registerer == nil {
 		reg := prometheus.NewRegistry()
 		o.registerer, o.gatherer = reg, reg
@@ -139,6 +140,7 @@ func New(opts ...func(*Options)) (*Exporter, error) {
 			return nil, fmt.Errorf("prometheus: register: %w", err)
 		}
 	}
+
 	return e, nil
 }
 
@@ -165,6 +167,7 @@ func (e *Exporter) ExportMetrics(_ context.Context, batch []emit.MetricPoint) er
 	if len(batch) == 0 {
 		return nil
 	}
+
 	for _, p := range batch {
 		switch p.Name {
 		case "biz_value_total":
@@ -191,6 +194,7 @@ func (e *Exporter) ExportMetrics(_ context.Context, batch []emit.MetricPoint) er
 			return fmt.Errorf("prometheus: unknown metric family %q", p.Name)
 		}
 	}
+
 	return nil
 }
 
@@ -211,6 +215,7 @@ func (e *Exporter) setInflight(vec *prometheus.GaugeVec, p emit.MetricPoint) {
 	if last, ok := e.inflightAt[key]; ok && p.At.Before(last) {
 		return // stale: a fresher level is already published
 	}
+
 	vec.WithLabelValues(vals...).Set(float64(p.Value))
 	e.inflightAt[key] = p.At
 }
@@ -219,6 +224,7 @@ func addCounter(vec *prometheus.CounterVec, labels []string, p emit.MetricPoint)
 	if p.Value < 0 {
 		return fmt.Errorf("prometheus: negative delta %d for counter family %q — counters only increase", p.Value, p.Name)
 	}
+
 	vec.WithLabelValues(orderedValues(p.Labels, labels)...).Add(float64(p.Value))
 	return nil
 }
@@ -233,6 +239,7 @@ func orderedValues(labels map[string]string, order []string) []string {
 	for i, name := range order {
 		out[i] = labels[name]
 	}
+
 	return out
 }
 

@@ -51,14 +51,18 @@ func outcomeAttrs(o biz.Outcome) []attribute.KeyValue {
 	if o.VC.Segment != "" {
 		kv = append(kv, attribute.String(biz.AttrSegment, o.VC.Segment))
 	}
+
 	if !o.VC.Deadline.IsZero() {
 		kv = append(kv, attribute.String(biz.AttrSLADeadline, o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")))
 	}
+
 	if o.Source != "" {
 		kv = append(kv, attribute.String(biz.AttrSource, o.Source))
 	}
+
 	if o.Err != "" {
 		kv = append(kv, attribute.String(biz.AttrError, o.Err))
 	}
+
 	return kv
 }

@@ -68,6 +68,7 @@ func New(opts ...Option) *Querier {
 	for _, o := range opts {
 		o(q)
 	}
+
 	return q
 }
 
@@ -86,6 +87,7 @@ func matchFilters(labels map[string]string, filters map[string]string) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -95,6 +97,7 @@ func groupKey(labels map[string]string, groupBy []string) map[string]string {
 	for _, k := range groupBy {
 		key[k] = labels[k]
 	}
+
 	return key
 }
 
@@ -104,11 +107,13 @@ func canonical(key map[string]string) string {
 	for k := range key {
 		ks = append(ks, k)
 	}
+
 	sort.Strings(ks)
 	s := ""
 	for _, k := range ks {
 		s += k + "=" + key[k] + "\x00"
 	}
+
 	return s
 }
 
@@ -117,6 +122,7 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 	if !q.caps.Metrics {
 		return nil, query.ErrUnsupported
 	}
+
 	// Collect matching points, grouped by the GroupBy label projection.
 	type bucketed struct {
 		labels map[string]string
@@ -129,6 +135,7 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 		if p.Name != qy.Metric || !matchFilters(p.Labels, qy.Filters) {
 			continue
 		}
+
 		// A counter is filtered to [From, To). A gauge is a persistent
 		// level: a sample set before the window still defines the level
 		// inside it, so gauge samples are kept whenever they precede the
@@ -141,6 +148,7 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 		} else if !inRange(p.At, qy.Range) {
 			continue
 		}
+
 		key := groupKey(p.Labels, qy.GroupBy)
 		ck := canonical(key)
 		g, ok := groups[ck]
@@ -149,8 +157,10 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 			groups[ck] = g
 			order = append(order, ck)
 		}
+
 		g.points = append(g.points, p)
 	}
+
 	sort.Strings(order)
 
 	out := make(query.Series, 0, len(order))
@@ -161,6 +171,7 @@ func (q *Querier) QueryMetric(_ context.Context, qy query.Query) (query.Series, 
 			Points: bucketPoints(g.points, qy, gauge),
 		})
 	}
+
 	return out, nil
 }
 
@@ -172,18 +183,22 @@ func bucketPoints(points []emit.MetricPoint, qy query.Query, gauge bool) []query
 		if v == nil {
 			return nil
 		}
+
 		return []query.Point{{At: qy.Range.From, Value: *v}}
 	}
+
 	var out []query.Point
 	for start := qy.Range.From; start.Before(qy.Range.To); start = start.Add(qy.Step) {
 		end := start.Add(qy.Step)
 		if end.After(qy.Range.To) {
 			end = qy.Range.To
 		}
+
 		if v := aggregate(points, start, end, qy.Agg, gauge); v != nil {
 			out = append(out, query.Point{At: start, Value: *v})
 		}
 	}
+
 	return out
 }
 
@@ -210,24 +225,30 @@ func aggregate(points []emit.MetricPoint, from, to time.Time, agg query.Agg, gau
 			if !p.At.Before(to) { // carry the last level ≤ boundary forward
 				continue
 			}
+
 			id := canonical(p.Labels)
 			if cur, ok := last[id]; !ok || p.At.After(cur.at) {
 				last[id] = level{at: p.At, v: p.Value}
 			}
 		}
+
 		if len(last) == 0 {
 			return nil
 		}
+
 		if agg == query.AggCount {
 			c := float64(len(last))
 			return &c
 		}
+
 		var sum float64
 		for _, l := range last {
 			sum += float64(l.v)
 		}
+
 		return &sum
 	}
+
 	var sum float64
 	var count float64
 	seen := false
@@ -238,12 +259,15 @@ func aggregate(points []emit.MetricPoint, from, to time.Time, agg query.Agg, gau
 			count++
 		}
 	}
+
 	if !seen {
 		return nil
 	}
+
 	if agg == query.AggCount {
 		return &count
 	}
+
 	return &sum
 }
 
@@ -291,6 +315,7 @@ func (q *Querier) QueryEvents(_ context.Context, qy query.EventQuery) (query.Eve
 			groups[ck] = g
 			order = append(order, ck)
 		}
+
 		g.count++
 		g.sumMinor += o.VC.Money.Amount
 		if o.VC.Money.Amount > g.maxMinor {
@@ -305,20 +330,24 @@ func (q *Querier) QueryEvents(_ context.Context, qy query.EventQuery) (query.Eve
 		if qy.Agg == query.EventAggMaxPerGroup {
 			eg.MaxMinor = g.maxMinor // representative per group (ADR-0009)
 		}
+
 		out = append(out, eg)
 	}
 
 	if err := orderGroups(out, qy.OrderBy); err != nil {
 		return nil, err
 	}
+
 	if qy.Limit > 0 {
 		if qy.OrderBy == query.OrderNone {
 			return nil, errors.New("memq: Limit requires an OrderBy (OrderNone + Limit>0 is undefined)")
 		}
+
 		if len(out) > qy.Limit {
 			out = out[:qy.Limit]
 		}
 	}
+
 	return out, nil
 }
 
@@ -329,6 +358,7 @@ func distinctCount(matched []biz.Outcome, groupBy []string) query.EventGroups {
 	for _, o := range matched {
 		seen[canonical(groupKey(eventLabels(o), groupBy))] = true
 	}
+
 	return query.EventGroups{{Count: int64(len(seen))}}
 }
 
@@ -339,11 +369,13 @@ func currencyInvariant(matched []biz.Outcome, qy query.EventQuery) error {
 	if _, pinned := qy.Filters["currency"]; pinned {
 		return nil
 	}
+
 	for _, g := range qy.GroupBy {
 		if g == "currency" {
 			return nil
 		}
 	}
+
 	// Not grouped or pinned: refuse rather than silently normalize (ADR-0001).
 	return fmt.Errorf("memq: event sum would cross currencies — pin currency in Filters or add it to GroupBy")
 }
@@ -358,6 +390,7 @@ func orderGroups(g query.EventGroups, o query.EventOrder) error {
 			if g[i].SumMinor != g[j].SumMinor {
 				return g[i].SumMinor > g[j].SumMinor
 			}
+
 			return canonical(g[i].Key) < canonical(g[j].Key)
 		})
 	case query.OrderCountDesc:
@@ -365,11 +398,13 @@ func orderGroups(g query.EventGroups, o query.EventOrder) error {
 			if g[i].Count != g[j].Count {
 				return g[i].Count > g[j].Count
 			}
+
 			return canonical(g[i].Key) < canonical(g[j].Key)
 		})
 	default:
 		return fmt.Errorf("memq: unknown OrderBy %q", o)
 	}
+
 	return nil
 }
 

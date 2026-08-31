@@ -89,6 +89,7 @@ func ceilMicro(t time.Time) time.Time {
 	if rem := t.Nanosecond() % 1000; rem != 0 {
 		return t.Add(time.Duration(1000-rem) * time.Nanosecond)
 	}
+
 	return t
 }
 
@@ -176,6 +177,7 @@ func (q *Querier) run(ctx context.Context, stmt string, params []queryParam) ([]
 	if err != nil {
 		return nil, fmt.Errorf("gcplogging: encode query: %w", err)
 	}
+
 	resp, err := q.call(ctx, http.MethodPost, q.queriesURL(), raw)
 	if err != nil {
 		return nil, err
@@ -186,11 +188,13 @@ func (q *Querier) run(ctx context.Context, stmt string, params []queryParam) ([]
 		if resp.JobReference == nil || resp.JobReference.JobID == "" {
 			return nil, fmt.Errorf("gcplogging: query is incomplete but the response carries no job id")
 		}
+
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-time.After(q.pollInterval):
 		}
+
 		resp, err = q.call(ctx, http.MethodGet, q.resultsURL(resp.JobReference, ""), nil)
 		if err != nil {
 			return nil, err
@@ -203,19 +207,24 @@ func (q *Querier) run(ctx context.Context, stmt string, params []queryParam) ([]
 		if seen[resp.PageToken] {
 			return nil, fmt.Errorf("gcplogging: the API repeated page token %q — refusing to loop", resp.PageToken)
 		}
+
 		seen[resp.PageToken] = true
 		if resp.JobReference == nil || resp.JobReference.JobID == "" {
 			return nil, fmt.Errorf("gcplogging: a further page was offered but the response carries no job id")
 		}
+
 		resp, err = q.call(ctx, http.MethodGet, q.resultsURL(resp.JobReference, resp.PageToken), nil)
 		if err != nil {
 			return nil, err
 		}
+
 		if !resp.JobComplete {
 			return nil, fmt.Errorf("gcplogging: the job went incomplete while paging results")
 		}
+
 		all = append(all, resp.Rows...)
 	}
+
 	return all, nil
 }
 
@@ -231,12 +240,15 @@ func (q *Querier) resultsURL(ref *jobRef, pageToken string) string {
 	if ref.Location != "" {
 		loc = ref.Location
 	}
+
 	if loc != "" {
 		v.Set("location", loc)
 	}
+
 	if pageToken != "" {
 		v.Set("pageToken", pageToken)
 	}
+
 	return q.queriesURL() + "/" + url.PathEscape(ref.JobID) + "?" + v.Encode()
 }
 
@@ -248,41 +260,52 @@ func (q *Querier) call(ctx context.Context, method, u string, body []byte) (*que
 	if body != nil {
 		rdr = bytes.NewReader(body)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, method, u, rdr)
 	if err != nil {
 		return nil, fmt.Errorf("gcplogging: request: %w", err)
 	}
+
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+
 	if q.token != nil {
 		tok, err := q.token()
 		if err != nil {
 			return nil, fmt.Errorf("gcplogging: bearer token: %w", err)
 		}
+
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
+
 	httpResp, err := q.doer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("gcplogging: %s %s: %w", method, u, err)
 	}
+
 	defer func() { _ = httpResp.Body.Close() }()
 	out, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("gcplogging: read response: %w", err)
 	}
+
 	if httpResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("gcplogging: bigquery status %d: %s", httpResp.StatusCode, out)
 	}
+
 	var resp queryResponse
 	if err := json.Unmarshal(out, &resp); err != nil {
 		return nil, fmt.Errorf("gcplogging: decode response: %w", err)
 	}
+
 	if resp.Error != nil {
 		return nil, fmt.Errorf("gcplogging: bigquery error %d: %s", resp.Error.Code, resp.Error.Message)
 	}
+
 	if len(resp.Errors) > 0 {
 		return nil, fmt.Errorf("gcplogging: bigquery error: %s", resp.Errors[0].Message)
 	}
+
 	return &resp, nil
 }

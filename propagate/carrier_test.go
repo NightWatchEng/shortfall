@@ -30,6 +30,7 @@ func (m mapCarrier) Keys() []string {
 	for k := range m {
 		out = append(out, k)
 	}
+
 	return out
 }
 
@@ -38,13 +39,16 @@ func TestInjectExtractRoundTrip(t *testing.T) {
 	if err := Inject(c, carrierVC()); err != nil {
 		t.Fatalf("inject: %v", err)
 	}
+
 	if c[biz.MemberKey] == "" {
 		t.Fatal("Inject wrote nothing under the biz.vc key")
 	}
+
 	got, ok, err := Extract(c)
 	if err != nil || !ok {
 		t.Fatalf("extract: ok=%v err=%v", ok, err)
 	}
+
 	if got.EntityID != "inv_42" || got.Money != carrierVC().Money {
 		t.Fatalf("round trip drifted: %+v", got)
 	}
@@ -69,6 +73,7 @@ func TestExtractOutcomes(t *testing.T) {
 			if ok != c.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, c.wantOK)
 			}
+
 			if (err != nil) != c.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, c.wantErr)
 			}
@@ -83,6 +88,7 @@ func TestInjectRejectsOversize(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		vc.EntityID += "xyz"
 	}
+
 	if err := Inject(c, vc); err == nil {
 		t.Fatal("oversize ValueContext should fail to inject (cap is the codec's)")
 	}

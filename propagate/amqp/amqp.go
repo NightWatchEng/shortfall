@@ -40,6 +40,7 @@ func (c Carrier) Set(key, value string) bool {
 	if c.Table == nil {
 		return false
 	}
+
 	c.Table[key] = value
 	return true
 }
@@ -50,5 +51,6 @@ func (c Carrier) Keys() []string {
 	for k := range c.Table {
 		out = append(out, k)
 	}
+
 	return out
 }

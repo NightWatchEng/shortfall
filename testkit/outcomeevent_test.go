@@ -16,6 +16,7 @@ func loadOutcomeVectors(t *testing.T) OutcomeEventVectors {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
+
 	return v
 }
 
@@ -40,15 +41,18 @@ func TestCheckOutcomeEventDetects(t *testing.T) {
 		for k, val := range c.Attrs {
 			m[k] = val
 		}
+
 		for k, val := range c.AttrsIfCarried {
 			m[k] = val
 		}
+
 		return m
 	}
 	byName := map[string]OutcomeEventVector{}
 	for _, c := range v.Cases {
 		byName[c.Name] = c
 	}
+
 	full, ok := byName["fully_populated"]
 	if !ok {
 		t.Fatal("the vector no longer has a fully_populated case")
@@ -77,10 +81,12 @@ func TestCheckOutcomeEventDetects(t *testing.T) {
 			if len(problems) == 0 {
 				t.Fatalf("checker reported conformant, want a complaint containing %q", tc.wantSub)
 			}
+
 			var joined string
 			for _, p := range problems {
 				joined += p + "\n"
 			}
+
 			if !contains(joined, tc.wantSub) {
 				t.Errorf("complaints did not mention %q:\n%s", tc.wantSub, joined)
 			}
@@ -124,5 +130,6 @@ func indexOf(hay, needle string) int {
 			return i
 		}
 	}
+
 	return -1
 }

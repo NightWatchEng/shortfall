@@ -87,6 +87,7 @@ func New(region, logGroup, accessKey, secretKey string, opts ...Option) *Querier
 	for _, o := range opts {
 		o(q)
 	}
+
 	return q
 }
 
@@ -108,6 +109,7 @@ func (q *Querier) QueryEvents(ctx context.Context, qy query.EventQuery) (query.E
 	if err != nil {
 		return nil, err
 	}
+
 	return memq.New(memq.WithEvents(events)).QueryEvents(ctx, qy)
 }
 
@@ -128,6 +130,7 @@ func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome
 	if err != nil {
 		return nil, err
 	}
+
 	var started struct {
 		QueryID string `json:"queryId"`
 	}
@@ -140,6 +143,7 @@ func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome
 		if err != nil {
 			return nil, err
 		}
+
 		var res struct {
 			Status  string             `json:"status"`
 			Results [][]insightsColumn `json:"results"`
@@ -147,6 +151,7 @@ func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome
 		if err := json.Unmarshal(raw, &res); err != nil {
 			return nil, fmt.Errorf("cwinsights: decode results: %w", err)
 		}
+
 		switch res.Status {
 		case "Complete":
 			// Insights hard-caps results at the query's limit (10000): a
@@ -155,6 +160,7 @@ func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome
 			if len(res.Results) >= 10000 {
 				return nil, fmt.Errorf("cwinsights: query returned the 10000-row Insights cap — the window is truncated; narrow the window")
 			}
+
 			return parseRows(res.Results)
 		case "Scheduled", "Running":
 			select {
@@ -194,9 +200,11 @@ func parseRows(rows [][]insightsColumn) ([]biz.Outcome, error) {
 				if err != nil {
 					return nil, err
 				}
+
 				at = t
 			}
 		}
+
 		// Unmarked rows are skipped by design, a deliberate trade the
 		// sibling adapters do not make: this group legitimately carries the
 		// exporter's EMF metric records, and a shared group can carry
@@ -210,12 +218,15 @@ func parseRows(rows [][]insightsColumn) ([]biz.Outcome, error) {
 		if err := json.Unmarshal([]byte(message), &marker); err != nil || marker.Event != "biz.outcome" {
 			continue
 		}
+
 		o, err := eventline.Parse([]byte(message), at)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, o)
 	}
+
 	return out, nil
 }
 
@@ -226,15 +237,18 @@ func parseTimestamp(raw json.RawMessage) (time.Time, error) {
 	if err := json.Unmarshal(raw, &ms); err == nil {
 		return time.UnixMilli(ms).UTC(), nil
 	}
+
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
 		if ms, err := strconv.ParseInt(s, 10, 64); err == nil {
 			return time.UnixMilli(ms).UTC(), nil
 		}
+
 		if t, err := time.Parse("2006-01-02 15:04:05.000", s); err == nil {
 			return t.UTC(), nil
 		}
 	}
+
 	return time.Time{}, fmt.Errorf("cwinsights: unparsable @timestamp %s", raw)
 }
 
@@ -244,10 +258,12 @@ func (q *Querier) call(ctx context.Context, action string, body map[string]any) 
 	if err != nil {
 		return nil, err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, q.endpoint+"/", bytes.NewReader(raw))
 	if err != nil {
 		return nil, fmt.Errorf("cwinsights: request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/x-amz-json-1.1")
 	req.Header.Set("X-Amz-Target", "Logs_20140328."+action)
 	signV4(req, raw, q.creds, q.region, q.now())
@@ -255,13 +271,16 @@ func (q *Querier) call(ctx context.Context, action string, body map[string]any) 
 	if err != nil {
 		return nil, fmt.Errorf("cwinsights: %s: %w", action, err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	out, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("cwinsights: %s read: %w", action, err)
 	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("cwinsights: %s: status %d: %s", action, resp.StatusCode, out)
 	}
+
 	return out, nil
 }

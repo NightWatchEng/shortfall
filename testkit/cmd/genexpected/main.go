@@ -27,6 +27,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "genexpected: no scenarios found — run from the repo root")
 		os.Exit(2)
 	}
+
 	wrote, skipped := 0, 0
 	for _, path := range matches {
 		sc, err := checkout.LoadScenario(path)
@@ -34,25 +35,30 @@ func main() {
 			fmt.Fprintf(os.Stderr, "genexpected: %v\n", err)
 			os.Exit(2)
 		}
+
 		if sc.Golden.From.IsZero() {
 			fmt.Fprintf(os.Stderr, "genexpected: %s declares no golden window — skipping\n", sc.Name)
 			skipped++
 			continue
 		}
+
 		exp := testkit.ComputeExpected(sc.Name, checkout.Run(sc.Config), sc.Golden)
 		b, err := json.MarshalIndent(exp, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "genexpected: %v\n", err)
 			os.Exit(2)
 		}
+
 		out := filepath.Join("testkit", "goldens", sc.Name+".json")
 		if err := os.WriteFile(out, append(b, '\n'), 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "genexpected: %v\n", err)
 			os.Exit(2)
 		}
+
 		fmt.Printf("wrote %s\n", out)
 		wrote++
 	}
+
 	fmt.Printf("genexpected: wrote %d, skipped %d\n", wrote, skipped)
 	if wrote == 0 {
 		fmt.Fprintln(os.Stderr, "genexpected: zero goldens written — refusing to pass vacuously")

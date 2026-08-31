@@ -35,6 +35,7 @@ func (c *capturingLogExporter) Export(_ context.Context, recs []sdklog.Record) e
 	if c.fail != nil {
 		return c.fail
 	}
+
 	c.mu.Lock()
 	c.recs = append(c.recs, recs...)
 	c.mu.Unlock()
@@ -54,6 +55,7 @@ func outcomes(n int) []biz.Outcome {
 	for range n {
 		out = append(out, biz.Outcome{At: at, VC: vc(), Stage: "capture", Result: biz.ResultFailed})
 	}
+
 	return out
 }
 
@@ -91,18 +93,22 @@ func TestTraceLinking(t *testing.T) {
 			if err := sink.emit(context.Background(), []biz.Outcome{o}); err != nil {
 				t.Fatalf("emit: %v", err)
 			}
+
 			recs := exp.all()
 			if len(recs) != 1 {
 				t.Fatalf("delivered %d records, want 1", len(recs))
 			}
+
 			gotLinked := recs[0].TraceID().IsValid()
 			if gotLinked != c.want {
 				t.Errorf("trace linked = %v, want %v (trace id %q)", gotLinked, c.want, c.traceID)
 			}
+
 			if c.want {
 				if got := recs[0].TraceID().String(); got != c.traceID {
 					t.Errorf("linked trace id = %s, want %s", got, c.traceID)
 				}
+
 				// Backends that gate log-to-trace correlation on the sampled
 				// flag drop the link when it is unset.
 				if !recs[0].TraceFlags().IsSampled() {
@@ -123,10 +129,12 @@ func TestRecordCarriesEveryBizField(t *testing.T) {
 	if err := sink.emit(context.Background(), []biz.Outcome{o}); err != nil {
 		t.Fatalf("emit: %v", err)
 	}
+
 	recs := exp.all()
 	if len(recs) != 1 {
 		t.Fatalf("delivered %d records, want 1", len(recs))
 	}
+
 	got := map[string]attribute.Value{}
 	recs[0].WalkAttributes(func(kv attribute.KeyValue) bool {
 		got[string(kv.Key)] = kv.Value
@@ -141,9 +149,11 @@ func TestRecordCarriesEveryBizField(t *testing.T) {
 			t.Errorf("delivered record is missing %s", key)
 		}
 	}
+
 	if v := got["biz.amount.minor"]; v.AsInt64() != 14900 {
 		t.Errorf("biz.amount.minor = %v, want 14900", v)
 	}
+
 	if recs[0].EventName() != eventName {
 		t.Errorf("event name = %q, want %q", recs[0].EventName(), eventName)
 	}
@@ -171,9 +181,11 @@ func TestUnknownMetricFamilyIsRejected(t *testing.T) {
 			if err == nil {
 				t.Fatal("want an error, got nil — an unrecognised family must not ship under a guessed kind")
 			}
+
 			if !strings.Contains(err.Error(), "unknown metric family") {
 				t.Errorf("error = %q, want it to name the unknown family", err)
 			}
+
 			if m.got != nil {
 				t.Error("a rejected batch reached the backend")
 			}
@@ -197,20 +209,25 @@ func TestEveryPointCarriesWriterIdentity(t *testing.T) {
 	if err := e.ExportMetrics(context.Background(), batch); err != nil {
 		t.Fatalf("export: %v", err)
 	}
+
 	if m.got.Resource == nil {
 		t.Fatal("exported points carry no resource — replicas would share one gauge series")
 	}
+
 	attrs := map[string]string{}
 	for _, kv := range m.got.Resource.Attributes() {
 		attrs[string(kv.Key)] = kv.Value.String()
 	}
+
 	if attrs["service.name"] == "" {
 		t.Error("resource carries no service.name")
 	}
+
 	inst := attrs["service.instance.id"]
 	if inst == "" {
 		t.Fatal("resource carries no service.instance.id — nothing distinguishes one replica from another")
 	}
+
 	if !strings.Contains(inst, strconv.Itoa(os.Getpid())) {
 		t.Errorf("service.instance.id = %q, want it to distinguish this process (pid %d)", inst, os.Getpid())
 	}
@@ -229,10 +246,12 @@ func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
 	if err := sink.emit(context.Background(), outcomes(1)); err != nil {
 		t.Fatalf("emit: %v", err)
 	}
+
 	recs := exp.all()
 	if len(recs) != 1 {
 		t.Fatalf("delivered %d records, want 1", len(recs))
 	}
+
 	eventAttrs := attrSet(recs[0].Resource().Attributes())
 
 	// Both legs are built from one resource value, so comparing them proves
@@ -247,19 +266,23 @@ func TestBothSignalsCarryTheSameWriterIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build metrics: %v", err)
 	}
+
 	metricAttrs := attrSet(rm.Resource.Attributes())
 
 	if got := eventAttrs["service.name"]; got != "shortfall" {
 		t.Errorf("service.name = %q, want shortfall", got)
 	}
+
 	for _, key := range []string{"service.name", "service.instance.id"} {
 		if eventAttrs[key] == "" {
 			t.Errorf("event leg carries no %s", key)
 		}
+
 		if eventAttrs[key] != metricAttrs[key] {
 			t.Errorf("%s differs between legs: events %q, metrics %q — a backend correlating them cannot", key, eventAttrs[key], metricAttrs[key])
 		}
 	}
+
 	if !strings.Contains(eventAttrs["service.instance.id"], strconv.Itoa(os.Getpid())) {
 		t.Errorf("service.instance.id = %q, want it to name this process (pid %d)", eventAttrs["service.instance.id"], os.Getpid())
 	}
@@ -270,6 +293,7 @@ func attrSet(kvs []attribute.KeyValue) map[string]string {
 	for _, kv := range kvs {
 		out[string(kv.Key)] = kv.Value.String()
 	}
+
 	return out
 }
 
@@ -293,6 +317,7 @@ func (b *boundedExporter) Export(_ context.Context, recs []sdklog.Record) error 
 	if b.sinceLast > b.maxRun {
 		b.maxRun = b.sinceLast
 	}
+
 	b.mu.Unlock()
 	return nil
 }
@@ -338,12 +363,15 @@ func TestEmitNeverExceedsQueueBetweenFlushes(t *testing.T) {
 			if err := sink.emit(context.Background(), outcomes(c.count)); err != nil {
 				t.Fatalf("emit: %v", err)
 			}
+
 			if err := sink.Shutdown(context.Background()); err != nil {
 				t.Fatalf("shutdown: %v", err)
 			}
+
 			if got := exp.peak(); got > eventQueueSize {
 				t.Errorf("%d records reached the provider between flushes, queue holds %d — the excess is silently overwritten", got, eventQueueSize)
 			}
+
 			if got := exp.delivered(); got != c.count {
 				t.Errorf("delivered %d of %d outcomes", got, c.count)
 			}
@@ -371,17 +399,21 @@ func TestConcurrentEmitNeverExceedsQueue(t *testing.T) {
 			}
 		}()
 	}
+
 	wg.Wait()
 	close(errs)
 	for err := range errs {
 		t.Fatalf("emit: %v", err)
 	}
+
 	if err := sink.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
+
 	if got := exp.peak(); got > eventQueueSize {
 		t.Errorf("%d records reached the provider between flushes across %d concurrent callers, queue holds %d — the excess is silently overwritten", got, callers, eventQueueSize)
 	}
+
 	if got, want := exp.delivered(), callers*per; got != want {
 		t.Errorf("delivered %d of %d outcomes", got, want)
 	}
@@ -409,6 +441,7 @@ func TestPostShutdownExportsAreLoud(t *testing.T) {
 	if !errors.Is(evErr, ErrShutdown) {
 		t.Errorf("ExportEvents after Shutdown = %v, want ErrShutdown — a batch nobody received must not report success", evErr)
 	}
+
 	mErr := e.ExportMetrics(context.Background(), []emit.MetricPoint{{
 		Name:   "biz_txn_total",
 		Labels: map[string]string{"flow": "invoice.pay", "stage": "capture", "outcome": "failed", "currency": "USD", "segment": "smb"},
@@ -417,6 +450,7 @@ func TestPostShutdownExportsAreLoud(t *testing.T) {
 	if !errors.Is(mErr, ErrShutdown) {
 		t.Errorf("ExportMetrics after Shutdown = %v, want ErrShutdown", mErr)
 	}
+
 	if got := len(logExp.all()); got != 0 {
 		t.Errorf("delivered %d records after Shutdown, want 0", got)
 	}
@@ -432,9 +466,11 @@ func TestPostShutdownEmptyBatchStaysANoop(t *testing.T) {
 	if err := e.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
+
 	if err := e.ExportEvents(context.Background(), nil); err != nil {
 		t.Errorf("empty ExportEvents after Shutdown: %v", err)
 	}
+
 	if err := e.ExportMetrics(context.Background(), nil); err != nil {
 		t.Errorf("empty ExportMetrics after Shutdown: %v", err)
 	}
@@ -463,10 +499,12 @@ func TestBothLegsResolveTheSameResource(t *testing.T) {
 	if err := sink.emit(context.Background(), outcomes(1)); err != nil {
 		t.Fatalf("emit: %v", err)
 	}
+
 	recs := exp.all()
 	if len(recs) != 1 {
 		t.Fatalf("delivered %d records, want 1", len(recs))
 	}
+
 	eventAttrs := attrSet(recs[0].Resource().Attributes())
 
 	// Through Exporter.ExportMetrics, not buildResourceMetrics directly: what
@@ -481,9 +519,11 @@ func TestBothLegsResolveTheSameResource(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("export metrics: %v", err)
 	}
+
 	if pusher.got == nil {
 		t.Fatal("metric leg shipped nothing")
 	}
+
 	rm := pusher.got
 	metricAttrs := attrSet(rm.Resource.Attributes())
 
@@ -492,6 +532,7 @@ func TestBothLegsResolveTheSameResource(t *testing.T) {
 	if !maps.Equal(eventAttrs, metricAttrs) {
 		t.Errorf("legs resolve different resources:\n events  %v\n metrics %v", eventAttrs, metricAttrs)
 	}
+
 	for key, want := range map[string]string{
 		"deployment.environment": "prod",
 		"k8s.pod.name":           "pod-7",
@@ -499,10 +540,12 @@ func TestBothLegsResolveTheSameResource(t *testing.T) {
 		if eventAttrs[key] != want {
 			t.Errorf("event leg %s = %q, want %q", key, eventAttrs[key], want)
 		}
+
 		if metricAttrs[key] != want {
 			t.Errorf("metric leg %s = %q, want %q — OTEL_RESOURCE_ATTRIBUTES must reach both signals", key, metricAttrs[key], want)
 		}
 	}
+
 	// The explicit resource must still win: OTEL_SERVICE_NAME cannot rename
 	// the writer out from under the instance id.
 	for name, got := range map[string]string{"events": eventAttrs["service.name"], "metrics": metricAttrs["service.name"]} {
@@ -510,6 +553,7 @@ func TestBothLegsResolveTheSameResource(t *testing.T) {
 			t.Errorf("%s service.name = %q, want shortfall — the explicit resource must win the merge", name, got)
 		}
 	}
+
 	// A schema URL of "" would mean resource.Default() had been merged in,
 	// whose semconv version differs from ours and conflicts.
 	if got := rm.Resource.SchemaURL(); got != semconv.SchemaURL {
@@ -523,17 +567,21 @@ func TestBothLegsResolveTheSameResource(t *testing.T) {
 	if got := attrSet(built.resource.Attributes())["deployment.environment"]; got != "prod" {
 		t.Errorf("newWith resource deployment.environment = %q, want prod — the constructor did not resolve the resource", got)
 	}
+
 	e, err := New(context.Background())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+
 	t.Cleanup(func() { _ = e.Shutdown(context.Background()) })
 	if got := attrSet(e.resource.Attributes())["deployment.environment"]; got != "prod" {
 		t.Errorf("New resource deployment.environment = %q, want prod — the constructor did not resolve the resource", got)
 	}
+
 	if got := attrSet(e.resource.Attributes())["service.name"]; got != "shortfall" {
 		t.Errorf("New resource service.name = %q, want shortfall", got)
 	}
+
 	// Both legs, not just the field the metric leg reads: New builds the log
 	// sink separately, so handing it a different resource would leave events
 	// carrying one identity and metrics another.
@@ -541,6 +589,7 @@ func TestBothLegsResolveTheSameResource(t *testing.T) {
 	if !ok {
 		t.Fatalf("New built %T, want *providerSink", e.logs)
 	}
+
 	if !maps.Equal(attrSet(sink.res.Attributes()), attrSet(e.resource.Attributes())) {
 		t.Errorf("New gave the legs different resources:\n events  %v\n metrics %v",
 			attrSet(sink.res.Attributes()), attrSet(e.resource.Attributes()))
@@ -560,9 +609,11 @@ func TestWithResourceMergesRatherThanOverrides(t *testing.T) {
 	if named["service.name"] != "custom" {
 		t.Errorf("service.name = %q, want custom — a resource that names itself must win", named["service.name"])
 	}
+
 	if named["service.instance.id"] != "replica-1" {
 		t.Errorf("service.instance.id = %q, want replica-1", named["service.instance.id"])
 	}
+
 	if named["deployment.environment"] != "prod" {
 		t.Errorf("deployment.environment = %q, want prod — the environment must still be merged in", named["deployment.environment"])
 	}
@@ -574,6 +625,7 @@ func TestWithResourceMergesRatherThanOverrides(t *testing.T) {
 	if unnamed["service.name"] != "from-env" {
 		t.Errorf("service.name = %q, want from-env — an unnamed resource must not shadow OTEL_SERVICE_NAME", unnamed["service.name"])
 	}
+
 	if unnamed["service.instance.id"] != "replica-2" {
 		t.Errorf("service.instance.id = %q, want replica-2", unnamed["service.instance.id"])
 	}
@@ -620,6 +672,7 @@ func TestShutdownRacingAnExportIsNeverSilent(t *testing.T) {
 			silent++
 		}
 	}
+
 	if silent != 0 {
 		t.Errorf("%d of %d races reported success having delivered less than the batch — that is the silent drop ADR-0002 forbids", silent, iters)
 	}
@@ -637,6 +690,7 @@ func (s *slowLogExporter) Export(context.Context, []sdklog.Record) error {
 		close(s.entered)
 		s.entered = nil
 	}
+
 	time.Sleep(s.d)
 	return nil
 }
@@ -669,6 +723,7 @@ func TestShutdownHonorsItsDeadline(t *testing.T) {
 	if elapsed > 150*time.Millisecond {
 		t.Errorf("Shutdown blocked %v on a 10ms deadline — a bounded shutdown budget cannot be honoured", elapsed)
 	}
+
 	if err == nil {
 		t.Error("Shutdown that abandoned its wait returned nil — the caller must learn the drain did not finish")
 	}
@@ -724,6 +779,7 @@ func (c *countingSlowExporter) Export(_ context.Context, recs []sdklog.Record) e
 		close(c.entered)
 		c.entered = nil
 	}
+
 	time.Sleep(c.d)
 	c.mu.Lock()
 	c.n += len(recs)
@@ -776,6 +832,7 @@ func TestExpiredCtxNeverStrandsTheProvider(t *testing.T) {
 			}
 		}
 	}
+
 	if stranded != 0 {
 		t.Errorf("%d of %d expired-ctx Shutdowns stranded the provider: latched, alive, and unrecoverable by retry", stranded, iters)
 	}

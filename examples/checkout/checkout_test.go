@@ -21,6 +21,7 @@ func ledgerDigest(t *testing.T, l Ledger) string {
 	if err != nil {
 		t.Fatalf("marshal ledger: %v", err)
 	}
+
 	return fmt.Sprintf("%x", sha256.Sum256(b))
 }
 
@@ -31,6 +32,7 @@ func TestRunIsDeterministicUnderSeed(t *testing.T) {
 	if len(a.Ledger.Txns) == 0 {
 		t.Fatal("simulation produced no transactions")
 	}
+
 	if da, db := ledgerDigest(t, a.Ledger), ledgerDigest(t, b.Ledger); da != db {
 		t.Fatalf("same seed produced different ledgers: %s vs %s", da, db)
 	}
@@ -69,6 +71,7 @@ func TestTrafficFollowsCurve(t *testing.T) {
 			want += curve[h] * 60
 			got += float64(hourly[h])
 		}
+
 		if got < want*0.75 || got > want*1.25 {
 			t.Errorf("%s: got %.0f arrivals, want ~%.0f", name, got, want)
 		}
@@ -78,8 +81,10 @@ func TestTrafficFollowsCurve(t *testing.T) {
 		for h := 0; h < 4; h++ {
 			trough = append(trough, day*24+h)
 		}
+
 		peak = append(peak, day*24+10)
 	}
+
 	sumBand(trough, "weekday night trough (00-04)")
 	sumBand(peak, "weekday 10:00 peak")
 	// The ordering peak > trough must hold hour-for-hour regardless.
@@ -99,14 +104,17 @@ func TestLifecycleCoherence(t *testing.T) {
 		if txn.AmountMinor <= 0 {
 			t.Fatalf("%s: non-positive amount %d", txn.ID, txn.AmountMinor)
 		}
+
 		if txn.Currency != "USD" {
 			t.Fatalf("%s: unexpected currency %q", txn.ID, txn.Currency)
 		}
+
 		switch txn.State {
 		case StateSettled:
 			if txn.SettledAt.IsZero() || txn.CapturedAt.IsZero() || txn.AuthedAt.IsZero() {
 				t.Fatalf("%s settled with missing stage timestamps: %+v", txn.ID, txn)
 			}
+
 			if txn.SettledAt.Before(txn.CapturedAt) || txn.CapturedAt.Before(txn.AuthedAt) ||
 				txn.AuthedAt.Before(txn.CreatedAt) {
 				t.Fatalf("%s: stage timestamps out of order: %+v", txn.ID, txn)
@@ -115,6 +123,7 @@ func TestLifecycleCoherence(t *testing.T) {
 			if !txn.SettledAt.IsZero() {
 				t.Fatalf("%s captured but has SettledAt: %+v", txn.ID, txn)
 			}
+
 			// In flight at window end is the only honest reason.
 			if !txn.CapturedAt.Add(time.Duration(res.Config.SettleDelayMin) * time.Minute).
 				After(end.Add(-time.Minute)) {
@@ -128,9 +137,11 @@ func TestLifecycleCoherence(t *testing.T) {
 			t.Fatalf("%s: unexpected state %q in fault-free run", txn.ID, txn.State)
 		}
 	}
+
 	if states[StateSettled] == 0 {
 		t.Fatal("fault-free run settled nothing")
 	}
+
 	// The in-flight tail must be small relative to a full day.
 	if tail := states[StateAuthed] + states[StateCaptured]; tail > states[StateSettled]/10 {
 		t.Fatalf("in-flight tail suspiciously large: %d in flight vs %d settled", tail, states[StateSettled])
@@ -157,10 +168,12 @@ func TestSegmentsAndAmounts(t *testing.T) {
 			t.Fatalf("unknown segment %q", txn.Segment)
 		}
 	}
+
 	total := smb + ent
 	if total == 0 {
 		t.Fatal("run produced no transactions — fraction check would pass vacuously on NaN")
 	}
+
 	frac := float64(ent) / float64(total)
 	if frac < 0.05 || frac > 0.2 {
 		t.Fatalf("enterprise fraction %f outside [0.05, 0.2] (%d of %d)", frac, ent, total)
@@ -228,13 +241,16 @@ func TestConfigValidation(t *testing.T) {
 	if len(res.Ledger.Txns) == 0 {
 		t.Fatal("sentinel run produced no transactions")
 	}
+
 	for _, txn := range res.Ledger.Txns {
 		if txn.Segment == SegmentEnterprise {
 			t.Fatalf("NoEnterprise run produced an enterprise txn: %+v", txn)
 		}
+
 		if txn.State != StateSettled {
 			t.Fatalf("InstantStage run left %s in state %s", txn.ID, txn.State)
 		}
+
 		if !txn.SettledAt.Equal(txn.CreatedAt) {
 			t.Fatalf("InstantStage txn %s settled at %v, created %v", txn.ID, txn.SettledAt, txn.CreatedAt)
 		}

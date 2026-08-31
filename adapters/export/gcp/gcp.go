@@ -80,9 +80,11 @@ func New(opts ...func(*Options)) *Exporter {
 	for _, f := range opts {
 		f(&o)
 	}
+
 	if o.w == nil {
 		o.w = os.Stdout
 	}
+
 	return &Exporter{w: bufio.NewWriter(o.w), projectID: o.projectID}
 }
 
@@ -108,23 +110,28 @@ func (e *Exporter) ExportEvents(_ context.Context, batch []biz.Outcome) error {
 	if len(batch) == 0 {
 		return nil
 	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.closed {
 		return ErrShutdown
 	}
+
 	for _, o := range batch {
 		rec, err := buildEventRecord(e.projectID, o)
 		if err != nil {
 			return err
 		}
+
 		if _, err := e.w.Write(rec); err != nil {
 			return fmt.Errorf("gcp: write: %w", err)
 		}
+
 		if err := e.w.WriteByte('\n'); err != nil {
 			return fmt.Errorf("gcp: write: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -140,5 +147,6 @@ func (e *Exporter) Shutdown(context.Context) error {
 	if err := e.w.Flush(); err != nil {
 		return fmt.Errorf("gcp: flush: %w", err)
 	}
+
 	return nil
 }

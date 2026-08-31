@@ -16,6 +16,7 @@ func TestEveryTrackedGoFileCarriesTheHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scanning tracked files: %v", err)
 	}
+
 	if len(missing) > 0 {
 		t.Errorf("%d file(s) missing the Apache-2.0 header (run: go run ./test/licensehdr -fix):\n%s",
 			len(missing), strings.Join(missing, "\n"))
@@ -75,6 +76,7 @@ func TestWithHeader(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s:\ngot:\n%s\nwant:\n%s", tc.name, got, tc.want)
 		}
+
 		if needsHeader([]byte(got)) {
 			t.Errorf("%s: fixed content still reported missing", tc.name)
 		}
