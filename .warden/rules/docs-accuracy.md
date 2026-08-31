@@ -36,5 +36,5 @@ The mechanical slice — fenced Go examples must compile, fenced registry
 examples must load — is enforced deterministically by test/docsnippets
 in the core CI job (promoted 2026-08-29): Go compilation for the docs
 its checkedDocs list governs, registry loading over a slightly wider
-doc list in its validator test. Fences elsewhere (docs/inhouse.md until
-it is governed, ADR history) stay with this lens's judgment.
+doc list in its validator test, docs/inhouse.md included since
+2026-08-31. Fences elsewhere (ADR history) stay with this lens's judgment.

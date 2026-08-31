@@ -1,0 +1,204 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
+// Command wikisync regenerates the GitHub wiki page set from docs/ and
+// README.md. The wiki is a derived mirror: docs/ in the repository is the
+// source of truth (ADR-0008), and the sync workflow (workspace-ehd)
+// overwrites wiki-side edits with this tool's output.
+//
+// Usage: go run ./test/wikisync -repo <repo-root> -out <dir>
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+const repoURL = "https://github.com/NightWatchEng/shortfall"
+
+// pageName maps a repo-relative markdown path to its flat wiki page name:
+// the docs/ prefix and .md suffix drop, remaining path separators become
+// hyphens. README.md at the repo root maps to README.
+func pageName(p string) string {
+	p = strings.TrimSuffix(p, ".md")
+	p = strings.TrimPrefix(p, "docs/")
+	return strings.ReplaceAll(p, "/", "-")
+}
+
+// docPages returns repo-relative source path -> wiki page name for every
+// mirrored markdown file: README.md plus each .md under docs/.
+func docPages(root string) (map[string]string, error) {
+	pages := map[string]string{}
+	if _, err := os.Stat(filepath.Join(root, "README.md")); err == nil {
+		pages["README.md"] = pageName("README.md")
+	}
+	err := filepath.WalkDir(filepath.Join(root, "docs"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return err
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		pages[rel] = pageName(rel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return pages, nil
+}
+
+// linkRE matches inline markdown link destinations. Reference-style links
+// do not occur in docs/; the sync test set pins the shapes that do.
+var linkRE = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+
+// rewriteLine rewrites every relative link destination on one line of the
+// source file src (repo-relative). Mirrored .md targets become wiki page
+// names (anchors preserved); other repo paths become GitHub blob/tree URLs;
+// absolute URLs and pure-anchor links pass through.
+func rewriteLine(root, src string, pages map[string]string, line string) string {
+	return linkRE.ReplaceAllStringFunc(line, func(m string) string {
+		dest := m[2 : len(m)-1]
+		if strings.Contains(dest, "://") || strings.HasPrefix(dest, "#") || strings.HasPrefix(dest, "mailto:") {
+			return m
+		}
+		target, anchor := dest, ""
+		if i := strings.IndexByte(dest, '#'); i >= 0 {
+			target, anchor = dest[:i], dest[i:]
+		}
+		resolved := path.Clean(path.Join(path.Dir(src), target))
+		if page, ok := pages[resolved]; ok {
+			return "](" + page + anchor + ")"
+		}
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(resolved)))
+		if err != nil {
+			// Target does not exist in the tree; leave the link as
+			// written rather than inventing a destination.
+			return m
+		}
+		kind := "blob"
+		if info.IsDir() {
+			kind = "tree"
+		}
+		return "](" + repoURL + "/" + kind + "/main/" + resolved + anchor + ")"
+	})
+}
+
+// rewriteDoc applies rewriteLine outside fenced code blocks and leaves
+// fenced content byte-identical.
+func rewriteDoc(root, src string, pages map[string]string, body string) string {
+	lines := strings.Split(body, "\n")
+	inFence := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if !inFence {
+			lines[i] = rewriteLine(root, src, pages, line)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// section groups pages for Home/_Sidebar navigation in a fixed order.
+type section struct {
+	title  string
+	prefix string
+}
+
+var sections = []section{
+	{"Guides & reference", ""},
+	{"Architecture", "architecture-"},
+	{"ADRs", "adr-"},
+}
+
+func navFor(pages map[string]string) string {
+	names := make([]string, 0, len(pages))
+	for _, page := range pages {
+		names = append(names, page)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, s := range sections {
+		b.WriteString("\n### " + s.title + "\n\n")
+		for _, name := range names {
+			inSection := s.prefix != "" && strings.HasPrefix(name, s.prefix)
+			if s.prefix == "" {
+				inSection = !strings.HasPrefix(name, "architecture-") && !strings.HasPrefix(name, "adr-")
+			}
+			if inSection {
+				b.WriteString("- [" + name + "](" + name + ")\n")
+			}
+		}
+	}
+	return b.String()
+}
+
+const homePreamble = `# shortfall
+
+**What an incident cost, who it hit, and how sure you are.**
+
+This wiki is a generated mirror of the repository's ` + "[`docs/`](" + repoURL + "/tree/main/docs)" + ` directory,
+which is the source of truth: documentation changes in the same PR as the
+behavior it describes (ADR-0008). Edits made directly to wiki pages are
+overwritten by the next sync run.
+`
+
+func generate(root, out string) error {
+	pages, err := docPages(root)
+	if err != nil {
+		return err
+	}
+	srcs := make([]string, 0, len(pages))
+	for src := range pages {
+		srcs = append(srcs, src)
+	}
+	sort.Strings(srcs)
+	for _, src := range srcs {
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(src)))
+		if err != nil {
+			return err
+		}
+		rewritten := rewriteDoc(root, src, pages, string(body))
+		footer := fmt.Sprintf(
+			"\n\n---\n_Generated mirror of [`%s`](%s/blob/main/%s). The repository is the source of truth; wiki edits are overwritten by the sync workflow._\n",
+			src, repoURL, src)
+		dest := filepath.Join(out, pages[src]+".md")
+		if err := os.WriteFile(dest, []byte(rewritten+footer), 0o644); err != nil {
+			return err
+		}
+	}
+	nav := navFor(pages)
+	if err := os.WriteFile(filepath.Join(out, "Home.md"), []byte(homePreamble+nav), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(out, "_Sidebar.md"), []byte(nav), 0o644)
+}
+
+func main() {
+	root := flag.String("repo", ".", "repository root")
+	out := flag.String("out", "", "output directory for the generated page set")
+	flag.Parse()
+	if *out == "" {
+		fmt.Fprintln(os.Stderr, "wikisync: -out is required")
+		os.Exit(2)
+	}
+	if err := os.MkdirAll(*out, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "wikisync:", err)
+		os.Exit(1)
+	}
+	if err := generate(*root, *out); err != nil {
+		fmt.Fprintln(os.Stderr, "wikisync:", err)
+		os.Exit(1)
+	}
+}
