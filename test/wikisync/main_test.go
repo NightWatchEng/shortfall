@@ -5,7 +5,10 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -308,6 +311,150 @@ func TestThisRepoNavigationCoversEveryPage(t *testing.T) {
 	if _, err := navFor(root, pages); err != nil {
 		t.Errorf("this repository has %v", err)
 	}
+}
+
+// wikiPageRefs returns the wiki page each absolute wiki URL in body names,
+// skipping fenced blocks and inline code spans exactly as linkTargets
+// does — a URL shown in a `curl` example is illustrating the format, not
+// linking. The wiki root names no page and yields nothing to check. A
+// trailing period is trimmed, since a URL ending a sentence would
+// otherwise carry it into the page name and fail for a correct link; only
+// "." is reachable, the rest of the punctuation being outside the capture
+// class already.
+func wikiPageRefs(body string) []string {
+	var refs []string
+	inFence := false
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+
+		if inFence {
+			continue
+		}
+
+		// Splitting on the backtick puts span contents at odd indices,
+		// exactly as linkTargets and rewriteLine do: a URL shown inside
+		// backticks is illustrating the format, not linking to it.
+		segs := strings.Split(line, "`")
+		for i := 0; i < len(segs); i += 2 {
+			for _, m := range wikiURL.FindAllStringSubmatch(segs[i], -1) {
+				page := strings.TrimRight(m[1], ".")
+				if page == "" {
+					continue // the wiki root, names no page to check
+				}
+
+				refs = append(refs, page)
+			}
+		}
+	}
+
+	return refs
+}
+
+// wikiURL matches an absolute wiki URL, capturing the page it names.
+var wikiURL = regexp.MustCompile(regexp.QuoteMeta(repoURL+"/wiki") + `(?:/([A-Za-z0-9._-]+))?`)
+
+func TestWikiPageRefs(t *testing.T) {
+	u := repoURL + "/wiki"
+	cases := []struct {
+		name, body string
+		want       []string
+	}{
+		{"plain link", "see [docs](" + u + "/quickstart)", []string{"quickstart"}},
+		{"bare url in prose", "read " + u + "/adapters today", []string{"adapters"}},
+		// A URL ending a sentence must not carry the period into the page.
+		{"trailing period", "read " + u + "/adapters.", []string{"adapters"}},
+		{"trailing paren", "(see " + u + "/money)", []string{"money"}},
+		{"wiki root yields nothing to check", "the [wiki](" + u + ")", nil},
+		{"root with trailing slash", "the wiki at " + u + "/", nil},
+		// A URL in a shell example is not a link, exactly as fenced
+		// markdown links are not links elsewhere in this module.
+		{"inline code span skipped", "run `curl " + u + "/not-a-page` now", nil},
+		{"fenced url skipped", "```sh\ncurl " + u + "/not-a-page\n```\n", nil},
+		{"tilde fence skipped", "~~~\n" + u + "/not-a-page\n~~~\n", nil},
+		{"two on one line", u + "/money and " + u + "/registry", []string{"money", "registry"}},
+		{"hyphenated page", "[c4](" + u + "/architecture-c4-l1-context)", []string{"architecture-c4-l1-context"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// nil and [""] must not compare equal: the wiki-root cases
+			// pin a guard whose loss turns the first into the second.
+			got := wikiPageRefs(c.body)
+			if !slices.Equal(got, c.want) {
+				t.Errorf("wikiPageRefs(%q) = %q, want %q", c.body, got, c.want)
+			}
+		})
+	}
+}
+
+// TestHardcodedWikiLinksResolve guards the absolute wiki URLs the README
+// uses to land a reader on the docs quickly. They name generated pages, so
+// renaming a doc breaks them — and nothing else in the tree would notice:
+// there is no link checker here, and rewriteSegment deliberately leaves an
+// unresolvable target as written rather than inventing a destination.
+func TestHardcodedWikiLinksResolve(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pages, err := docPages(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	generated := map[string]bool{"Home": true} // Home is synthesized, not mirrored
+	for _, page := range pages {
+		generated[page] = true
+	}
+
+	checked := 0
+	for _, rel := range trackedMarkdown(t, root) {
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, page := range wikiPageRefs(string(body)) {
+			checked++
+			if !generated[page] {
+				t.Errorf("%s links to %s/wiki/%s, which the generator does not produce", rel, repoURL, page)
+			}
+		}
+	}
+
+	// Counts pages actually resolved, not URLs seen: bare wiki-root links
+	// are validated against nothing, so counting them would let the floor
+	// pass on a scan that checked no page at all.
+	if checked == 0 {
+		t.Fatal("no wiki page links found — the check is vacuous")
+	}
+}
+
+// trackedMarkdown lists every tracked .md file, so a wiki URL added
+// anywhere in the tree is checked rather than only in a named few.
+func trackedMarkdown(t *testing.T, root string) []string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", root, "ls-files", "-z", "--", "*.md").Output()
+	if err != nil {
+		t.Fatalf("git ls-files: %v", err)
+	}
+
+	var files []string
+	for _, f := range strings.Split(strings.TrimRight(string(out), "\x00"), "\x00") {
+		if f != "" {
+			files = append(files, f)
+		}
+	}
+
+	if len(files) < 20 {
+		t.Fatalf("only %d tracked .md file(s) found — the scan is vacuous", len(files))
+	}
+
+	return files
 }
 
 func collectPages(t *testing.T, root string) map[string]string {

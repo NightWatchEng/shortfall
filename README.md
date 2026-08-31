@@ -7,6 +7,12 @@ incident from telemetry your services already emit, and reports it in a
 form Finance can audit. There is no service to run, no datastore to
 install, and no agent to deploy.
 
+📖 **[Documentation](https://github.com/NightWatchEng/shortfall/wiki)** —
+[Quickstart](https://github.com/NightWatchEng/shortfall/wiki/quickstart) ·
+[Integration guide](https://github.com/NightWatchEng/shortfall/wiki/integration) ·
+[Backends](https://github.com/NightWatchEng/shortfall/wiki/adapters) ·
+[Architecture](https://github.com/NightWatchEng/shortfall/wiki/architecture-README)
+
 ## The problem
 
 The postmortem template has a field for customer and revenue impact. It
@@ -189,8 +195,11 @@ sizing anything.
 
 ## Documentation
 
-The [wiki](https://github.com/NightWatchEng/shortfall/wiki) mirrors
-`docs/`, which is the source of truth.
+Everything below is on the
+**[wiki](https://github.com/NightWatchEng/shortfall/wiki)**, which is the
+readable surface — one page per topic, in reading order, regenerated from
+`docs/` on every push to main. The in-repo links here are the same pages
+at their source of truth.
 
 **Start here**
 - [Quickstart](docs/quickstart.md) — instrument a service and watch `biz_*` come out, in 10 minutes, no external services.

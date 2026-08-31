@@ -1,0 +1,252 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+  "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+  "rules_version": "98abf0671ba2",
+  "reviewed_at": "2026-08-31T18:01:29+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context; three rounds over the branch and each fix delta, given the engine:claude rule bodies verbatim (blank-line-after-block included, now that it is declared), the skills-policy charter and a warden-packaged diff. Reviews executed rather than read: the scanner was run against constructed markdown, the four README wiki URLs were resolved against a page set derived from docPages/pageName rather than the live wiki, and the test-cache hazard was reproduced for the new scanner in a scratch repo."
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude general-purpose subagent, separate context; every round refuted its own findings before reporting and returned an explicit refuted list \u2014 among them the emoji typography question, Home handling shared with the nav test, the docs/internal mirroring claim, and whether the wiki-sync path filter undercuts 'regenerated on every push to main'. A full eight-mutation kill matrix was run against the eleven table cases, confirming no survivor."
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 288,
+      "severity": "MEDIUM",
+      "finding": "[r1] The new test was inserted between TestThisRepoNavigationCoversEveryPage's doc comment and its function, so the comment documented a test that does none of what it says and the nav test was left uncommented.",
+      "evidence": "Two adjacent comment blocks with no function between them; the described function sat 80 lines below, uncommented.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Moved below the nav test. This is the second time in one session I made this exact insertion error \u2014 the first was TestExtractFences in test/docsnippets.",
+      "id": "77af2682e9c5103b"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "unmapped:overbroad-link-scanner",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 315,
+      "severity": "MEDIUM",
+      "finding": "[r1] The scanner was not markdown-aware and would fail the build on correct links: the page-name class swallowed a trailing sentence period, and unlike every other scanner in the module it did not skip fenced blocks.",
+      "evidence": "Appending `See .../wiki/adapters.` and a fenced `curl .../wiki/some-page` to a doc made the real test fail on both. main.go's linkTargets skips fences precisely so a fenced example does not count as a link.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Extracted as wikiPageRefs, which skips fences and trims the trailing period. A sentence-ending URL was confirmed not to fail after the fix.",
+      "id": "cb837d541de397f8"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 336,
+      "severity": "MEDIUM",
+      "finding": "[r1] The anti-vacuity floor counted URLs seen rather than pages resolved: the counter incremented before the bare-wiki-root `continue`, so root links, validated against nothing, satisfied it.",
+      "evidence": "Deleting the four page links from README left the test passing on two root links while resolving no page at all.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Counts pages actually checked. Reinstating the old counter reddens the guard itself.",
+      "id": "fdb344250186341a"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "tests-required",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 298,
+      "severity": "MEDIUM",
+      "finding": "[r1] The new matching logic had no table-driven cases and was exercised only by whatever URLs README happened to contain, with its edge behaviour wrong in exactly the cases a table would have listed.",
+      "evidence": "Every other pure helper in the module is table-driven, including TestRewriteSkipsCodeFences \u2014 the fence case the new scanner got wrong.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Eleven subtests over an extracted wikiPageRefs; a mutation matrix of eight distinct mutations leaves no subtest unkilled.",
+      "id": "2977e9abfde44f95"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "unmapped:incomplete-scan-scope",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 345,
+      "severity": "LOW",
+      "finding": "[r1] The source list hardcoded three files, leaving adapters/README.md, SECURITY.md and .github/ outside the guard with nothing to say so.",
+      "evidence": "The comment claimed to list 'the docs that may carry absolute wiki URLs' while four tracked .md files were excluded.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Walks every tracked .md, with its own floor.",
+      "id": "d0de3e74a9390c1a"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 374,
+      "severity": "MEDIUM",
+      "finding": "[r2] The table written to prove the scanner non-vacuous was itself vacuous: asserting with strings.Join cannot distinguish nil from [\"\"], so the two subtests pinning the wiki-root guard could not detect its loss.",
+      "evidence": "Deleting `if page == \"\" { continue }` left all ten subtests green; `return nil` reddened only six of ten.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "slices.Equal compares length and elements; both root cases now redden on exactly that mutation.",
+      "id": "aead4a672a503c02"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "unmapped:inline-code-span-not-skipped",
+      "tags": [
+        "inline-code-span-not-skipped"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 321,
+      "severity": "MEDIUM",
+      "finding": "[r2] wikiPageRefs skipped fenced blocks but not inline code spans while its doc comment claimed parity with every other scanner in the module. A wiki URL shown inside backticks would have failed the required core-checks job.",
+      "evidence": "wikiPageRefs on 'run `curl .../wiki/not-a-page` to fetch' returned the page. linkTargets and rewriteLine both split on the backtick first.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Splits on the backtick, byte-identically to linkTargets. A named case reddens when the even-segment step is removed.",
+      "id": "80fb28b4a3c28572"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 383,
+      "severity": "MEDIUM",
+      "finding": "[r2] The doc comment justifying the whole test cited an 'in-repo link checker' that only follows relative paths. No link checker exists anywhere in this tree.",
+      "evidence": "grep for link-check mechanisms across workflows, scripts, Go and markdown returns only the sentence itself. The relative-link checking had been an ad-hoc shell one-liner run during review, written up as though it were a repo artifact \u2014 ADR-0008 clause 3.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The comment says what is true: nothing here would notice, and rewriteSegment leaves an unresolvable target as written rather than inventing a destination.",
+      "id": "d7932b0ea563544f"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "scripts",
+      "file": "scripts/ci-go.sh",
+      "line": 37,
+      "severity": "MEDIUM",
+      "finding": "[r2] The comment paying for the -count=1 cost enumerated the whole-tree git ls-files scanners as three; trackedMarkdown makes test/wikisync a fourth with the same cache exposure.",
+      "evidence": "Reproduced for the new scanner: an unlisted doc gave `ok (cached)` while -count=1 failed naming it.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "All four named. An ALL-CAPS emphasis left in that comment earlier was removed at the same time.",
+      "id": "9e561a5873dc84d5"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 383,
+      "severity": "MEDIUM",
+      "finding": "[r3] The comment explaining the assertion credited the wrong artifact: '%q rather than Join' names the Errorf verb, which has no effect on pass or fail. The mechanism is slices.Equal on the adjacent line.",
+      "evidence": "With the root guard deleted, both root subtests fail under slices.Equal; the verb is not load-bearing.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "States the constraint the comparison must satisfy.",
+      "id": "58ad64624aade179"
+    },
+    {
+      "ts": "2026-08-31T18:01:29+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "a9d89dfd41db8206b493be2153f60278a8a09ea3",
+      "base_sha": "10fcb0f0c7d21af33a0ccb6a2885a58f4e094927",
+      "rule_id": "comment-hygiene",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 383,
+      "severity": "MEDIUM",
+      "finding": "[r3] The comment's content was an argument against the previous commit's implementation. strings.Join appears nowhere in the file, so a fresh reader has no prior version to weigh it against and it reads as persuasion aimed at this diff's reviewer.",
+      "evidence": "ADR-0014 lists change history and persuasion under 'Never in comments'; the review corpus carries a judged finding of the same shape in adapters/export/otlp/pipeline_test.go.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Rewritten as a constraint: nil and [\"\"] must not compare equal, because the wiki-root cases pin a guard whose loss turns the first into the second.",
+      "id": "b55e2ef42da1708b"
+    }
+  ]
+}
