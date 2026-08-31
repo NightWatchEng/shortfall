@@ -21,7 +21,7 @@
   "encode": [
     {
       "name": "reference",
-      "note": "the worked example in docs/portability.md",
+      "note": "the worked example in docs/portability/wire-codec.md",
       "vc": {
         "flow": "invoice.pay",
         "entity_id": "inv_8Ka92j",

@@ -214,7 +214,6 @@ at their source of truth.
 
 **Specification**
 - [Portability contract](docs/portability.md) — what another implementation, or an external adapter, must satisfy.
-- [Semantic conventions](docs/semconv.md) — the `biz.*` attribute and metric shapes (draft).
 
 **Design**
 - [Architecture](docs/architecture/README.md) — C4 levels 1–3 and the money-path sequences.

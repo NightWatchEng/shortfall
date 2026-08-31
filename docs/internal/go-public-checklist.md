@@ -20,7 +20,7 @@ visibility flip itself is the founder's alone**.
 | Name clearance: trademark search | 👤 **founder** | a real clearance search is a legal judgment; not executed by automation |
 | Employer IP review email | 👤 **founder** | a personal action ("one email now beats a problem later") |
 | Versioning policy stated | ✅ | README **Status**: v0.x instability; v1.0.0 only after the frozen interfaces survive two external adapters |
-| Semconv feedback before v1 | ✅ policy stated | `docs/semconv.md` is marked draft; README ties v1.0.0 to external-adapter survival |
+| Semconv feedback before v1 | ✅ policy stated | `semconv.md`, beside this file, is marked draft; README ties v1.0.0 to external-adapter survival |
 | The flip | 👤 **founder** | private → public is, and stays, the founder's call |
 
 When flipping: no other repo settings need to change — Pages stays off

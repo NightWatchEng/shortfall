@@ -24,9 +24,13 @@ import (
 // `go run ./testkit/cmd/genvectors` from the repo root, and update the
 // contract in the same PR (ADR-0008).
 
-// portabilityDoc is the specification these vectors are the executable
-// half of; the doc-tie test below reads it.
-const portabilityDoc = "../docs/portability.md"
+// portabilityDocs is the specification these vectors are the executable
+// half of: an index plus its chapters. The doc-tie test below reads the
+// set, so a class named in any part counts — splitting the contract into
+// chapters must not silently narrow what this asserts.
+const portabilityDir = "../docs/portability"
+
+var portabilityDocs = "../docs/portability.md and " + portabilityDir
 
 func loadVC(t *testing.T) VCVectors {
 	t.Helper()
@@ -331,16 +335,11 @@ func TestRegistryVectorsAreNotVacuous(t *testing.T) {
 // and every constant they pin. A class added to the vectors without a
 // line in the contract fails here.
 func TestPortabilityDocMatchesVectors(t *testing.T) {
-	raw, err := os.ReadFile(portabilityDoc)
-	if err != nil {
-		t.Fatalf("read %s: %v", portabilityDoc, err)
-	}
-
-	doc := string(raw)
+	doc := readPortability(t)
 	vc := loadVC(t)
 	for _, class := range append(append([]string{}, VCErrorClasses...), RegistryErrorClasses...) {
 		if !strings.Contains(doc, "`"+class+"`") {
-			t.Errorf("%s does not name rejection class %q", portabilityDoc, class)
+			t.Errorf("%s does not name rejection class %q", portabilityDocs, class)
 		}
 	}
 
@@ -350,9 +349,48 @@ func TestPortabilityDocMatchesVectors(t *testing.T) {
 		strings.Join(vc.FieldOrder, " | "),
 	} {
 		if !strings.Contains(doc, want) {
-			t.Errorf("%s does not state %q", portabilityDoc, want)
+			t.Errorf("%s does not state %q", portabilityDocs, want)
 		}
 	}
+}
+
+// readPortability concatenates the contract's index and every chapter. A
+// chapter that stops being read would quietly stop being checked, so the
+// chapter count is floored rather than trusted.
+func readPortability(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile("../docs/portability.md")
+	if err != nil {
+		t.Fatalf("read the portability index: %v", err)
+	}
+
+	entries, err := os.ReadDir(portabilityDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", portabilityDir, err)
+	}
+
+	var b strings.Builder
+	b.Write(raw)
+	chapters := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+
+		part, err := os.ReadFile(filepath.Join(portabilityDir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+
+		b.Write(part)
+		chapters++
+	}
+
+	if chapters < 8 {
+		t.Fatalf("only %d portability chapter(s) read — the doc tie is vacuous", chapters)
+	}
+
+	return b.String()
 }
 
 // TestRegistryFactsEqualFailsClosed is the regression test for a review

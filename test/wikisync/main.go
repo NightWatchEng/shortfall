@@ -191,7 +191,6 @@ var sections = []section{
 	}},
 	{"Specification", []navEntry{
 		{"portability", "Portability contract"},
-		{"semconv", "Semantic conventions (draft)"},
 	}},
 	{"Architecture", []navEntry{
 		{"architecture-README", "Overview"},
@@ -205,34 +204,60 @@ var sections = []section{
 	}},
 }
 
-// adrPrefix marks pages listed by the ADR index rather than by a nav
-// section — eighteen sidebar lines would bury the guides. Their
-// reachability is checked against that index, not assumed: see adrIndex.
-const adrPrefix = "adr-"
+// indexed names a page set that one index page lists, rather than the
+// navigation listing each member — eighteen ADRs or eight spec chapters
+// would bury the guides. Reachability is checked against the index, not
+// assumed: see indexLinks. The index page itself takes the ordinary
+// curated route, so nothing is exempt.
+type indexed struct {
+	prefix string // wiki page-name prefix its members carry
+	src    string // repo-relative index that must link them
+}
 
-// adrIndexSrc is the one page that lists the ADRs; it is itself curated.
-const adrIndexSrc = "docs/adr/README.md"
+var indexes = []indexed{
+	{"adr-", "docs/adr/README.md"},
+	{"portability-", "docs/portability.md"},
+}
+
+// indexFor returns the index owning page, if any. An index page may match
+// its own prefix — docs/adr/README.md is the page adr-README — so callers
+// compare the source path against ix.src to keep the index itself on the
+// curated route. Exempting it there instead would let one deleted nav line
+// orphan the whole set behind it.
+func indexFor(page string) (indexed, bool) {
+	for _, ix := range indexes {
+		if strings.HasPrefix(page, ix.prefix) {
+			return ix, true
+		}
+	}
+
+	return indexed{}, false
+}
 
 // navFor renders the curated navigation, and fails on a page nothing would
 // link to. A new doc under docs/ is mirrored automatically, so without this
 // the wiki grows pages reachable only by URL (CONTRIBUTING, "Documentation
-// accuracy"). A page is reachable two ways: a nav section names it, or it
-// is an ADR the ADR index links — and the index itself takes the first
-// route, so nothing is exempt.
+// accuracy"). A page is reachable two ways: a nav section names it, or an
+// index in indexes links it. Every index takes the first route itself, so
+// nothing is exempt.
 func navFor(root string, pages map[string]string) (string, error) {
-	linkedADRs, err := adrIndex(root)
-	if err != nil {
-		return "", err
+	linked := map[string]map[string]bool{}
+	for _, ix := range indexes {
+		l, err := indexLinks(root, ix.src)
+		if err != nil {
+			return "", err
+		}
+
+		linked[ix.src] = l
 	}
 
 	uncovered := make(map[string]string, len(pages)) // page -> why it is unreachable
 	for src, page := range pages {
-		// The index is an ADR page by name but is reached the ordinary way,
-		// so it needs a curated entry like everything else — exempting it
-		// here would let one deleted nav line orphan the whole ADR set.
-		if strings.HasPrefix(page, adrPrefix) && src != adrIndexSrc {
-			if !linkedADRs[path.Base(src)] {
-				uncovered[page] = "link it from " + adrIndexSrc
+		// src != ix.src keeps an index page curated even when its own name
+		// carries the prefix; see indexFor.
+		if ix, ok := indexFor(page); ok && src != ix.src {
+			if !linked[ix.src][path.Base(src)] {
+				uncovered[page] = "link it from " + ix.src
 			}
 
 			continue
@@ -276,13 +301,13 @@ func navFor(root string, pages map[string]string) (string, error) {
 	return b.String(), nil
 }
 
-// adrIndex returns the set of ADR filenames the ADR index links, so an ADR
+// indexLinks returns the set of filenames an index page links, so a member
 // left out of it is caught here rather than published as an orphan. A
-// missing index yields an empty set and so fails every ADR page in navFor,
-// which is the fail-closed direction: an index that vanished orphans the
-// whole ADR set at once, and that must be loud.
-func adrIndex(root string) (map[string]bool, error) {
-	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(adrIndexSrc)))
+// missing index yields an empty set and so fails every page behind it,
+// which is the fail-closed direction: an index that vanished orphans its
+// whole set at once, and that must be loud.
+func indexLinks(root, src string) (map[string]bool, error) {
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(src)))
 	if errors.Is(err, os.ErrNotExist) {
 		return map[string]bool{}, nil
 	}
