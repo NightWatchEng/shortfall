@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "019b87c7012651064ea61e6d7dd6d21c8fa73c20",
+  "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-31T00:41:13+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude -p sonnet (headless, independent context; Agent tool unavailable to worktree fork)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude -p sonnet (headless, separate context, judged the findings list adversarially with own command runs)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T00:41:13+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "019b87c7012651064ea61e6d7dd6d21c8fa73c20",
+      "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-accuracy"
+      ],
+      "dir_prefix": ".github",
+      "file": ".github/pull_request_template.md",
+      "line": 15,
+      "severity": "MEDIUM",
+      "finding": "The PR introduced a bundled multi-id title convention in CONTRIBUTING.md and commit-lint.sh but left .github/pull_request_template.md ('The id that authorises this change', singular) and .warden/skills-policy.md Shipping ('the tracked item id', 'type: summary (bead-id)') stating the old single-id contract \u2014 one standard in two disagreeing wordings (charter item 8, ADR-0008).",
+      "evidence": "cross-examiner read both files at the round-1 head: neither mentioned the bundled form this diff enforces",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-5f4",
+      "reason": "Both files updated in the same PR: the template now names the space-separated multi-id form, and the policy's Shipping section points at CONTRIBUTING for the bundled spelling. Scoped re-review verdict: addressed.",
+      "id": "9ef2d0a62d25a92a"
+    },
+    {
+      "ts": "2026-08-31T00:41:13+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "019b87c7012651064ea61e6d7dd6d21c8fa73c20",
+      "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+      "rule_id": "unmapped:regex-hole",
+      "tags": [
+        "untested-surface"
+      ],
+      "dir_prefix": "scripts",
+      "file": "scripts/commit-lint.sh",
+      "line": 52,
+      "severity": "LOW",
+      "finding": "The new multi-id alternation accepted duplicate ids \u2014 '(workspace-abc workspace-abc)' passed \u2014 because ERE has no backreference; CONTRIBUTING's 'lists every id it closes' implies distinct ids, and no test case covered repetition.",
+      "evidence": "grep -Ex against the new pattern matched the duplicate-id header verbatim (reviewer command output)",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-5f4",
+      "reason": "Post-match shell dedupe over the parens group (sed extract, tr/sort/uniq -d) rejects duplicates with a named error; three new test cases (duplicate pair, duplicate among three with squash suffix, dotted-sibling distinct pass) watched failing before the fix. Scoped re-review verdict: addressed.",
+      "id": "a730207421af053c"
+    },
+    {
+      "ts": "2026-08-31T00:41:13+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "019b87c7012651064ea61e6d7dd6d21c8fa73c20",
+      "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+      "rule_id": "unmapped:diagnostic-placement",
+      "tags": [],
+      "dir_prefix": "scripts",
+      "file": "scripts/ci-go.sh",
+      "line": 141,
+      "severity": "LOW",
+      "finding": "The new 'ci-go.sh: MODE under ROOT' stderr line lands at the tail of each check's captured output_tail in .warden/out verify artifacts, after the check's real concluding output.",
+      "evidence": "verify-result.json output_tail fields end with the diagnostic for all six modes despite the echo executing before the module loop",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-5f4",
+      "reason": "Cross-examiner REJECTED: the placement is the capture layer concatenating stdout-then-stderr, not a script defect; every other ci-go.sh diagnostic deliberately uses stderr and the check verdict is driven by exit_code, so switching this one line to stdout would break the script's own convention to work around an external rendering quirk.",
+      "id": "6427d9ce1a495a29"
+    }
+  ]
+}
