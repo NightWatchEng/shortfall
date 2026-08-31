@@ -38,6 +38,9 @@ expect fail "comma without space"               "fix: close two beads at once (w
 expect fail "doubled space between ids"         "fix: close two beads at once (workspace-abc  workspace-x.2)"
 expect fail "trailing space inside parens"      "fix: close two beads at once (workspace-abc )"
 expect fail "bare second id without prefix"     "fix: close two beads at once (workspace-abc x.2)"
+expect fail "duplicate id in bundle"            "fix: close two beads at once (workspace-abc workspace-abc)"
+expect fail "duplicate id among three"          "ci: sweep the scripts (workspace-a1 workspace-b2 workspace-a1) (#9)"
+expect pass "dotted siblings are distinct"      "fix: close two beads at once (workspace-a.1 workspace-a.2)"
 
 # Byte-length cap: exactly 100 bytes passes, 101 fails.
 h100="feat: $filler (no-bead: len888)"  # 6+76+18 = 100 bytes

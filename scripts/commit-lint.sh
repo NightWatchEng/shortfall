@@ -61,4 +61,16 @@ Got: $header
 EOF
   exit 1
 fi
+
+# A bundle lists DISTINCT ids — ERE has no backreference, so the duplicate
+# check is a shell pass over the matched parens group. sed prints the group
+# only for the id form; the no-bead form yields nothing and skips this.
+ids="$(printf '%s' "$header" | sed -n -E 's/^.* \((workspace-[a-z0-9.]+( workspace-[a-z0-9.]+)*)\)( \(#[0-9]+\))?$/\1/p')"
+if [ -n "$ids" ]; then
+  dup="$(printf '%s' "$ids" | tr ' ' "$nl" | sort | uniq -d)"
+  if [ -n "$dup" ]; then
+    echo "commit-lint: duplicate tracked-item id in header: $dup" >&2
+    exit 1
+  fi
+fi
 exit 0

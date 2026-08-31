@@ -83,9 +83,12 @@ Money-correctness focus, applied to every review:
 
 ## Shipping
 
-- PR bodies carry: the tracked item id, what was built, verification output
+- PR bodies carry: the tracked item id (every id, for a bundled PR), what
+  was built, verification output
   summary, every review finding with its disposition, and
   `.warden/bin/warden attest show`.
-- Commits: conventional `type: summary (bead-id)`.
+- Commits: conventional `type: summary (bead-id)`; a bundled PR lists every
+  bead it closes in the one parens, space-separated (CONTRIBUTING.md,
+  "Commits").
 - Merge (delegated, see Autonomy scope): squash, delete branch, close the
   bead, then `.warden/bin/warden memory ingest` on main.
