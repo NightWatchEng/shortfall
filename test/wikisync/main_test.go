@@ -56,8 +56,11 @@ func writeRepo(t *testing.T) string {
 		"docs/adapters.md":   "code at [exporters](../adapters/export) and [vector](../testkit/vectors/outcome-event.json); web [semconv](https://opentelemetry.io/)",
 		"docs/adr/0002-outcome-event-transport.md": "see [labels](0004-metric-label-set.md) and [money](../money.md)",
 		"docs/adr/0004-metric-label-set.md":        "history",
-		"adapters/export/README.md":                "not docs",
-		"testkit/vectors/outcome-event.json":       "{}",
+		// The ADR index is what makes an ADR page reachable; navFor
+		// checks each ADR against it rather than exempting the prefix.
+		"docs/adr/README.md":                 "[0002](0002-outcome-event-transport.md) [0004](0004-metric-label-set.md)",
+		"adapters/export/README.md":          "not docs",
+		"testkit/vectors/outcome-event.json": "{}",
 	}
 	for p, body := range files {
 		full := filepath.Join(root, p)
@@ -150,8 +153,117 @@ func TestGenerateEmitsEveryPagePlusHomeAndSidebar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(home), "[quickstart](quickstart)") {
+	if !strings.Contains(string(home), "[Quickstart](quickstart)") {
 		t.Errorf("Home navigation misses quickstart:\n%s", home)
+	}
+	if !strings.Contains(string(home), "### Start here") {
+		t.Errorf("Home navigation lost its curated sections:\n%s", home)
+	}
+}
+
+func TestNavRefusesAnUnreachablePage(t *testing.T) {
+	cases := []struct {
+		name      string
+		setup     func(t *testing.T, root string)
+		wantNamed string
+	}{
+		// A guide no section lists is mirrored but reachable only by URL.
+		{"guide missing from the curated sections", func(t *testing.T, root string) {
+			writeDoc(t, root, "docs/brand-new-guide.md", "unlisted")
+		}, "brand-new-guide"},
+		// An ADR is exempt from the sections because the ADR index lists
+		// it, so one the index omits is just as unreachable.
+		{"ADR missing from the ADR index", func(t *testing.T, root string) {
+			writeDoc(t, root, "docs/adr/0099-unlisted-decision.md", "history")
+		}, "adr-0099-unlisted-decision"},
+		// Markdown does not render a link inside a fence, so neither may
+		// the reachability check count one.
+		{"ADR linked only from a fenced example", func(t *testing.T, root string) {
+			writeDoc(t, root, "docs/adr/0099-unlisted-decision.md", "history")
+			writeDoc(t, root, "docs/adr/README.md",
+				"[0002](0002-outcome-event-transport.md) [0004](0004-metric-label-set.md)\n"+
+					"```\n[0099](0099-unlisted-decision.md)\n```\n")
+		}, "adr-0099-unlisted-decision"},
+		// A code span is not a link either, and the span branch is a
+		// separate code path from the fence branch above.
+		{"ADR linked only from an inline code span", func(t *testing.T, root string) {
+			writeDoc(t, root, "docs/adr/0099-unlisted-decision.md", "history")
+			writeDoc(t, root, "docs/adr/README.md",
+				"[0002](0002-outcome-event-transport.md) [0004](0004-metric-label-set.md)\n"+
+					"spell it `[0099](0099-unlisted-decision.md)` to show the shape\n")
+		}, "adr-0099-unlisted-decision"},
+		// The index carries the adr- prefix but is reached the ordinary
+		// way; exempting it would let one deleted nav line orphan every ADR.
+		{"ADR index itself missing from the curated sections", func(t *testing.T, root string) {
+			withoutNavEntry(t, "adr-README")
+		}, "adr-README"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := writeRepo(t)
+			c.setup(t, root)
+			err := generate(root, t.TempDir())
+			if err == nil {
+				t.Fatal("generate accepted a page nothing links to")
+			}
+			if !strings.Contains(err.Error(), c.wantNamed) {
+				t.Errorf("error does not name the unreachable page %q: %v", c.wantNamed, err)
+			}
+		})
+	}
+}
+
+// writeDoc creates one file under root, making its directory as needed.
+func writeDoc(t *testing.T, root, rel, body string) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// withoutNavEntry drops one curated entry for the duration of a test, so a
+// case can assert what happens to a page no section names.
+func withoutNavEntry(t *testing.T, page string) {
+	t.Helper()
+	saved := sections
+	t.Cleanup(func() { sections = saved })
+	trimmed := make([]section, 0, len(saved))
+	for _, s := range saved {
+		kept := make([]navEntry, 0, len(s.entries))
+		for _, e := range s.entries {
+			if e.page != page {
+				kept = append(kept, e)
+			}
+		}
+		trimmed = append(trimmed, section{title: s.title, entries: kept})
+	}
+	sections = trimmed
+}
+
+// TestThisRepoNavigationCoversEveryPage runs the generator over this
+// repository rather than a fixture. Without it the cases above only ever
+// judge a synthetic tree, and a doc added under docs/ with no nav entry
+// would pass every pre-merge check and fail the wiki-sync workflow after
+// merge. scripts/ci-go.sh discovers this module, so it runs in the required
+// core checks job.
+func TestThisRepoNavigationCoversEveryPage(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages, err := docPages(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) == 0 {
+		t.Fatal("docPages found no docs in this repo — the check would be vacuous")
+	}
+	if _, err := navFor(root, pages); err != nil {
+		t.Errorf("this repository has %v", err)
 	}
 }
 

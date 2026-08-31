@@ -33,7 +33,7 @@ var (
 	req engine.Request
 )
 `,
-	"docs/inhouse.md": `package docsnippet
+	"docs/integration.md": `package docsnippet
 
 import (
 	"context"
@@ -67,7 +67,7 @@ var (
 
 func parseInvoice(*http.Request) Invoice { return Invoice{} }
 `,
-	"docs/integration-webhook-lambdas.md": `package docsnippet
+	"docs/example-webhooks.md": `package docsnippet
 
 import (
 	"context"
@@ -138,12 +138,12 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 	root := repoRoot(t)
 	docs := []string{
 		"README.md",
-		"docs/integration-webhook-lambdas.md",
+		"docs/example-webhooks.md",
 		"docs/quickstart.md",
 		"docs/registry.md",
 		"docs/adapters.md",
 		"docs/portability.md",
-		"docs/inhouse.md",
+		"docs/integration.md",
 	}
 	found := 0
 	for _, doc := range docs {

@@ -17,9 +17,8 @@ Three audiences, one document:
   above.
 
 Everything normative here is backed by an ADR and, where it can be, by
-machine-checkable conformance vectors. Where a shape is genuinely still
-moving, this document says so and says what would settle it. A false
-guarantee costs a port more than an honest gap does.
+machine-checkable conformance vectors. Where a shape is still moving, this
+document says so, and says what would settle it.
 
 **Keywords.** MUST, MUST NOT, and MAY carry their usual force.
 
@@ -39,8 +38,8 @@ guarantee costs a port more than an honest gap does.
 
 ## Conformance vectors
 
-A contract nothing verifies is a wish. Three language-neutral JSON files
-carry the checkable half of this document:
+Three language-neutral JSON files carry the checkable half of this
+document:
 
 | File | Covers |
 |---|---|

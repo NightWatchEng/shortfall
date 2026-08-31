@@ -5,7 +5,7 @@ Date: 2026-08-28
 
 ## Context
 
-The emitter records every stage transition (docs/inhouse.md; `emit.Std.Record`),
+The emitter records every stage transition (docs/integration.md; `emit.Std.Record`),
 so a settled transaction ships success `biz_value_total` and `biz_txn_total`
 points at each of its stages. Two engine readers summed success series with no
 stage filter:

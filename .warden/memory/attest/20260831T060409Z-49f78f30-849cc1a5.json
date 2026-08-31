@@ -1,0 +1,263 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+  "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+  "rules_version": "6f56f6b96c9b",
+  "reviewed_at": "2026-08-31T06:04:09+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context; three rounds (full branch, then each fix delta), each given the engine:claude rule bodies verbatim, the skills-policy review charter, a warden-packaged diff, and reviewer-side split memory"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude general-purpose subagent, separate context; round 1 as sole arbiter over the findings list and review package only (reviewer rationale withheld), with examiner-side split memory; rounds 2 and 3 ran reviewer and examiner combined per the skill's small-delta allowance, each refuting its own findings before reporting"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 151,
+      "severity": "MEDIUM",
+      "finding": "[review round 1] CONTRIBUTING claimed 'the generator's test fails on a page that is neither curated nor an ADR', but every test/wikisync test ran against a synthetic t.TempDir() tree; nothing ran docPages/navFor over the real docs/. An uncurated page passed every pre-merge check and would only have reddened the post-merge wiki-sync workflow.",
+      "evidence": "Repro: adding docs/zz-temp-uncurated.md left `go test ./test/wikisync/...` green while `go run ./test/wikisync -repo .` exited 1. writeRepo returns t.TempDir(); repo.yaml verify.core is the six ci-go.sh steps; wikisync appears in CI only in .github/workflows/wiki-sync.yml, gated on push to main.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Added TestThisRepoNavigationCoversEveryPage, which runs the generator over this repository. scripts/ci-go.sh discovers the module, so it runs in the required core checks job on every PR. Verified failing with an uncurated doc present and passing once removed.",
+      "id": "67a4eddc69dae4bf"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main.go",
+      "line": 196,
+      "severity": "LOW",
+      "finding": "[review round 1] navFor's doc comment claimed the generator refuses to publish a page nothing links to, while the code exempted every adr- page unconditionally and never read the ADR index. An ADR left out of the index would publish as an orphan.",
+      "evidence": "Comment: 'the generator refuses rather than publishing a page nothing links to'. Code: `if !strings.HasPrefix(page, adrPrefix) { uncovered[page] = true }` \u2014 no code path read docs/adr/README.md.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "adrIndex now parses docs/adr/README.md; an ADR it does not link fails the same check with the error naming the fix. A missing index fails every ADR page, which is the fail-closed direction and is documented as such.",
+      "id": "e112dcd976ea12ad"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/README.md",
+      "line": 19,
+      "severity": "LOW",
+      "finding": "[review round 1] 'Each diagram carries an edge table naming the protocol or constraint on every arrow' overstated the tables: the sequences carry one row per step that has a constraint. The deleted STYLE.md carried the qualifier and CONTRIBUTING kept it, so one standard was stated two ways.",
+      "evidence": "money-path.md section 1: 17 autonumbered steps, 11 table rows (no rows for 1, 6, 15, 17).",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Reworded; superseded twice more by rounds 2 and 3 before README and CONTRIBUTING carried the same sentence.",
+      "id": "0f55a15f123f1660"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "unmapped:lost-normative-guidance",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/STYLE.md",
+      "line": 1,
+      "severity": "LOW",
+      "finding": "[review round 1] Two render-affecting constraints from the deleted STYLE.md were not relocated into the CONTRIBUTING section replacing it, while the diagrams they govern remain: no semicolons in sequence message/note text (a ';' terminates the Mermaid statement and the fence fails to render), and low-alpha rgba box/rect tints rather than opaque rgb (GitHub renders both themes).",
+      "evidence": "Deleted STYLE.md sections 5.2 and 5.3. Neither 'semicolon' nor 'rgba' appeared anywhere in CONTRIBUTING.md or any surviving doc, while money-path.md uses box rgba(140,140,140,0.10) throughout.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Both relocated into CONTRIBUTING's Architecture diagrams section. Verified the three surviving sequences comply: zero semicolons inside any sequenceDiagram fence, every box/rect low-alpha rgba.",
+      "id": "351d92c5056f789d"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 150,
+      "severity": "MEDIUM",
+      "finding": "[review round 2] Making the ADR index load-bearing left CONTRIBUTING stating the older, weaker rule ('neither curated nor an ADR'). A contributor adding an ADR would read that no action was needed and be failed by the check.",
+      "evidence": "CONTRIBUTING.md 'neither curated nor an ADR' contradicted by test/wikisync/main.go `case !linkedADRs[path.Base(src)]: uncovered[page] = \"link it from \" + adrIndexSrc`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "CONTRIBUTING now names both routes a page can be reachable by and which one a new guide versus a new ADR needs.",
+      "id": "708b72306dd4c31a"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "unmapped:unchecked-exemption",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main.go",
+      "line": 199,
+      "severity": "MEDIUM",
+      "finding": "[review round 2] navFor exempted docs/adr/README.md from the reachability check on the grounds that it is curated, but nothing verified that. Deleting its one nav entry would have orphaned the index and all eighteen ADRs behind it while the generator reported success \u2014 the exact failure navFor exists to prevent.",
+      "evidence": "`case src == adrIndexSrc: // the index itself is curated, below`. Reproduced in a scratch copy with the Design decisions section removed: generator exited 0 and _Sidebar.md contained zero references to the ADR index.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "The index now takes the ordinary curated route like every other page; nothing is exempt. Named regression case 'ADR index itself missing from the curated sections' fails without the fix.",
+      "id": "71516d94048d1751"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "unmapped:fenced-code-counted-as-link",
+      "tags": [
+        "inline-code-span-not-skipped"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main.go",
+      "line": 248,
+      "severity": "LOW",
+      "finding": "[review round 2] adrIndex scanned the ADR index byte-for-byte, so a ']( )' occurrence inside a fenced block or code span counted as a link \u2014 while the same file's rewriter deliberately skipped both, leaving two contradictory notions of 'a link' in one file. An ADR named only in a fenced example would publish as an orphan. mdLink was also a byte-identical duplicate of linkRE.",
+      "evidence": "`mdLink.FindAllStringSubmatch(string(body), -1)` with no fence tracking, vs rewriteDoc which tracks fences and splits on backticks. Reproduced: an ADR linked only inside a fence made the generator exit 0.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Both now share linkTargets, which skips fences and code spans exactly as rewriteDoc does; the duplicate regex is gone. Two named regression cases (fenced example, code span), each mutation-verified to redden only its own subtest.",
+      "id": "02cf0edd17caf994"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/README.md",
+      "line": 15,
+      "severity": "LOW",
+      "finding": "[review round 2] The round-1 wording fix replaced one overstatement with another: 'one row per edge in the C4 levels' is false for L2 and L3, which merge edges sharing a constraint into single rows.",
+      "evidence": "c4-l2-containers.md: 14 edges against 11 rows; c4-l3-components.md: `REQ --> REAL & DEF & UNREAL & CUST --> REP` is 8 rendered arrows covered by 2 rows.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Both files now state that a row may cover several edges, or a step range, sharing one constraint.",
+      "id": "87734ebf8cb0c01e"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "comment-hygiene",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main_test.go",
+      "line": 197,
+      "severity": "LOW",
+      "finding": "[review round 2] Two new comments used ALL-CAPS emphasis, which ADR-0014 bans outright, and one doc comment ran to seven lines of rationale rather than a terse contract.",
+      "evidence": "'runs the generator over the REAL repository' and 'so one the index does NOT list'; ADR-0014: 'Never in comments: ... ALL-CAPS emphasis.'",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Rewritten without emphasis and shortened. No ALL-CAPS tokens remain in the touched files other than acronyms.",
+      "id": "c4628d1fd7175005"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "tests-required",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main.go",
+      "line": 273,
+      "severity": "MEDIUM",
+      "finding": "[review round 3] Half of the new linkTargets logic \u2014 the inline-code-span skipping \u2014 had no test. Replacing the backtick-splitting loop with a whole-line regex left the entire package green, so a regression would silently count an ADR named only inside a code span as linked.",
+      "evidence": "Mutation removing the span loop: `go test ./...` returned ok with zero failures, while the fence branch was covered (reverting it reddened the fenced-example subtest).",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Added the named case 'ADR linked only from an inline code span'. Re-ran the mutation: it now reddens exactly that subtest and no other.",
+      "id": "b2c64a53d3353227"
+    },
+    {
+      "ts": "2026-08-31T06:04:09+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "49f78f30c80ef030d4e11808a786bb42a55ef0d3",
+      "base_sha": "a7c495ac0855e35077b8648e1d225d0b84f9f8e1",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/README.md",
+      "line": 16,
+      "severity": "LOW",
+      "finding": "[review round 3] The round-2 rewrite dropped the 'that carries a constraint' qualifier from the sequence half, so README and CONTRIBUTING again stated one standard two ways; the sharing clause also said 'edges' where the sequences share numbered-step ranges.",
+      "evidence": "README 'one per numbered step in the sequences' against money-path.md section 1 (17 steps, 11 rows), section 2 (16 steps, 9 rows), section 3 (23 steps, 13 rows); CONTRIBUTING kept 'that carries a real constraint'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-axk",
+      "reason": "Both files now carry the same sentence, scoped to edges or steps that carry a constraint, with a row possibly covering several that share one. Verified against all six diagrams.",
+      "id": "cb66c3bf758d0426"
+    }
+  ]
+}

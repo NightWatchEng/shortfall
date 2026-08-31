@@ -21,7 +21,7 @@ take, and **the visibility flip itself is the founder's alone**.
 | Semconv feedback before v1 | ✅ policy stated | `docs/semconv.md` is marked draft; README ties v1.0.0 to external-adapter survival |
 | The flip | 👤 **founder** | private → public is, and stays, the founder's call |
 
-When flipping: no other repo settings need to change (Pages stays off —
-see `docs/architecture/README.md` for why), and the README's
-"pkg.go.dev once the repo is public" locators become live on first
-index.
+When flipping: no other repo settings need to change — Pages stays off
+(see [CONTRIBUTING](../CONTRIBUTING.md#architecture-diagrams) for why; the
+wiki is the published surface instead) — and the README's pkg.go.dev
+locators become live on first index.

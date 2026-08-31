@@ -10,6 +10,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -129,43 +130,174 @@ func rewriteDoc(root, src string, pages map[string]string, body string) string {
 	return strings.Join(lines, "\n")
 }
 
-// section groups pages for Home/_Sidebar navigation in a fixed order.
+// navEntry is one curated line of the Home/_Sidebar navigation: the wiki
+// page name and the title it is listed under.
+type navEntry struct{ page, title string }
+
+// section groups curated pages for navigation in a fixed reading order —
+// start here, then reference, then the design record. Order is the whole
+// point: a reader arriving at the wiki should be able to follow it top to
+// bottom, so this list is maintained by hand rather than sorted.
 type section struct {
-	title  string
-	prefix string
+	title   string
+	entries []navEntry
 }
 
 var sections = []section{
-	{"Guides & reference", ""},
-	{"Architecture", "architecture-"},
-	{"ADRs", "adr-"},
+	{"Start here", []navEntry{
+		{"README", "Introduction"},
+		{"quickstart", "Quickstart"},
+		{"integration", "Integration guide"},
+		{"example-webhooks", "Worked example: webhook Lambdas"},
+	}},
+	{"Reference", []navEntry{
+		{"adapters", "Backends & adapters"},
+		{"registry", "Registry"},
+		{"money", "Money & the legs"},
+		{"semconv", "Semantic conventions"},
+		{"performance", "Performance"},
+		{"portability", "Portability contract"},
+	}},
+	{"Architecture", []navEntry{
+		{"architecture-README", "Overview"},
+		{"architecture-c4-l1-context", "C4 L1 — system context"},
+		{"architecture-c4-l2-containers", "C4 L2 — containers"},
+		{"architecture-c4-l3-components", "C4 L3 — components"},
+		{"architecture-money-path", "The money path"},
+	}},
+	{"Design decisions", []navEntry{
+		{"adr-README", "All decision records"},
+	}},
+	{"Project", []navEntry{
+		{"go-public-checklist", "Go-public checklist"},
+	}},
 }
 
-func navFor(pages map[string]string) string {
-	names := make([]string, 0, len(pages))
-	for _, page := range pages {
-		names = append(names, page)
+// adrPrefix marks pages listed by the ADR index rather than by a nav
+// section — eighteen sidebar lines would bury the guides. Their
+// reachability is checked against that index, not assumed: see adrIndex.
+const adrPrefix = "adr-"
+
+// adrIndexSrc is the one page that lists the ADRs; it is itself curated.
+const adrIndexSrc = "docs/adr/README.md"
+
+// navFor renders the curated navigation, and fails on a page nothing would
+// link to. A new doc under docs/ is mirrored automatically, so without this
+// the wiki grows pages reachable only by URL (CONTRIBUTING, "Documentation
+// accuracy"). A page is reachable two ways: a nav section names it, or it
+// is an ADR the ADR index links — and the index itself takes the first
+// route, so nothing is exempt.
+func navFor(root string, pages map[string]string) (string, error) {
+	linkedADRs, err := adrIndex(root)
+	if err != nil {
+		return "", err
 	}
-	sort.Strings(names)
+	uncovered := make(map[string]string, len(pages)) // page -> why it is unreachable
+	for src, page := range pages {
+		// The index is an ADR page by name but is reached the ordinary way,
+		// so it needs a curated entry like everything else — exempting it
+		// here would let one deleted nav line orphan the whole ADR set.
+		if strings.HasPrefix(page, adrPrefix) && src != adrIndexSrc {
+			if !linkedADRs[path.Base(src)] {
+				uncovered[page] = "link it from " + adrIndexSrc
+			}
+			continue
+		}
+		uncovered[page] = "add an entry to sections in test/wikisync/main.go"
+	}
 	var b strings.Builder
 	for _, s := range sections {
-		b.WriteString("\n### " + s.title + "\n\n")
-		for _, name := range names {
-			inSection := s.prefix != "" && strings.HasPrefix(name, s.prefix)
-			if s.prefix == "" {
-				inSection = !strings.HasPrefix(name, "architecture-") && !strings.HasPrefix(name, "adr-")
+		var lines []string
+		for _, e := range s.entries {
+			if !containsPage(pages, e.page) {
+				continue // curated but not present in this tree
 			}
-			if inSection {
-				b.WriteString("- [" + name + "](" + name + ")\n")
+			delete(uncovered, e.page)
+			lines = append(lines, "- ["+e.title+"]("+e.page+")\n")
+		}
+		if len(lines) == 0 {
+			continue
+		}
+		b.WriteString("\n### " + s.title + "\n\n")
+		for _, l := range lines {
+			b.WriteString(l)
+		}
+	}
+	if len(uncovered) > 0 {
+		reasons := make([]string, 0, len(uncovered))
+		for page, how := range uncovered {
+			reasons = append(reasons, page+" ("+how+")")
+		}
+		sort.Strings(reasons)
+		return "", fmt.Errorf("wiki page(s) nothing would link to: %s", strings.Join(reasons, "; "))
+	}
+	return b.String(), nil
+}
+
+// adrIndex returns the set of ADR filenames the ADR index links, so an ADR
+// left out of it is caught here rather than published as an orphan. A
+// missing index yields an empty set and so fails every ADR page in navFor,
+// which is the fail-closed direction: an index that vanished orphans the
+// whole ADR set at once, and that must be loud.
+func adrIndex(root string) (map[string]bool, error) {
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(adrIndexSrc)))
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	linked := map[string]bool{}
+	for _, dest := range linkTargets(string(body)) {
+		linked[path.Base(strings.SplitN(dest, "#", 2)[0])] = true
+	}
+	return linked, nil
+}
+
+// linkTargets returns every inline link destination markdown would actually
+// render, skipping fenced blocks and inline code spans exactly as
+// rewriteDoc does. An ADR named only inside a fenced example is not linked
+// by it, and must not count as reachable.
+func linkTargets(body string) []string {
+	var dests []string
+	inFence := false
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		segs := strings.Split(line, "`")
+		for i := 0; i < len(segs); i += 2 { // even segments sit outside spans
+			for _, m := range linkRE.FindAllStringSubmatch(segs[i], -1) {
+				dests = append(dests, m[1])
 			}
 		}
 	}
-	return b.String()
+	return dests
+}
+
+// containsPage reports whether any source maps to the given wiki page.
+func containsPage(pages map[string]string, page string) bool {
+	for _, p := range pages {
+		if p == page {
+			return true
+		}
+	}
+	return false
 }
 
 const homePreamble = `# shortfall
 
 **What an incident cost, who it hit, and how sure you are.**
+
+shortfall is a Go library and CLI that measures the dollar impact of an
+incident from telemetry your services already emit, and reports it in a
+form Finance can audit. New here? Read the
+[introduction](README), then the [quickstart](quickstart).
 
 This wiki is a generated mirror of the repository's ` + "[`docs/`](" + repoURL + "/tree/main/docs)" + ` directory,
 which is the source of truth: documentation changes in the same PR as the
@@ -197,7 +329,10 @@ func generate(root, out string) error {
 			return err
 		}
 	}
-	nav := navFor(pages)
+	nav, err := navFor(root, pages)
+	if err != nil {
+		return err
+	}
 	if err := os.WriteFile(filepath.Join(out, "Home.md"), []byte(homePreamble+nav), 0o644); err != nil {
 		return err
 	}
