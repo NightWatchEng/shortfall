@@ -380,8 +380,8 @@ func TestWikiPageRefs(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			// %q rather than Join: Join cannot tell nil from [""], so the
-			// wiki-root cases could not detect losing the guard they pin.
+			// nil and [""] must not compare equal: the wiki-root cases
+			// pin a guard whose loss turns the first into the second.
 			got := wikiPageRefs(c.body)
 			if !slices.Equal(got, c.want) {
 				t.Errorf("wikiPageRefs(%q) = %q, want %q", c.body, got, c.want)
