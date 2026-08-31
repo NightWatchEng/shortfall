@@ -3,7 +3,7 @@ module github.com/NightWatchEng/shortfall/adapters/export/cloudwatch
 go 1.25.0
 
 require (
-	github.com/NightWatchEng/shortfall v0.1.0
+	github.com/NightWatchEng/shortfall v0.2.0
 	github.com/aws/aws-sdk-go-v2 v1.45.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.0

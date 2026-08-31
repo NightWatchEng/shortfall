@@ -2,7 +2,7 @@ module github.com/NightWatchEng/shortfall/adapters/payment/stripe
 
 go 1.25.0
 
-require github.com/NightWatchEng/shortfall v0.1.0
+require github.com/NightWatchEng/shortfall v0.2.0
 
 require golang.org/x/net v0.58.0 // indirect
 

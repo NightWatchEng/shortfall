@@ -65,6 +65,13 @@ Merging additionally needs the required checks green (`core checks`,
 [CONTRIBUTING.md](https://github.com/NightWatchEng/shortfall/blob/main/CONTRIBUTING.md)
 for both.
 
+**Opened this from a fork?** `warden gate` will report that it did not run,
+and it is right: GitHub sends no repository secrets to a fork's workflow, so
+the check cannot reach the platform it gates against. That is expected and it
+is not something you did wrong. A maintainer relays your branch into this
+repository and the PR proceeds from there with your authorship intact —
+CONTRIBUTING.md, "Who can contribute", has the exact commands.
+
 ## Documentation, in this PR
 
 [ADR-0008](https://github.com/NightWatchEng/shortfall/blob/main/docs/adr/0008-docs-tell-the-truth.md)

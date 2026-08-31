@@ -202,6 +202,12 @@ body:
     id: offering
     attributes:
       label: Are you offering to write it?
+      description: >-
+        If you are, read CONTRIBUTING.md "Who can contribute" first. A pull
+        request from a fork cannot pass the required gate — GitHub sends no
+        repository secrets to a fork's workflow — so a maintainer relays your
+        branch into this repository and the PR proceeds from there, with your
+        authorship intact. Worth knowing before you write the code, not after.
       options:
         - label: "I plan to write this adapter"
         - label: "I can test it against a real deployment"

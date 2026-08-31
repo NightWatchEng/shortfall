@@ -12,8 +12,7 @@ stages, queues, propagation across services — is the
 ## 1. Install
 
 **While the repository is private, `go get` cannot resolve it** — the
-checksum database returns 404 for a private module, and the one published
-tag (`v0.1.0`) predates most of the API below. Clone it and point a
+checksum database returns 404 for a private module. Clone it and point a
 `replace` at your checkout:
 
 ```sh
@@ -83,8 +82,10 @@ Check it before you run:
 
 The `cd` is not incidental. `cmd/shortfall` is its own nested module, and
 the repo's `go.work` is what stitches the modules together — run it from
-the clone root or the CLI will not resolve. (`go run …@latest` cannot
-resolve a private module either; that form arrives with the flip.)
+the clone root or the CLI will not resolve. The `pkg@latest` form does not
+become available at the flip either: it refuses a module whose `go.mod`
+carries `replace` directives, and this one's does — see [Next](#next) for how
+to get a binary instead.
 
 ## 3. Instrument
 
@@ -237,8 +238,14 @@ Run it from the clone, as in step 2:
   --flow invoice.pay --prometheus http://prometheus:9090)
 ```
 
-After the flip, `go install` puts a `shortfall` binary on your PATH and
-this is one line.
+Running it from the clone is not a temporary workaround for the repository
+being private — `go install` cannot install this CLI at all. `go install
+pkg@version` refuses any module whose `go.mod` carries `replace` directives,
+and `cmd/shortfall`'s carries three (they are what resolves the release
+build). Once the repository is public, the way to get a `shortfall` binary
+on your PATH is the **release archive** for your platform, attached to every
+`v*` tag; from a clone, `go run ./cmd/shortfall` is the one line. See
+CONTRIBUTING, "Releases".
 
 Metrics alone ground the deferred and unrealized legs and a realized
 upper bound; the exact, de-duplicated realized figure and the customer

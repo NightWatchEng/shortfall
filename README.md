@@ -75,6 +75,13 @@ verify the module and `go get` fails. Until the flip, clone it and use a
 `replace` directive — the [quickstart](docs/quickstart.md) has the exact
 steps.
 
+**The CLI is a separate question.** `cmd/shortfall` is its own module and
+carries `replace` directives, which `go install pkg@version` refuses
+outright — so no `go install` form produces the `shortfall` binary used
+below, before or after the flip. It ships as a **release archive** attached
+to every `v*` tag, and from a clone it runs as `go run ./cmd/shortfall`. See
+CONTRIBUTING, "Releases".
+
 The core module pulls `otel` and `yaml.v3` and nothing else. Every
 adapter under `adapters/` is a separate nested module, so a Prometheus
 shop never compiles the AWS SDK and nobody compiles stripe-go by
@@ -137,6 +144,9 @@ the signals out to whatever you already run. Swap it for
 `adapters/export/{prometheus,cloudwatch,gcp}` to write a backend directly.
 
 ## Report
+
+Using the released binary; from a clone this is `go run ./cmd/shortfall
+impact ...` (see [Install](#install)).
 
 ```sh
 shortfall impact --registry registry.yaml \

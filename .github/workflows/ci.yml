@@ -5,9 +5,16 @@
 # Third-party actions are pinned to immutable commit SHAs, same reasoning as
 # .warden/bin/warden's platform pin: a tag can be force-moved, a SHA cannot.
 #
-# This repo is private and takes same-repo branches only; there is no fork
-# story here. Fork-PR gate handling is a go-public checklist item, decided
-# before the repo ever flips public.
+# Fork PRs: every job that runs on a pull request runs fine from a fork
+# except `warden gate`, which needs AGENTOPS_DEPLOY_KEY — and GitHub sends no
+# repository secret to a fork's workflow. The gate says so and fails closed
+# rather than passing vacuously; CONTRIBUTING.md, "Who can contribute", has
+# the branch relay that carries an outside contribution instead.
+# (`corpus ingest` is push-to-main only, so no pull request reaches it.)
+#
+# No PR job is skipped ON ACCOUNT OF being a fork: a required context that a
+# skipped job never reports leaves the PR pending forever, with
+# enforce_admins on and no override.
 name: ci
 
 on:
@@ -265,16 +272,28 @@ jobs:
           # Resolve the base ref FIRST. The per-path guard below cannot tell
           # "this path is new on the base ref" from "the base ref did not
           # resolve" — cat-file exits 128 either way — so without this an
-          # unresolvable BASE_REF would print six reassuring bootstrap lines
-          # and leave the PR's entire gate surface in place, with the deploy
-          # key landing three steps later. Fail loudly instead.
+          # unresolvable BASE_REF would print a reassuring bootstrap line for
+          # every path below that exists in this PR and leave the PR's entire
+          # gate surface in place, with the deploy key landing three steps
+          # later. Fail loudly instead.
+          #
+          # .warden/checkers is deliberately NOT in this list. Repo-local
+          # checkers are a platform feature this repo does not use, and pinning
+          # the directory would not protect it: `git checkout <ref> -- path`
+          # deletes nothing, so a PR that ADDS a checker keeps it and the gate
+          # executes it with the key on disk. Pinning an executable directory
+          # needs remove-then-restore, which is its own reviewed change.
           git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null
           for p in .warden/bin .warden/rules .warden/skills-policy.md repo.yaml graph.yaml scripts; do
             if git cat-file -e "origin/${BASE_REF}:${p}" 2>/dev/null; then
               git checkout "origin/${BASE_REF}" -- "$p"
-            else
+            elif [ -e "$p" ]; then
               echo "${p} absent on base ref (bootstrap PR): using this PR's copy"
             fi
+            # Silent third case: absent from the base ref AND from this PR.
+            # Nothing to pin and nothing to say — announcing it would make the
+            # bootstrap line above routine, which is how the signal of a
+            # genuinely broken pin gets ignored.
           done
           git status --short
       # This job runs `warden verify --scope core` below, and that scope
@@ -304,6 +323,19 @@ jobs:
         env:
           KEY: ${{ secrets.AGENTOPS_DEPLOY_KEY }}
         run: |
+          # An absent key is a fork PR, not a network fault. Without this the
+          # empty secret writes a 1-byte key file, every step here exits 0, and
+          # the first red step is the shim reporting "network/ssh/cache" — which
+          # sends a contributor to debug connectivity they do not control. 2 =
+          # the gate DID NOT RUN, the same contract the shim uses.
+          if [ -z "$KEY" ]; then
+            echo "warden gate: no platform credential. A pull request from a" >&2
+            echo "fork receives no repository secrets, by GitHub's design, so" >&2
+            echo "this gate cannot run here. See CONTRIBUTING.md, \"Who can" >&2
+            echo "contribute\", for the route a fork branch takes instead." >&2
+            exit 2
+          fi
+
           mkdir -p ~/.ssh
           # GitHub's published static host keys (docs.github.com) — no
           # trust-on-first-scan
@@ -342,6 +374,19 @@ jobs:
         env:
           KEY: ${{ secrets.AGENTOPS_DEPLOY_KEY }}
         run: |
+          # This job runs only on push to main, so a fork PR never reaches it
+          # and an absent key means the repository secret is unset, renamed or
+          # rotated — not a fork. Without this the empty secret writes a 1-byte
+          # key file, every step here exits 0, and the failure surfaces later as
+          # the shim blaming "network/ssh/cache". 2 = it DID NOT RUN.
+          if [ -z "$KEY" ]; then
+            echo "corpus ingest: no platform credential on a push to main." >&2
+            echo "AGENTOPS_DEPLOY_KEY is unset, renamed, or rotated — check the" >&2
+            echo "repository secret. The review corpus is NOT being updated" >&2
+            echo "until this is fixed." >&2
+            exit 2
+          fi
+
           mkdir -p ~/.ssh
           printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> ~/.ssh/known_hosts
           printf '%s\n' 'github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=' >> ~/.ssh/known_hosts

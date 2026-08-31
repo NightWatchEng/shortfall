@@ -47,3 +47,5 @@ use (
 use ./test/blankline
 
 use ./test/symbolcheck
+
+use ./test/modgraph

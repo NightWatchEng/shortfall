@@ -2,7 +2,7 @@ module github.com/NightWatchEng/shortfall/adapters/query/gcplogging
 
 go 1.25.0
 
-require github.com/NightWatchEng/shortfall v0.1.0
+require github.com/NightWatchEng/shortfall v0.2.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
