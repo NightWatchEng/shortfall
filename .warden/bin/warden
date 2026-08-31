@@ -1,11 +1,11 @@
 #!/bin/sh
-# distill consumes the AgentOps platform, pinned to an IMMUTABLE commit SHA
+# shortfall consumes the AgentOps platform, pinned to an IMMUTABLE commit SHA
 # (a tag can be force-moved; a full SHA cannot — review P2-2), which also
 # makes warm uv caches valid offline. repo.yaml's platform.pin carries the
 # semantic version; warden fails closed if they disagree.
 # Bump procedure: update PIN_SHA here AND platform.pin in repo.yaml together
 # (one PR; both files are HIGH-tier).
-PIN_SHA="972f683b0ee035902ba32058adc3ed4a66d2c334"   # = v1.0.0 (post-tag main: adds rules recommend, skill-recurrence stats, decision shards)
+PIN_SHA="a900e56810e5f0cded65345782a5de25e1d991c2"   # = v1.1.0 (attest survives a content-preserving rebase, agentops-4ft)
 FROM="git+ssh://git@github.com/NightWatchEng/agentops@${PIN_SHA}"
 
 # Exit-code contract (review P2-3): 2 = gate DID NOT RUN. Resolve the platform

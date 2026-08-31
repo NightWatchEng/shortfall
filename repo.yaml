@@ -6,7 +6,7 @@ version: 1
 repo: shortfall
 
 platform:
-  pin: v1.0.0   # must agree with PIN_SHA in .warden/bin/warden (bump together)
+  pin: v1.1.0   # must agree with PIN_SHA in .warden/bin/warden (bump together)
 
 components:
   biz:       {path: biz/,       lang: go, description: "value types: Money (int64 minor units), ValueContext, Outcome, PII guard"}
