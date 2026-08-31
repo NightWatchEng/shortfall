@@ -49,8 +49,8 @@ gofmt + go vet remain the mechanical baseline. On top of them:
   others: `else`/`else if` continuing the same `if`; `case`/`default`
   opening the next clause; the block being the last statement in its list,
   so what follows is the enclosing `}` (the end of a function body
-  included); and a block written entirely on one line, which has no
-  closing brace of its own to break after. A comment counts as the code
+  included); and a block written entirely on one line, whose braces
+  share a line and so leave no break to require. A comment counts as the code
   that follows, so the blank line goes before it. A `defer` or `go` with a
   function literal, a multi-line composite literal, and a wrapped call all
   end in a brace or paren without being blocks; they are outside the rule.

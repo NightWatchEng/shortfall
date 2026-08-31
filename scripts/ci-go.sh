@@ -41,8 +41,9 @@
 # no cached run and does not invalidate the entry: the guard returns a green
 # `(cached)` while the violation sits in the tree. CI restores GOCACHE
 # between runs (setup-go cache: true), so this would persist across PRs.
-# The whole tree tests in a few seconds; a guard that can pass without
-# looking is not worth the saving.
+# The cost is real and worth stating: ~25s uncached against ~2.5s fully
+# cached, across the whole tree. A guard that can pass without looking is
+# not worth the 22 seconds.
 BUILD_TAGS="benchload integration"
 
 set -eu

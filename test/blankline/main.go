@@ -9,8 +9,8 @@
 // continuing the same `if`; `case`/`default` opening the next clause; the
 // block being the last statement in its list, so what follows is the
 // enclosing `}` (the end of a function body included); and a block
-// written entirely on one line, which has no closing brace of its own to
-// break after. A comment counts as the following code, so the blank line
+// written entirely on one line, whose braces share a line and so leave no
+// break to require. A comment counts as the following code, so the blank line
 // goes before it.
 //
 // The check is an AST walk (go/parser, go/ast, go/token), not a line
@@ -19,9 +19,9 @@
 // mechanisms keep it narrow. A multi-line composite literal, a wrapped
 // call and a `defer`/`go` with a function literal end in a brace or paren
 // without being block-bodied statements, so the walk never considers them.
-// A block written entirely on one line IS block-bodied, and is skipped by
-// the line comparison instead — its closing brace shares a line with its
-// opening one, so there is no break to require. gofmt, which this repo
+// A block written entirely on one line is block-bodied too, and is
+// skipped by the line comparison instead: its closing brace shares a line
+// with its opening one, so there is no break to require. gofmt, which this repo
 // gates on, expands almost every such form anyway; `select {}` is the one
 // it leaves alone.
 //
@@ -146,7 +146,7 @@ func (c *checker) checkList(list []ast.Stmt) {
 		open := c.fset.Position(stmt.Pos())
 		closing := c.fset.Position(stmt.End())
 		if closing.Line == open.Line {
-			continue // written on one line: no closing brace of its own
+			continue // braces share a line: no break to require
 		}
 
 		follows := c.fset.Position(next.Pos())

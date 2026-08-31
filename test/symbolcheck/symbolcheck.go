@@ -93,11 +93,11 @@ func selectorShaped(s string) bool {
 
 // stripCall removes a trailing call's argument list, so the guides' natural
 // way of naming a function — `emit.WithFlushInterval(d)`, `biz.CheckPII(field,
-// s)` — is checked rather than skipped. Only a suffix that opens at the LAST
-// unmatched "(" and closes the string is removed, so a selector embedded in a
-// larger expression stays unmatched and is dropped by selectorShaped as
-// before. Arguments are not parsed: this asks whether the named function
-// exists, not whether the call would compile.
+// s)` — is checked rather than skipped. Only a suffix that opens at the
+// last unmatched "(" and closes the string is removed, so a selector
+// embedded in a larger expression stays unmatched and is dropped by
+// selectorShaped as before. Arguments are not parsed: this asks whether
+// the named function exists, not whether the call would compile.
 func stripCall(s string) string {
 	if !strings.HasSuffix(s, ")") {
 		return s
@@ -124,7 +124,7 @@ func stripCall(s string) string {
 type ref struct {
 	doc  string // repo-relative path
 	line int    // 1-based line the identifier sits on
-	text string // resolvable form: the raw text without a trailing "()"
+	text string // resolvable form: the raw text without any trailing call
 	raw  string // as written in the doc, for the failure message
 }
 

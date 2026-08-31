@@ -197,6 +197,14 @@ func TestScanProse(t *testing.T) {
 		{"one span", "a `engine.Compute` b\n", []string{"engine.Compute"}, ""},
 		{"two spans on a line", "`a.Bee` and `c.Dee`\n", []string{"a.Bee", "c.Dee"}, ""},
 		{"trailing parens normalized", "`vc.Validate()`\n", []string{"vc.Validate"}, ""},
+		// The regression these three pin: only a bare "()" used to be
+		// stripped, so every call written with arguments — which is how the
+		// guides name a function — was dropped before resolution.
+		{"call with one argument", "`emit.WithFlushInterval(d)`\n", []string{"emit.WithFlushInterval"}, ""},
+		{"call with several arguments", "`biz.CheckPII(field, s)`\n", []string{"biz.CheckPII"}, ""},
+		{"call with a nested call", "`stripe.Reconcile(ctx, fetch(x), since)`\n", []string{"stripe.Reconcile"}, ""},
+		{"chained call is not a selector", "`slack.New(token).Post(ctx, c, r)`\n", nil, ""},
+		{"unbalanced parens are not a selector", "`a.Bee((c)`\n", nil, ""},
 		{"unterminated span ignored", "a `engine.Compute\n", nil, ""},
 		{"fence skipped", "```go\n`a.Bee`\n```\n`c.Dee`\n", []string{"c.Dee"}, ""},
 		{"indented fence skipped", "  ```go\n`a.Bee`\n  ```\n", nil, ""},

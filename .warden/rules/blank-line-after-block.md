@@ -44,8 +44,9 @@ that justifies shipping it at all is real and in the tree: the six
 consecutive `if vc.X, err = <decode>(fields[N]); err != nil` guards in
 `DecodeVC` (`biz/baggage.go`) — five calling `unescape`, one calling
 `strconv.ParseInt` — where the sweep that applied the clause split one
-"read fields 1 through 6" step into six paragraphs. Note that the bodies
-are identical and only the decoder differs, so this does not meet the
-"bodies differ in shape" exclusion above. It is left as it stands:
+"read fields 1 through 6" step into six paragraphs. The six bodies are the
+same shape — decode, and return a wrapped error naming the field — so the
+run does not meet the "bodies differ in shape" exclusion above, even
+though the decoders and the messages differ. It is left as it stands:
 restructuring the money codec is not a whitespace PR's business, and it
 is the worked example of what this rule is for.
