@@ -2,7 +2,7 @@ module github.com/NightWatchEng/shortfall/adapters/incident/firehydrant
 
 go 1.25.0
 
-require github.com/NightWatchEng/shortfall v0.1.0
+require github.com/NightWatchEng/shortfall v0.2.0
 
 require (
 	github.com/kr/text v0.2.0 // indirect

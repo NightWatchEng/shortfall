@@ -81,7 +81,7 @@ outrunning another.
 
 ## `emit.Record` — does it scale with cores?
 
-**Barely.** Throughput tops out near 1M accepted outcomes per second at
+**Barely.** Throughput tops out around 950k accepted outcomes per second at
 eight cores — 2.2× what one core does — and falls back past that. Every
 `Record` call takes the emitter's single mutex to be admitted and de-duped,
 and an *accepted* one takes it a second time to append its metric points,

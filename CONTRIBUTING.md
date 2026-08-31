@@ -9,13 +9,46 @@ no exceptions, including for maintainers (enforce_admins is on).
 
 ## Who can contribute
 
-Contributing requires write access today. The repository is private, and
-the required `warden gate` check authenticates with repository credentials
-that a PR from a fork never receives — a fork PR cannot pass the required
-checks, so fork PRs are not accepted. That is a pre-flip posture, not a
-philosophy: it gets revisited before the repository goes public, in the
-same pass that updates the issue templates already pre-positioned for the
-flip.
+Anyone. Outside contributions arrive by a **branch relay** rather than by a
+fork pull request, for two mechanical reasons that outlive the repository
+being private:
+
+1. The required `warden gate` check resolves the AgentOps platform over SSH
+   against a private repository, using a deploy key held as a repository
+   secret. GitHub sends no repository secret to a workflow triggered by a
+   pull request from a fork — unconditionally, by design, and not something
+   a permissions block or an approval setting changes. The gate is
+   fail-closed, so on a fork PR it reports that it did not run.
+2. Separately, the required pre-PR review attestation
+   (`.warden/memory/attest/`) is produced by `warden attest`, which needs
+   that same private-platform access. A contributor could not generate one
+   on their own machine either, so this is not a CI problem that a CI change
+   would fix.
+
+**The relay.** Open a pull request from your fork anyway, or file an issue
+with a link to your branch. A maintainer pushes your commits to a branch in
+this repository and opens the PR from there:
+
+```sh
+git remote add contrib https://github.com/<you>/shortfall.git
+git fetch contrib <your-branch>
+git push origin FETCH_HEAD:refs/heads/contrib/<you>-<topic>
+```
+
+`refs/heads/` is not optional: `FETCH_HEAD` is not itself under
+`refs/heads/`, so git cannot infer the destination namespace and refuses the
+push outright.
+
+Your commits keep their authorship, and the PR carries a `Co-authored-by:`
+trailer. The maintainer runs and commits the pre-PR review — which is what
+the attestation asserts happened, and it did. Everything else is identical
+to any other PR, including the six local checks below, which need no special
+access and which you should run before asking for the relay.
+
+This costs a maintainer a few minutes per contribution. It is the honest
+shape while the gate depends on a private platform, and it is preferred over
+the alternative: a required check that can go green without having run is
+worse than one that is occasionally inconvenient.
 
 ## Licensing of contributions
 
@@ -112,6 +145,114 @@ policy, not a release flag. Library consumers just `go get` the tag.
 Dry-run rehearsal: run the `release` workflow manually (workflow_dispatch)
 — it builds a snapshot and uploads `dist/` as an artifact without tagging
 or publishing.
+
+### Tagging is a fan-out, not one tag
+
+`go get` on `github.com/NightWatchEng/shortfall` is satisfied by the root
+`v*` tag. Every **nested** module — the fourteen under `adapters/` and
+`cmd/shortfall` — is a separate module in Go's eyes, and Go resolves each
+one only through a tag carrying its own directory prefix. A root `v0.2.0`
+publishes nothing under `adapters/`.
+
+So a release is three ordered waves, and the order is load-bearing: each
+wave's tags must exist on the remote before the next wave's `go.mod` can
+resolve them.
+
+```sh
+# 1. the core module
+git tag v0.2.0 && git push origin v0.2.0
+
+# 2. every shipped nested module, on its own path prefix
+for m in adapters/export/cloudwatch adapters/export/gcp \
+         adapters/export/otlp adapters/export/prometheus \
+         adapters/incident/firehydrant adapters/incident/incidentio \
+         adapters/incident/pagerduty adapters/incident/rootly \
+         adapters/incident/slack adapters/payment/stripe \
+         adapters/query/cwinsights adapters/query/gcplogging \
+         adapters/query/promql adapters/query/sql; do
+  git tag "$m/v0.2.0"
+done
+git push origin --tags
+
+# 3. the CLI, which requires the promql and sql tags from wave 2
+git tag cmd/shortfall/v0.2.0 && git push origin cmd/shortfall/v0.2.0
+```
+
+Modules under `test/` are internal harnesses that nothing imports from
+outside this repository; they are deliberately never tagged.
+
+**The `replace` directives are not a substitute.** Every nested module that
+depends on a first-party module replaces it with a relative path to the
+repository root: the fourteen under `adapters/<kind>/<name>/` with `../../..`,
+and `cmd/shortfall`, `test/docsnippets`, `test/loggolden` and
+`test/promgolden`, one level shallower, with `../..`. Three of them replace
+sibling adapters too: `cmd/shortfall` two (promql, sql), `test/loggolden` two
+(cloudwatch, cwinsights), `test/promgolden` one (promql). (The remaining
+`test/` modules — `blankline`, `licensehdr`, `modgraph`, `symbolcheck`,
+`wikisync` — are standalone checkers importing nothing first-party, so they
+carry neither.)
+
+`test/modgraph` is what keeps this paragraph from being the only thing
+holding the invariant: it fails the core test step when first-party requires
+disagree about a version, name one that was never tagged, or lack the local
+replace that makes them resolvable here. A `replace` in a
+*dependency's* `go.mod` is ignored by whoever consumes it, so those lines
+make the require versions invisible to us while leaving them fully
+load-bearing for an adopter. That is exactly how `cmd/shortfall` shipped
+requiring two sibling modules at `v0.0.0` — a version that has never
+existed — without anything going red.
+
+**Verify from outside the workspace, or you have verified nothing.**
+`./scripts/ci-go.sh test` runs under `go.work`, where every replace applies,
+so it cannot see a resolution failure. `test/modgraph` catches the version
+*correspondence* — that every first-party require names one consistent
+version — but it reads the tree, not the proxy, so it cannot tell you whether
+that version was ever published.
+
+Only a real resolution can, and it needs the repository public and the tag
+waves above pushed; while the module is private the checksum database returns
+404 and `go mod tidy` below fails on that alone. Note what this checks and
+what it does not: module resolution finds the newest *published tag* for each
+path, never this working tree — so run it after tagging, to confirm what you
+published, not before, to preview what you are about to.
+
+```sh
+cd "$(mktemp -d)" && go mod init scratch
+cat > main.go <<'EOF'
+package main
+
+import (
+	"fmt"
+
+	"github.com/NightWatchEng/shortfall/biz"
+	_ "github.com/NightWatchEng/shortfall/adapters/export/prometheus"
+)
+
+func main() { fmt.Println(biz.Money{Amount: 1, Currency: "USD", Exponent: 2}) }
+EOF
+GOWORK=off go mod tidy
+GOWORK=off go build ./...
+```
+
+The import is the point — `go build ./...` in a module with no `.go` files
+matches no packages and exits 0, which would make this block look like a
+compile check while compiling nothing.
+
+**`go install` of the CLI is deliberately not on that list.** `go install
+pkg@version` refuses any module whose `go.mod` carries `replace` directives
+— "it must not contain directives that would cause it to be interpreted
+differently than if it were the main module" (`go help install`), enforced
+unconditionally, benign replaces included. `cmd/shortfall/go.mod` carries
+three, and they are what resolves the release build: goreleaser builds that
+module with `GOWORK=off` and no `GOPRIVATE`, so without them the build has
+no way to reach the core and sibling-adapter modules at all.
+
+So the CLI ships as **release binaries** — the `release` workflow attaches
+linux/darwin × amd64/arm64 archives with checksums to every `v*` tag — and
+from a clone it runs as `go run ./cmd/shortfall`. Making `go install` work
+means dropping those three replaces and giving the release build another way
+to resolve the graph; that is a real change to the release pipeline, and it
+is tracked as its own item rather than assumed.
 
 ## Code style
 

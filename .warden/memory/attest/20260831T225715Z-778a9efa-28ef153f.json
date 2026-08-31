@@ -1,0 +1,747 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+  "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-08-31T22:57:15+00:00",
+  "range_patch_ids": [
+    "0525ab3c43a1694e21b62aa3ed108afa8c2274b3"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent, independent context, 4 rounds"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent, separate context; sole arbiter (round 1 formally; rounds 2-4 verified in-line against the tree)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:go-install-blocked-by-replace",
+      "tags": [
+        "docs-drift",
+        "enforcement-claim"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 196,
+      "severity": "HIGH",
+      "finding": "The verify block presented `go install .../cmd/shortfall@latest` as 'the check that counts', but go install pkg@version refuses any module whose go.mod carries replace directives; cmd/shortfall carries three.",
+      "evidence": "`go help install`: \"it must not contain directives (replace and exclude) that would cause it to be interpreted differently than if it were the main module\"; cmd/shortfall/go.mod carries three replaces. Reproduced against a file:// proxy.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Confirmed against `go help install` and reproduced by the cross-examiner against a file:// proxy. The command was removed, the reason documented, and the underlying decision filed as workspace-47f rather than taken here.",
+      "id": "68521a4ccffd644e"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 239,
+      "severity": "MEDIUM",
+      "finding": "Step 5's close named exactly two preconditions for go install ('Both are needed') when a third \u2014 the replace directives \u2014 makes it impossible regardless.",
+      "evidence": "docs/quickstart.md: \"Once the repository is public **and** the release tags are pushed ... Both are needed\" - contradicted by cmd/shortfall/go.mod's replace lines.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "f3435ebe1145c8d2"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 8,
+      "severity": "MEDIUM",
+      "finding": "The file header said 'there is no fork story here' while the same diff added a fork-PR credential guard to that file.",
+      "evidence": ".github/workflows/ci.yml:8 \"there is no fork story here\" vs the fork guard added at ci.yml:307 in the same diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "ef4d7aa1418e6378"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 268,
+      "severity": "MEDIUM",
+      "finding": "The pin-loop comment said 'six reassuring bootstrap lines' after the loop grew to seven paths; the count is the comment's whole argument for the rev-parse guard.",
+      "evidence": ".github/workflows/ci.yml:268 \"six reassuring bootstrap lines\" vs a seven-path loop at :272.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "8391b9a755c65f89"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:dead-config-path",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 272,
+      "severity": "LOW",
+      "finding": ".warden/checkers was added to the pin list but exists nowhere, so the else branch printed a bootstrap line every run, normalising the tell of a broken pin.",
+      "evidence": "`ls .warden/checkers` -> No such file or directory; `git cat-file -e main:.warden/checkers` -> exit 128.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed twice. First by silencing the absent-from-both case; then, after round 2 showed the entry also invalidated the loop's add-only safety argument, the entry was removed entirely and the reasoning recorded in the comment.",
+      "id": "0e1d6cb635cab211"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "ci-gate",
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 358,
+      "severity": "MEDIUM",
+      "finding": "The fork guard was copied verbatim into the corpus job, which is push-to-main only, so both its comment and its operator-facing message were false there.",
+      "evidence": ".github/workflows/ci.yml:349 `if: github.event_name == 'push'` and :19-20 `push: branches: [main]`, vs the fork-worded message inside the corpus job.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "0524f5eb5e989a31"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 180,
+      "severity": "LOW",
+      "finding": "'Each nested go.mod carries replace ... => ../../..' was wrong for cmd/shortfall and the test modules, which are one level shallower.",
+      "evidence": "cmd/shortfall/go.mod uses `=> ../..`; only adapters/<kind>/<name>/ are three levels down.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "a46ac55307153706"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "enforcement-claim"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 35,
+      "severity": "HIGH",
+      "finding": "The branch-relay command block \u2014 the entire new outside-contribution path \u2014 did not work: `git push origin FETCH_HEAD:contrib/<name>` is rejected because the destination is unqualified.",
+      "evidence": "Executed literally in a scratch repo: \"error: The destination you provided is not a full refname ... hint: Did you mean 'FETCH_HEAD:refs/heads/contrib/someone-topic'?\" exit=1.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reproduced failing in a scratch repo, then fixed to FETCH_HEAD:refs/heads/... with a note on why the namespace cannot be inferred.",
+      "id": "0d919b8e41377f18"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 87,
+      "severity": "MEDIUM",
+      "finding": "A cross-reference added by the round-1 fix pointed at 'the end of step 5'; the explanation is under ## Next.",
+      "evidence": "docs/quickstart.md headings: 197 `## 5. What you get`, 227 `## Next`; the go-install paragraph begins at 239, inside Next.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "d730e80981afe91f"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "scope-misstatement"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 193,
+      "severity": "MEDIUM",
+      "finding": "'The check that counts' was stated unconditionally although neither go get line can run while the module is private, contradicting README and quickstart; and go get resolves published tags, never the working tree, so it cannot verify this diff's bumps.",
+      "evidence": "CONTRIBUTING.md \"The check that counts\" vs docs/quickstart.md:14 and README.md:73, both stating go get cannot resolve a private module.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "7fc44f03aad880ff"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:vacuous-verification-step",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 199,
+      "severity": "MEDIUM",
+      "finding": "The block ended on `go build ./...` in a scratch module with no .go files: it matches no packages and exits 0, reading as a compile check while compiling nothing.",
+      "evidence": "`go mod init scratch` then `go build ./...` in an empty module: \"go: warning: ./... matched no packages\", exit 0.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Replaced with a heredoc main.go importing biz and the prometheus adapter, then go mod tidy + go build. The snippet was compiled and run against the local tree (prints 'USD 0.01').",
+      "id": "017157cdf2929fcf"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:unpublished-version-require",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/go.mod",
+      "line": 7,
+      "severity": "MEDIUM",
+      "finding": "The fix replaced one never-published version with another: every first-party require now names v0.2.0, which is not tagged either, and the correspondence to the release tag was unwritten and unenforced.",
+      "evidence": "`git tag -l` -> v0.1.0 only; every nested go.mod now requires v0.2.0, which is not tagged.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Addressed by test/modgraph plus the documented tag fan-out. The residue is stated plainly: modgraph reads the tree, never the proxy, so it cannot confirm publication.",
+      "id": "e5c4c13463510dc3"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "tests-required",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/go.mod",
+      "line": 6,
+      "severity": "MEDIUM",
+      "finding": "A bug whose defining property was 'nothing went red' shipped with prose and no mechanical guard, so it could re-land silently.",
+      "evidence": "scripts/ci-go.sh:144 enumerates go.mod files but never inspects them; no test in the tree read go.mod contents before this diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Added test/modgraph, following the repo's existing checker-module pattern. Watched failing on both real cases (v0.0.0 placeholder, version skew) before being trusted.",
+      "id": "88e9165be72328c0"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 13,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:gate-surface-pin-bypass",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 277,
+      "severity": "MEDIUM",
+      "finding": "Adding .warden/checkers to the pin loop invalidated the stated add-only safety argument: git checkout -- path deletes nothing, so a PR ADDING a checker keeps it and the gate would execute it with the deploy key on disk.",
+      "evidence": ".github/workflows/ci.yml:257-261 \"git checkout <ref> -- path ... deletes nothing ... Nothing invokes a script by an unknown name\" vs adding an executable directory to the loop at :272.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Entry removed. Pinning an executable directory needs remove-then-restore, which changes the pin's semantics and is its own reviewed change; the reasoning is now in the loop's comment.",
+      "id": "9a895a794af2fd9c"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 14,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:misleading-ci-comment",
+      "tags": [
+        "ci-gate",
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 286,
+      "severity": "MEDIUM",
+      "finding": "The comment claimed the entry guaranteed pinning 'the day one lands', which is exactly the day the path is absent from base and runs unpinned.",
+      "evidence": "ci.yml comment \"the day one lands it must already be pinned\" adjacent to the elif branch that runs the PR's own copy on exactly that day.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "b6c5ae4878a5f466"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 15,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:misleading-ci-comment",
+      "tags": [
+        "ci-gate",
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 8,
+      "severity": "MEDIUM",
+      "finding": "The rewritten header grouped corpus ingest with warden gate as fork-blocked and asserted 'No job here is skipped on a fork', but corpus is push-only and skipped on every PR.",
+      "evidence": "ci.yml:7-14 \"No job here is skipped on a fork\" vs :360 `if: github.event_name == 'push'`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "f2734d2035490392"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 16,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 180,
+      "severity": "LOW",
+      "finding": "The round-1 fix traded one wrong statement for another: four of the seven test/ modules neither require nor replace the core module.",
+      "evidence": "test/blankline/go.mod, test/licensehdr/go.mod, test/symbolcheck/go.mod, test/wikisync/go.mod carry no first-party require or replace.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "1b2f734ceb7965df"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 17,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 73,
+      "severity": "LOW",
+      "finding": "The PR rewrote the CLI-acquisition story in quickstart and CONTRIBUTING but left README's Install and Report sections describing the old one, giving no way to obtain the CLI it demonstrates.",
+      "evidence": "README.md:69-76 (Install) and README.md:141-145 (`shortfall impact ...`) vs docs/quickstart.md:239-246 after this diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "8afa859bb13b45ff"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 18,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 147,
+      "severity": "MEDIUM",
+      "finding": "Two of the three repo-level tests were loop-and-assert bodies that could execute zero times and still PASS; only one carried a guard, and loadMods' guard was on file count, not on edges understood.",
+      "evidence": "Reviewer pointed repoRoot at a two-module fixture with no first-party requires: TestNoFirstPartyRequireNamesAPlaceholderVersion and TestEveryFirstPartyRequireHasALocalReplace both PASSED having inspected nothing.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reproduced by the reviewer against a fixture. Fixed with a shared guard in loadMods: zero unparsed first-party lines, and a first-party require floor recorded against the real count.",
+      "id": "f810fbd879471c3c"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 19,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 73,
+      "severity": "MEDIUM",
+      "finding": "ParseMod had no failure channel: any go.mod shape it did not recognise contributed silently nothing, so a whole file could drop out of all three checks with the suite green. The reviewer reproduced the ORIGINAL bug sitting green behind a quoted module path.",
+      "evidence": "Reviewer fixture with sub/go.mod carrying `require \"<prefix>/adapters/query/sql\" v0.0.0` (quoted, no replace): all three tests PASS, subtests emitted only for the other module.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Added the Unparsed channel \u2014 a first-party line the parser cannot read now fails the run \u2014 plus quoted-path handling. This was the most valuable finding of the review.",
+      "id": "d0c583e49d4dbf32"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 20,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 207,
+      "severity": "MEDIUM",
+      "finding": "The paragraph still described 'both go get lines' after the snippet below it had been rewritten to go mod tidy / go build.",
+      "evidence": "CONTRIBUTING.md:207 \"both go get lines fail on that alone\" vs the fenced block at 210-224, whose commands are go mod init / cat > main.go / go mod tidy / go build.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "94a391ae65a3060a"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 21,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 188,
+      "severity": "MEDIUM",
+      "finding": "The replace-depth paragraph missed that loggolden and promgolden also carry sibling-adapter replaces, and omitted test/modgraph from the standalone-checker list this PR adds.",
+      "evidence": "test/loggolden/go.mod replaces cloudwatch and cwinsights; test/promgolden/go.mod replaces promql; test/modgraph/go.mod is a fifth standalone checker.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "36e5e82be4c87856"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 22,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 83,
+      "severity": "LOW",
+      "finding": "The table checked Requires by exact length but Replaces only for presence, so a parser marking everything replaced passed the whole table.",
+      "evidence": "modgraph_test.go replaces loop `for _, path := range c.replaces` runs zero times for five of seven cases, and no case asserted len(got.Replaces).",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "6faabb84a54ba7f4"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 23,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 40,
+      "severity": "LOW",
+      "finding": "The Replaces godoc and the test name both asserted a LOCAL replacement while the parser never inspected the target.",
+      "evidence": "ParseMod on `replace <prefix> => example.com/fork v1.2.3` yielded replaces[<prefix>]=true with no inspection of the target.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Added IsLocalTarget with its own table test, and the check now rejects a module-path target.",
+      "id": "28cf69e5fc4a5765"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 24,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:gomod-parse-gap",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 112,
+      "severity": "LOW",
+      "finding": "A replace with a version on the left \u2014 what `go mod edit -replace=path@version=target` writes \u2014 was unrecognised in both forms, producing a false accusation.",
+      "evidence": "ParseMod on `replace <prefix> v0.2.0 => ../..` yielded requires={<prefix>:v0.2.0} replaces={} - a false 'does not replace it' accusation.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Rewritten to locate the arrow by index rather than fixed position; covered by a table case.",
+      "id": "1719e5e8c7d455cf"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 25,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 140,
+      "severity": "LOW",
+      "finding": "The skew failure message claimed adopters would fail, which is untrue \u2014 minimal version selection picks the highest and resolves.",
+      "evidence": "modgraph_test.go message \"fails only for an adopter\"; MVS resolves differing requires to the highest with no error.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Message rewritten to describe the real consequence: silent drift until a release tags one version and the stragglers name another.",
+      "id": "eb13bd419fb33868"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 26,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:overbroad-invariant",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 174,
+      "severity": "LOW",
+      "finding": "The replace requirement was enforced unconditionally while its own message framed it as conditional; after publication, dropping a replace becomes correct rather than a defect.",
+      "evidence": "modgraph_test.go asserted m.Replaces[path] for every first-party require with no condition, while CONTRIBUTING names dropping cmd/shortfall's replaces as the tracked path to a working go install.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Renamed and given a doc comment naming it a deliberate pre-publication ratchet, to be revisited by the change that drops the replaces.",
+      "id": "c820ce96c5c077f5"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 27,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:error-diagnostics-dropped",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 49,
+      "severity": "LOW",
+      "finding": "%w on an *exec.ExitError renders only 'exit status 128', discarding git's captured reason, in the one place the checker can fail for infrastructure reasons.",
+      "evidence": "TrackedModFiles(\"/\") -> \"git ls-files: exit status 128\" with git's \"fatal: not a git repository\" discarded by %w on an ExitError.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Surfaces ExitError.Stderr, with a table test watched failing when the branch is defeated.",
+      "id": "04e227986f0f4071"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 28,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "scope-misstatement"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 19,
+      "severity": "MEDIUM",
+      "finding": "The docstring claimed the go toolchain is silent about 'exactly the pair' of conditions when the package's own third invariant is a third such condition, invisible to go because of go.work's use list rather than because of a replace.",
+      "evidence": "Deleting the replace from adapters/query/promql/go.mod: go build/vet/test in that module all exit 0, while test/modgraph goes red - a third go-silent condition where the docstring said 'exactly the pair'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "8af5b53470d4022a"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 29,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "tests-required",
+      "tags": [
+        "untested-surface"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 78,
+      "severity": "MEDIUM",
+      "finding": "The new ExitError.Stderr branch had no test in either direction, and TrackedModFiles was the only exported function with no direct test.",
+      "evidence": "grep for TrackedModFiles in modgraph_test.go found it only inside loadMods on the success path; the ExitError branch had no test.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Added TestTrackedModFilesExplainsAGitFailure, table-driven over a non-git dir and a missing dir; watched failing when the Stderr surfacing is removed.",
+      "id": "bc02c94ca9191c56"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 30,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 34,
+      "severity": "LOW",
+      "finding": "The docstring credited the non-local-replace guard to this checker, but go.work makes that a hard conflict go refuses first \u2014 the same trap the surrounding paragraph warns about.",
+      "evidence": "Setting a module-path replace produced `go: conflicting replacements ... EXIT=1` before any test ran - go's failure, credited to this checker.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded to say the guard is belt to go's braces and why it stays.",
+      "id": "75fe37725ce94b88"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 31,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "misleading-comment"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 62,
+      "severity": "LOW",
+      "finding": "The Replaces comment said targets are kept 'verbatim' while a trailing version on the right-hand side is dropped, and the table case name implied the opposite.",
+      "evidence": "ParseMod on `replace <prefix> => example.com/f v1.2.3` yields target `example.com/f`; the version is dropped though the comment says 'verbatim'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Fixed in this branch; see the commit body.",
+      "id": "b287b49e71b98e8c"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 32,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:unhandled-block-directive",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 157,
+      "severity": "LOW",
+      "finding": "Go 1.24's `tool (` block was swallowed by the single-line catch-all, so a first-party tool path inside it became an unreadable line and failed the run \u2014 a false failure on a legitimate go.mod, and inconsistent with the single-line form.",
+      "evidence": "ParseMod on a `tool (` block containing a first-party path yielded unparsed=[<prefix>/cmd/shortfall]; the single-line `tool` form yielded unparsed=[].",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "tool( and godebug( now open ignored blocks; a table case pins both forms agreeing.",
+      "id": "5dc9beb718c9e628"
+    },
+    {
+      "ts": "2026-08-31T22:57:15+00:00",
+      "seq": 33,
+      "source": "attest",
+      "sha": "778a9efafcd59eddcad84bb481950193f2af5c14",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:count-floor-margin-unstated",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 16,
+      "severity": "LOW",
+      "finding": "The floor's comment described a margin against a number it never recorded, making the margin unverifiable and silently erodible.",
+      "evidence": "Instrumented count over the tracked set: 24 files, 23 first-party requires; the comment recorded neither, so the stated margin was unverifiable.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The comment now records 23 requires across 24 files, states the margin's purpose, and notes the calibration that matters: 12 arrive via the block form and 11 via the single-line form, so losing either trips the floor.",
+      "id": "335a24b328297027"
+    }
+  ]
+}
