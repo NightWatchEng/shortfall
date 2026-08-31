@@ -34,10 +34,10 @@
 # from disagreeing, for no extra coverage. If a negated tag ever lands here,
 # that reasoning breaks and this must become its own mode.
 # -count=1 on the test mode disables Go's test result cache, and that is
-# load-bearing rather than paranoia. test/blankline, test/licensehdr and
-# test/symbolcheck each scan the whole tree, reaching files through
-# `git ls-files` rather than opening them by name. The cache keys on the
-# files a run actually opened, so a NEWLY ADDED violating file was opened by
+# load-bearing rather than paranoia. test/blankline, test/licensehdr,
+# test/symbolcheck and test/wikisync each scan the whole tree, reaching
+# files through `git ls-files` rather than opening them by name. The cache
+# keys on the files a run actually opened, so a new violating file was seen by
 # no cached run and does not invalidate the entry: the guard returns a green
 # `(cached)` while the violation sits in the tree. CI restores GOCACHE
 # between runs (setup-go cache: true), so this would persist across PRs.

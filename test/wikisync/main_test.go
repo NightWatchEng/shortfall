@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -313,11 +314,13 @@ func TestThisRepoNavigationCoversEveryPage(t *testing.T) {
 }
 
 // wikiPageRefs returns the wiki page each absolute wiki URL in body names,
-// skipping fenced blocks the way every other scanner in this module does —
-// a URL in a `curl` example is not a link. The wiki root (no page) yields
-// nothing to check and is not returned. Trailing sentence punctuation is
-// trimmed: a URL ending a sentence would otherwise carry the period into
-// the page name and fail for a link that is correct.
+// skipping fenced blocks and inline code spans exactly as linkTargets
+// does — a URL shown in a `curl` example is illustrating the format, not
+// linking. The wiki root names no page and yields nothing to check. A
+// trailing period is trimmed, since a URL ending a sentence would
+// otherwise carry it into the page name and fail for a correct link; only
+// "." is reachable, the rest of the punctuation being outside the capture
+// class already.
 func wikiPageRefs(body string) []string {
 	var refs []string
 	inFence := false
@@ -332,13 +335,19 @@ func wikiPageRefs(body string) []string {
 			continue
 		}
 
-		for _, m := range wikiURL.FindAllStringSubmatch(line, -1) {
-			page := strings.TrimRight(m[1], ".,;:!?)")
-			if page == "" {
-				continue // the wiki root, always valid
-			}
+		// Splitting on the backtick puts span contents at odd indices,
+		// exactly as linkTargets and rewriteLine do: a URL shown inside
+		// backticks is illustrating the format, not linking to it.
+		segs := strings.Split(line, "`")
+		for i := 0; i < len(segs); i += 2 {
+			for _, m := range wikiURL.FindAllStringSubmatch(segs[i], -1) {
+				page := strings.TrimRight(m[1], ".")
+				if page == "" {
+					continue // the wiki root, names no page to check
+				}
 
-			refs = append(refs, page)
+				refs = append(refs, page)
+			}
 		}
 	}
 
@@ -363,6 +372,7 @@ func TestWikiPageRefs(t *testing.T) {
 		{"root with trailing slash", "the wiki at " + u + "/", nil},
 		// A URL in a shell example is not a link, exactly as fenced
 		// markdown links are not links elsewhere in this module.
+		{"inline code span skipped", "run `curl " + u + "/not-a-page` now", nil},
 		{"fenced url skipped", "```sh\ncurl " + u + "/not-a-page\n```\n", nil},
 		{"tilde fence skipped", "~~~\n" + u + "/not-a-page\n~~~\n", nil},
 		{"two on one line", u + "/money and " + u + "/registry", []string{"money", "registry"}},
@@ -370,18 +380,21 @@ func TestWikiPageRefs(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			// %q rather than Join: Join cannot tell nil from [""], so the
+			// wiki-root cases could not detect losing the guard they pin.
 			got := wikiPageRefs(c.body)
-			if strings.Join(got, ",") != strings.Join(c.want, ",") {
-				t.Errorf("wikiPageRefs(%q) = %v, want %v", c.body, got, c.want)
+			if !slices.Equal(got, c.want) {
+				t.Errorf("wikiPageRefs(%q) = %q, want %q", c.body, got, c.want)
 			}
 		})
 	}
 }
 
 // TestHardcodedWikiLinksResolve guards the absolute wiki URLs the README
-// uses to land a reader on the docs quickly. They point at generated page
-// names, so renaming a doc silently breaks them: the in-repo link checker
-// only follows relative paths, and nothing else reads these.
+// uses to land a reader on the docs quickly. They name generated pages, so
+// renaming a doc breaks them — and nothing else in the tree would notice:
+// there is no link checker here, and rewriteSegment deliberately leaves an
+// unresolvable target as written rather than inventing a destination.
 func TestHardcodedWikiLinksResolve(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
