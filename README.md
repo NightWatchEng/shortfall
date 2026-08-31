@@ -303,7 +303,7 @@ M5 Pro / Go 1.27, medians of six samples:
 |---|---|
 | `emit.Record`, accepted outcome | 2.3 µs on one core, 1.0 µs on eight |
 | `emit.Record` throughput ceiling | ~950k outcomes/s, reached at 8 cores — it does **not** scale past that |
-| `emit.InFlightTracker`, `Track`+`Done` | 56 ns uncontended; throughput *falls* to 0.19× as consumers are added |
+| `emit.InFlightTracker`, `Track`+`Done` | 86 ns uncontended; sharded by id hash, the sweep holds 86–135 ns/pair out to 18 cores |
 | Slow backend (25 ms/batch) | never reaches the caller as latency — it costs outcomes instead, dropped and counted |
 | `engine.Compute`, 2M events | 4.3 s, 4.35 GB allocated |
 

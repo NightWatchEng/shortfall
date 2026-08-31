@@ -1,8 +1,10 @@
 package emit
 
 import (
+	"hash/maphash"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/biz"
@@ -35,33 +37,68 @@ func AgeBucketFor(age time.Duration) string {
 //
 // Age semantics: measured from the first enqueue timestamp — a retry
 // re-Track of the same id never makes the backlog look younger.
+// trackerShards fixes the shard count. A constant beats deriving one
+// from GOMAXPROCS: the semantics never depend on it, 32 idle mutexes
+// cost nothing on a small machine, and a deterministic layout is one
+// less variable when a storm test fails. Power of two, so the shard
+// index is a mask, not a division.
+const trackerShards = 32
+
+// trackerShard is one lock's worth of the in-flight set. Track and Done
+// contend only within their shard; Publish takes every shard lock at
+// once for its snapshot.
+type trackerShard struct {
+	mu    sync.Mutex
+	items map[inflightKey]inflightItem
+	// Pad each shard out to a cache line's width: unpadded, four shards
+	// share one line and neighbors' lock traffic ping-pongs it. Go only
+	// guarantees 8-byte alignment for the array, so this bounds the
+	// sharing (at most a tail can straddle into the next head) rather
+	// than eliminating it.
+	_ [64 - (8+8)%64]byte
+}
+
 type InFlightTracker struct {
 	em     Emitter
 	clock  func() time.Time
 	logger *slog.Logger
 
-	mu    sync.Mutex
-	items map[inflightKey]inflightItem
+	// The in-flight set, sharded by message-id hash. Ids carry the
+	// cardinality, so hashing the id alone spreads real load; a
+	// pathological all-one-id stream lands on one shard, which is
+	// exactly the old single-mutex behavior, not worse.
+	seed   maphash.Seed
+	shards [trackerShards]trackerShard
+
 	// combos we have published non-zero values for and must zero once
 	// when they empty, so a stalled dashboard never shows stale levels.
+	// Only Publish touches it, and publishMu serializes Publish.
 	live map[comboKey]struct{}
-	// canonical exponent per currency, pinned on first sight: a second
-	// exponent for the same currency would silently flap one gauge
-	// series between incomparable sums.
-	exponents map[string]int8
+	// canonical exponent per currency (string -> int8), pinned on first
+	// sight via LoadOrStore: a second exponent for the same currency
+	// would silently flap one gauge series between incomparable sums.
+	exponents sync.Map
 	maxItems  int
-	overflow  int64 // Track calls the bound rejected (retries count each)
-	rejected  int64 // Track calls rejected for invalid/mismatched money
+	itemCount atomic.Int64 // len across shards; the bound stays exact
+	overflow  atomic.Int64 // Track calls the bound rejected (retries count each)
+	rejected  atomic.Int64 // Track calls rejected for invalid/mismatched money
 
 	// publishMu serializes snapshot and emission: without it an older
 	// snapshot can be emitted after a newer one and win under the
 	// order-by-At contract.
 	publishMu sync.Mutex
 
+	stateMu  sync.Mutex // guards started
 	started  bool
 	stop     chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
+}
+
+// shardFor picks the shard for a message id. trackerShards is a power
+// of two, so the mask keeps every hash bit that matters and no modulo.
+func (t *InFlightTracker) shardFor(id string) *trackerShard {
+	return &t.shards[maphash.String(t.seed, id)&(trackerShards-1)]
 }
 
 type inflightKey struct{ flow, stage, id string }
@@ -104,14 +141,16 @@ func WithTrackerLogger(l *slog.Logger) TrackerOption {
 // NewInFlightTracker builds a tracker publishing through em.
 func NewInFlightTracker(em Emitter, opts ...TrackerOption) *InFlightTracker {
 	t := &InFlightTracker{
-		em:        em,
-		clock:     time.Now,
-		logger:    slog.Default(),
-		items:     map[inflightKey]inflightItem{},
-		live:      map[comboKey]struct{}{},
-		exponents: map[string]int8{},
-		maxItems:  1 << 20,
-		stop:      make(chan struct{}),
+		em:       em,
+		clock:    time.Now,
+		logger:   slog.Default(),
+		seed:     maphash.MakeSeed(),
+		live:     map[comboKey]struct{}{},
+		maxItems: 1 << 20,
+		stop:     make(chan struct{}),
+	}
+	for i := range t.shards {
+		t.shards[i].items = map[inflightKey]inflightItem{}
 	}
 	for _, o := range opts {
 		o(t)
@@ -132,65 +171,74 @@ func NewInFlightTracker(em Emitter, opts ...TrackerOption) *InFlightTracker {
 func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueuedAt time.Time) {
 	if err := money.Validate(); err != nil {
 		t.logger.Warn("emit: tracker rejected invalid money — dropped and counted", "error", err)
-		t.mu.Lock()
-		t.rejected++
-		t.mu.Unlock()
+		t.rejected.Add(1)
+		return
+	}
+	// First sight pins the exponent atomically; every later Track for
+	// the currency compares against the winner. As before, the pin
+	// happens even when the Track then overflows the bound. Load first:
+	// after the first sight this is the always-taken path, and it is
+	// cheaper than LoadOrStore re-proving the store cannot happen.
+	pinned, loaded := t.exponents.Load(money.Currency)
+	if !loaded {
+		pinned, loaded = t.exponents.LoadOrStore(money.Currency, money.Exponent)
+	}
+	if loaded && pinned.(int8) != money.Exponent {
+		t.rejected.Add(1)
+		t.logger.Warn(
+			"emit: tracker rejected mismatched currency exponent — one series must never flap between incomparable sums",
+			"currency", money.Currency,
+			"pinned", pinned,
+			"got", money.Exponent,
+		)
 		return
 	}
 	k := inflightKey{flow, stage, id}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if pinned, ok := t.exponents[money.Currency]; ok {
-		if pinned != money.Exponent {
-			t.rejected++
-			t.logger.Warn(
-				"emit: tracker rejected mismatched currency exponent — one series must never flap between incomparable sums",
-				"currency", money.Currency,
-				"pinned", pinned,
-				"got", money.Exponent,
-			)
-			return
-		}
-	} else {
-		t.exponents[money.Currency] = money.Exponent
-	}
-	if prev, ok := t.items[k]; ok {
+	sh := t.shardFor(id)
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if prev, ok := sh.items[k]; ok {
 		if prev.enqueuedAt.Before(enqueuedAt) {
 			enqueuedAt = prev.enqueuedAt
 		}
-		t.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
+		sh.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
 		return
 	}
-	if len(t.items) >= t.maxItems {
-		t.overflow++
+	// Reserve, then insert; roll back on over-reserve. The bound stays
+	// EXACT under concurrency — the resident-footprint guarantee in
+	// WithTrackerMaxItems's contract, not an approximation.
+	if t.itemCount.Add(1) > int64(t.maxItems) {
+		t.itemCount.Add(-1)
+		t.overflow.Add(1)
 		return
 	}
-	t.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
+	sh.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
 }
 
 // Done records a message leaving its stage. Unknown ids are a no-op, so
 // Done is idempotent (consumer wrappers retry).
 func (t *InFlightTracker) Done(flow, stage, id string) {
-	t.mu.Lock()
-	delete(t.items, inflightKey{flow, stage, id})
-	t.mu.Unlock()
+	k := inflightKey{flow, stage, id}
+	sh := t.shardFor(id)
+	sh.mu.Lock()
+	if _, ok := sh.items[k]; ok {
+		delete(sh.items, k)
+		t.itemCount.Add(-1)
+	}
+	sh.mu.Unlock()
 }
 
 // Overflowed returns how many Track calls the bound rejected since the
 // tracker was built: nonzero means the published gauge understates the
 // true in-flight value.
 func (t *InFlightTracker) Overflowed() int64 {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.overflow
+	return t.overflow.Load()
 }
 
 // Rejected returns how many Track calls were refused for invalid money
 // or a mismatched currency exponent.
 func (t *InFlightTracker) Rejected() int64 {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.rejected
+	return t.rejected.Load()
 }
 
 // Publish computes the current per-(flow, stage, bucket, currency) sums
@@ -212,26 +260,38 @@ func (t *InFlightTracker) Publish() {
 		count int64 // number of in-flight transactions
 	}
 	type comboBuckets map[string]*bucketAgg // bucket -> value+count
-	t.mu.Lock()
+	// Hold every shard lock for the whole aggregation: value and count
+	// must come from ONE consistent snapshot (ADR-0012), so no shard may
+	// mutate while another is being read. Lock in index order — Publish
+	// is the only multi-shard locker, so any fixed order is deadlock-free.
+	for i := range t.shards {
+		t.shards[i].mu.Lock()
+	}
 	sums := map[comboKey]comboBuckets{}
-	for k, item := range t.items {
-		ck := comboKey{k.flow, k.stage, item.money.Currency, item.money.Exponent}
-		cb, ok := sums[ck]
-		if !ok {
-			cb = comboBuckets{}
-			sums[ck] = cb
+	for i := range t.shards {
+		for k, item := range t.shards[i].items {
+			ck := comboKey{k.flow, k.stage, item.money.Currency, item.money.Exponent}
+			cb, ok := sums[ck]
+			if !ok {
+				cb = comboBuckets{}
+				sums[ck] = cb
+			}
+			bucket := AgeBucketFor(now.Sub(item.enqueuedAt))
+			a := cb[bucket]
+			if a == nil {
+				a = &bucketAgg{}
+				cb[bucket] = a
+			}
+			a.minor += item.money.Amount
+			a.count++
 		}
-		bucket := AgeBucketFor(now.Sub(item.enqueuedAt))
-		a := cb[bucket]
-		if a == nil {
-			a = &bucketAgg{}
-			cb[bucket] = a
-		}
-		a.minor += item.money.Amount
-		a.count++
+	}
+	for i := range t.shards {
+		t.shards[i].mu.Unlock()
 	}
 	// Every combo with items stays live; every live combo without items
-	// gets one zeroing pass and retires.
+	// gets one zeroing pass and retires. live is publishMu-guarded, and
+	// we hold publishMu here.
 	toPublish := make([]comboKey, 0, len(sums))
 	for ck := range sums {
 		t.live[ck] = struct{}{}
@@ -247,8 +307,7 @@ func (t *InFlightTracker) Publish() {
 	for _, ck := range toRetire {
 		delete(t.live, ck)
 	}
-	overflowed := t.overflow
-	t.mu.Unlock()
+	overflowed := t.overflow.Load()
 	if overflowed > 0 {
 		// Understated value is only acceptable when visible: say so on
 		// every publish cycle while the condition persists.
@@ -282,14 +341,14 @@ func (t *InFlightTracker) Start(interval time.Duration) {
 		)
 		return
 	}
-	t.mu.Lock()
+	t.stateMu.Lock()
 	if t.started {
-		t.mu.Unlock()
+		t.stateMu.Unlock()
 		t.logger.Warn("emit: tracker Start called twice; keeping the first loop")
 		return
 	}
 	t.started = true
-	t.mu.Unlock()
+	t.stateMu.Unlock()
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()

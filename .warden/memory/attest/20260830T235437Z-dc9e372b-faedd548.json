@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "dc9e372b83d5442a3fed1817f67eba575b324f1a",
+  "base_sha": "b1158789b29fa686c4b304a1252db8ea68ec18cc",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-30T23:54:37+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude -p sonnet, isolated headless process; prompt carried the three engine:claude rule bodies verbatim, the policy review charter, the review-package path, and reviewer-side memory recall under the required heading"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude -p sonnet, second isolated headless process; received only the findings JSON, the review-package path, and examiner-side precedents \u2014 never the reviewer's reasoning. Deviation disclosed: the deliver agent is a worktree fork that cannot spawn Agent-tool subagents, so both judge passes ran as isolated headless claude -p processes (the workspace-m7l mechanism); contexts disjoint, split memory honored, graph's independent-judge intent preserved"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-30T23:54:37+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "dc9e372b83d5442a3fed1817f67eba575b324f1a",
+      "base_sha": "b1158789b29fa686c4b304a1252db8ea68ec18cc",
+      "rule_id": "docs-accuracy",
+      "tags": [],
+      "dir_prefix": "emit",
+      "file": "emit/concurrency_bench_test.go",
+      "line": 291,
+      "severity": "MEDIUM",
+      "finding": "BenchmarkTrackerPublishScale doc comment still described the replaced single-mutex design ('under t.mu')",
+      "evidence": "// BenchmarkTrackerPublishScale is how long the tracker holds its mutex on a\\n// publish, as the tracked set grows. Publish snapshots every item under\\n// t.mu",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "comment now says Publish snapshots holding all shard locks; scoped re-review: addressed [tag: docs-drift]",
+      "id": "3b305612bb6dafce"
+    },
+    {
+      "ts": "2026-08-30T23:54:37+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "dc9e372b83d5442a3fed1817f67eba575b324f1a",
+      "base_sha": "b1158789b29fa686c4b304a1252db8ea68ec18cc",
+      "rule_id": "vacuous-pass",
+      "tags": [],
+      "dir_prefix": "testkit",
+      "file": "testkit/load_test.go",
+      "line": 342,
+      "severity": "MEDIUM",
+      "finding": "flatness assertions silently skipped when fewer than 8 runtime samples were collected; TestSustainedLoadReconciles would pass green while verifying nothing about growth",
+      "evidence": "if n := len(report.samples); n >= 8 {",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "a run with fewer than 8 samples now records a problem, so degraded sampling fails the test loudly; scoped re-review: addressed [tag: vacuous-pass]",
+      "id": "0a1dc3f401fa83f2"
+    },
+    {
+      "ts": "2026-08-30T23:54:37+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "dc9e372b83d5442a3fed1817f67eba575b324f1a",
+      "base_sha": "b1158789b29fa686c4b304a1252db8ea68ec18cc",
+      "rule_id": "unmapped:shard-padding-alignment-not-guaranteed",
+      "tags": [],
+      "dir_prefix": "emit",
+      "file": "emit/inflight.go",
+      "line": 56,
+      "severity": "LOW",
+      "finding": "padding comment implied false sharing was eliminated, but Go guarantees only 8-byte alignment for the shard array, so a shard tail can still straddle into the next shard's head",
+      "evidence": "_ [64 - (8+8)%64]byte  // comment claimed the ping-pong is the very cost sharding exists to remove",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "comment now states the padding bounds the sharing rather than eliminating it; scoped re-review: addressed [tag: docs-drift]",
+      "id": "9a9b786ff8ffcf0a"
+    }
+  ]
+}
