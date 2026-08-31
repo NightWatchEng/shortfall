@@ -477,14 +477,20 @@ An implementation's own outbound client therefore MUST:
 - fail closed: if a safe header cannot be expressed, send no `baggage`
   header rather than forward a possibly-leaky original.
 
-The fence is the client transport, so what escapes it is anything that
-does not go through one: a request issued by a client the implementation
-does not own, or a baggage injector composed *inside* the fenced transport
-rather than around it, which would re-inject after the removal above. A
-globally installed generic propagator matters only insofar as it reaches
-those paths — through the fence, its member is removed like any other.
-This is a deployment concern, and an implementation that could be deployed
-that way MUST document it as one.
+The fence is the client transport, so exactly two things escape it, and an
+implementation MUST document both as deployment concerns:
+
+- a request that never reaches the fence — issued through a client the
+  implementation does not own, an SDK holding its own, or any path the
+  deployment did not route through the fenced transport; and
+- a baggage injector composed *inside* the fenced transport rather than
+  around it, which re-injects after the removal above. Composition order
+  is part of the contract, not an implementation detail.
+
+Both are available in every deployment, so neither is conditional. A
+globally installed generic propagator is the usual source of the injected
+member in both cases, and is not itself the hazard: through the fence its
+member is removed like any other.
 
 Allowlist matching is specified in 4.4 and covered by the
 `host_allowlist` vectors.

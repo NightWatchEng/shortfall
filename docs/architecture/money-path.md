@@ -62,7 +62,7 @@ sequenceDiagram
 
     rect rgba(140,140,140,0.10)
         Note over API,EG: Phase 3 — the egress fence
-        API->>MW: outbound call through httpmw.NewTransport(reg, base)
+        API->>MW: outbound call through httpmw.NewTransport(&reg, base)
         alt host matches registry.Propagation.AllowHosts
             MW->>EG: baggage rebuilt, biz.vc injected from ctx
         else any other host — deny by default

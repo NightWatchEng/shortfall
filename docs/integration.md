@@ -282,9 +282,7 @@ allowlisted, so its requests leave clean.
 >
 > *A request that never goes through it.* Route every outbound call
 > through a client built this way, including calls made inside SDKs — most
-> accept a custom `http.Client`. A globally-installed generic Baggage
-> propagator matters here and only here: it injects `biz.vc` into whatever
-> it touches, and an unfenced client is what it touches.
+> accept a custom `http.Client`.
 >
 > *An injector composed inside it.* `RoundTrip` rebuilds the header and
 > then hands the request to its `base`, so a transport that injects
@@ -295,8 +293,11 @@ allowlisted, so its requests leave clean.
 > httpmw.NewTransport(&reg, otelhttp.NewTransport(base))  // re-injects
 > ```
 >
-> Everything else is fenced: toward a non-allowlisted host a `biz.vc` is
-> deleted even when a global propagator put it there (ADR-0003). Shipping
+> A globally-installed generic Baggage propagator is the usual injector in
+> both cases — `otelhttp` reaches for `otel.GetTextMapPropagator()` by
+> default — but it is not itself the hazard. Everything that does reach
+> the fence is fenced: toward a non-allowlisted host a `biz.vc` is deleted
+> even when a global propagator put it there (ADR-0003). Shipping
 > transaction amounts to a third party is a decision someone makes on
 > purpose.
 
