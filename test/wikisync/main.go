@@ -185,7 +185,8 @@ const adrIndexSrc = "docs/adr/README.md"
 // link to. A new doc under docs/ is mirrored automatically, so without this
 // the wiki grows pages reachable only by URL (CONTRIBUTING, "Documentation
 // accuracy"). A page is reachable two ways: a nav section names it, or it
-// is an ADR the ADR index links.
+// is an ADR the ADR index links — and the index itself takes the first
+// route, so nothing is exempt.
 func navFor(root string, pages map[string]string) (string, error) {
 	linkedADRs, err := adrIndex(root)
 	if err != nil {
@@ -193,14 +194,16 @@ func navFor(root string, pages map[string]string) (string, error) {
 	}
 	uncovered := make(map[string]string, len(pages)) // page -> why it is unreachable
 	for src, page := range pages {
-		switch {
-		case !strings.HasPrefix(page, adrPrefix):
-			uncovered[page] = "add an entry to sections in test/wikisync/main.go"
-		case src == adrIndexSrc:
-			// the index itself is curated, below
-		case !linkedADRs[path.Base(src)]:
-			uncovered[page] = "link it from " + adrIndexSrc
+		// The index is an ADR page by name but is reached the ordinary way,
+		// so it needs a curated entry like everything else — exempting it
+		// here would let one deleted nav line orphan the whole ADR set.
+		if strings.HasPrefix(page, adrPrefix) && src != adrIndexSrc {
+			if !linkedADRs[path.Base(src)] {
+				uncovered[page] = "link it from " + adrIndexSrc
+			}
+			continue
 		}
+		uncovered[page] = "add an entry to sections in test/wikisync/main.go"
 	}
 	var b strings.Builder
 	for _, s := range sections {
@@ -245,14 +248,37 @@ func adrIndex(root string) (map[string]bool, error) {
 		return nil, err
 	}
 	linked := map[string]bool{}
-	for _, m := range mdLink.FindAllStringSubmatch(string(body), -1) {
-		linked[path.Base(strings.SplitN(m[1], "#", 2)[0])] = true
+	for _, dest := range linkTargets(string(body)) {
+		linked[path.Base(strings.SplitN(dest, "#", 2)[0])] = true
 	}
 	return linked, nil
 }
 
-// mdLink captures the target of a markdown link.
-var mdLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+// linkTargets returns every inline link destination markdown would actually
+// render, skipping fenced blocks and inline code spans exactly as
+// rewriteDoc does. An ADR named only inside a fenced example is not linked
+// by it, and must not count as reachable.
+func linkTargets(body string) []string {
+	var dests []string
+	inFence := false
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		segs := strings.Split(line, "`")
+		for i := 0; i < len(segs); i += 2 { // even segments sit outside spans
+			for _, m := range linkRE.FindAllStringSubmatch(segs[i], -1) {
+				dests = append(dests, m[1])
+			}
+		}
+	}
+	return dests
+}
 
 // containsPage reports whether any source maps to the given wiki page.
 func containsPage(pages map[string]string, page string) bool {

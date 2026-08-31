@@ -145,10 +145,13 @@ the same PR. The docs-accuracy review rule flags departures.
 
 `docs/` is the source of truth and the wiki is a generated mirror —
 `test/wikisync` regenerates the whole page set on every push to main, so
-wiki-side edits are overwritten. A new page under `docs/` appears in the
-wiki automatically, but list it in `test/wikisync`'s curated navigation so
-it lands in the right section; the generator's test fails on a page that
-is neither curated nor an ADR. Fenced Go and registry examples in the
+wiki-side edits are overwritten. A new page under `docs/` is mirrored
+automatically, which means it can be published with nothing linking to it,
+so every page must be reachable one of two ways: a new guide gets an entry
+in `test/wikisync`'s curated navigation, and a new ADR gets a row in
+`docs/adr/README.md`. `TestThisRepoNavigationCoversEveryPage` runs the
+generator over this repository and fails on a page neither route covers,
+naming the page and which route it needs. Fenced Go and registry examples in the
 guide docs are compiled and validated by `test/docsnippets` in the core CI
 job — adding a fence with a new doc-implied identifier extends that
 module's stub, and the compile failure names it.
@@ -196,8 +199,9 @@ id["<b>engine</b><br/><i>core module</i><br/>four legs · coverage · severity"]
 ```
 
 Keep arrow labels to a short verb phrase. Every protocol, constraint and
-caveat goes in the diagram's **edge table** — one row per edge, or per
-numbered step that carries a constraint — which every diagram carries. A
+caveat goes in the diagram's **edge table**, which every diagram carries:
+one row per edge, or per numbered step, that carries a real constraint.
+Edges that share one constraint share one row. A
 `subgraph` or `box` is a claim about everything inside it; `alt`/`opt` is
 only for a branch that exists in the code.
 

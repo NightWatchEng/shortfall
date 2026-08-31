@@ -13,9 +13,9 @@ The decisions behind them are in the [ADRs](../adr/README.md).
 
 Each diagram carries a table naming the protocol or constraint behind
 every edge that has one — one row per edge in the C4 levels, one per
-numbered step that carries a constraint in the sequences. Colour is
-semantic and encodes ownership, so a node in the wrong colour is a
-factual defect: violet is your code, dark blue the
+numbered step in the sequences, with edges that share a constraint
+sharing a row. Colour is semantic and encodes ownership, so a node in the
+wrong colour is a factual defect: violet is your code, dark blue the
 core module, mid blue an opt-in nested module, ochre-dashed never ships,
 grey external. The full drawing rules are in
 [CONTRIBUTING](../../CONTRIBUTING.md#architecture-diagrams).
