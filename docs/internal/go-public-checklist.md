@@ -1,9 +1,9 @@
 # Go-public checklist — state of record
 
 Executed 2026-08-29 (workspace-tmw.10.3); the Go-ecosystem clearance row
-added 2026-08-31. The repository-side items are
-done with evidence; two items are personal actions only the founder can
-take, and **the visibility flip itself is the founder's alone**.
+dates from 2026-08-31. The repository-side items are done with evidence;
+three items are personal actions only the founder can take, and **the
+visibility flip itself is the founder's alone**.
 
 | Item | State | Evidence |
 |---|---|---|

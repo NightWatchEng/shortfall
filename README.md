@@ -53,10 +53,10 @@ Deterministic and estimated legs are never summed into one figure.
 
 **Why "shortfall".** It is the finance word for exactly this — the gap
 between expected and actual — and it carries the nuance the report is
-built around: a shortfall can be recovered. Deferred value is a shortfall
-that has not become a loss, and unrealized demand may yet return. A word
-meaning only *loss* would have been wrong for three of the four legs —
-deferred, unrealized and customer impact are none of them a loss figure.
+built around: a shortfall can be recovered. Deferred value is the case in
+point. It is money that is late, not gone, and it becomes loss only when
+a deadline in the registry says so. A word meaning only *loss* would have
+prejudged it.
 
 ## Install
 
