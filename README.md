@@ -69,15 +69,23 @@ each stage transition:
 
 ```go
 func main() {
+    ctx := context.Background()
+
     reg, err := registry.Load("registry.yaml") // the flow registry Finance co-signs
     if err != nil {
         log.Fatal(err)
     }
-    em, err := emit.New(&reg, cloudwatch.New()) // any adapters/export/* exporter
+
+    exp, err := otlp.New(ctx) // to your collector; reads OTEL_EXPORTER_OTLP_*
     if err != nil {
         log.Fatal(err)
     }
-    defer em.Close(context.Background())
+
+    em, err := emit.New(&reg, exp)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer em.Close(ctx)
 
     http.HandleFunc("POST /invoices/{invoice}/pay", func(w http.ResponseWriter, r *http.Request) {
         ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
@@ -91,9 +99,11 @@ func main() {
             http.Error(w, err.Error(), http.StatusBadRequest)
             return
         }
+
         em.Record(ctx, "auth", biz.ResultSuccess) // once per stage transition
         w.WriteHeader(http.StatusAccepted)
     })
+
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
@@ -103,6 +113,10 @@ for the always-on aggregate view, and one outcome event carrying the
 exact amount and the ids, emitted regardless of any sampling decision.
 The value context rides W3C Baggage across service hops, so a flow
 spanning three services is still one flow.
+
+OTLP is the vendor-neutral path: one integration, and your collector fans
+the signals out to whatever you already run. Swap it for
+`adapters/export/{prometheus,cloudwatch,gcp}` to write a backend directly.
 
 ## Report
 
@@ -118,10 +132,12 @@ de-duplication and customer impact. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. `shortfall reconcile --ledger` adds the coverage ratio.
 
-The CLI reads Prometheus and SQL. If you export to CloudWatch or Cloud
-Logging, as the snippet above does, you read back through that backend's
-query adapter from a small reporting job instead — same `engine.Compute`,
-same report. The [worked example](docs/example-webhooks.md) shows it.
+That command matches the wiring above: the collector writes metrics to
+Prometheus and outcome events to a store the `sql` adapter reads. The CLI
+speaks only those two. Export straight to CloudWatch or Cloud Logging
+instead and you read back through that backend's query adapter from a
+small reporting job — same `engine.Compute`, same report, no CLI. The
+[worked example](docs/example-webhooks.md) shows it end to end.
 
 ## Design rules
 

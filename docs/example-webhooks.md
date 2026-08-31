@@ -68,10 +68,12 @@ func setup() error {
         return err
     }
     reg = r
+
     em, err = emit.New(&reg, cloudwatch.New()) // EMF to stdout — the Lambda-native path
     if err != nil {
         return err
     }
+
     // One client for the Lambda's lifetime. The Transport is the egress
     // fence: it injects biz.vc only toward registry-allowlisted hosts.
     client = &http.Client{Transport: httpmw.NewTransport(&reg, http.DefaultTransport)}
@@ -134,6 +136,7 @@ mux.HandleFunc("POST /internal/webhooks/process", func(w http.ResponseWriter, r 
         http.Error(w, "processing failed", http.StatusInternalServerError)
         return
     }
+
     em.Record(ctx, "process", biz.ResultSuccess)
     w.WriteHeader(http.StatusNoContent)
 })
@@ -194,6 +197,7 @@ func writeImpact(ctx context.Context, reg *registry.Registry, from, to time.Time
     if err != nil {
         return err
     }
+
     fmt.Println(rpt.RenderMarkdown(rep))
     return nil
 }

@@ -106,6 +106,7 @@ exp, err := prom.New()               // serve exp.Gatherer() on /metrics
 if err != nil {
     log.Fatal(err)
 }
+
 em, err := emit.New(&reg, exp)       // emit.New(*registry.Registry, exporter, ...EmitterOption)
 if err != nil {
     log.Fatal(err)
@@ -155,6 +156,7 @@ ingress := func(r *http.Request) (biz.ValueContext, bool) {
     if r.Method != http.MethodPost || r.URL.Path != "/pay" {
         return biz.ValueContext{}, false // not a flow entry point
     }
+
     inv := parseInvoice(r) // your decode
     return biz.ValueContext{
         Flow:       "invoice.pay",
