@@ -24,10 +24,12 @@
 //     pages use once the owning package is established — `Leg.Count`.
 //     Every indexed package is searched for an exported type of that name.
 //
-// A trailing "()" is stripped before matching, so `vc.Validate()` reads as
-// a method reference. receiverTypes extends resolution to the doc-local
-// variables the guides write against, so `em.Record` is checked as
-// emit.Std.Record rather than exempted.
+// A trailing call is stripped before matching, arguments and all, so both
+// `vc.Validate()` and `emit.WithFlushInterval(d)` read as references to the
+// function named. Arguments are never parsed — the question is whether the
+// symbol exists, not whether the call compiles. receiverTypes extends
+// resolution to the doc-local variables the guides write against, so
+// `em.Record` is checked as emit.Std.Record rather than exempted.
 //
 // Not covered, by decision rather than by oversight:
 //
@@ -87,6 +89,34 @@ var (
 // selectorShaped reports whether s is an identifier this checker resolves.
 func selectorShaped(s string) bool {
 	return qualifiedRE.MatchString(s) || bareMemberRE.MatchString(s)
+}
+
+// stripCall removes a trailing call's argument list, so the guides' natural
+// way of naming a function — `emit.WithFlushInterval(d)`, `biz.CheckPII(field,
+// s)` — is checked rather than skipped. Only a suffix that opens at the LAST
+// unmatched "(" and closes the string is removed, so a selector embedded in a
+// larger expression stays unmatched and is dropped by selectorShaped as
+// before. Arguments are not parsed: this asks whether the named function
+// exists, not whether the call would compile.
+func stripCall(s string) string {
+	if !strings.HasSuffix(s, ")") {
+		return s
+	}
+
+	depth := 0
+	for i := len(s) - 1; i >= 0; i-- {
+		switch s[i] {
+		case ')':
+			depth++
+		case '(':
+			depth--
+			if depth == 0 {
+				return s[:i]
+			}
+		}
+	}
+
+	return s
 }
 
 // ref is one selector-shaped identifier found in prose, with enough
@@ -221,7 +251,7 @@ func scanProse(root, doc string) ([]ref, error) {
 		segs := strings.Split(line, "`")
 		for i := 1; i+1 < len(segs); i += 2 {
 			raw := strings.TrimSpace(segs[i])
-			text := strings.TrimSuffix(raw, "()")
+			text := stripCall(raw)
 			if !selectorShaped(text) {
 				continue
 			}
@@ -415,8 +445,7 @@ func checkRefs(ix *symbolIndex, refs []ref) []string {
 // methodOnSomeType reports whether any exported type of p has an exported
 // method called name. The guides write a method package-qualified —
 // `emit.Record` for (*emit.Std).Record — which is how `go doc emit.Record`
-// resolves it and which this repository's review has judged correct style
-// (docs-accuracy, README.md:204, 2026-08-30). Resolution follows go doc
+// resolves it, and is the style the guides use. Resolution follows go doc
 // rather than forcing the receiver into every sentence; the reference is
 // still checked, so deleting or renaming the method still fails.
 func methodOnSomeType(p *types.Package, name string) bool {

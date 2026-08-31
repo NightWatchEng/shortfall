@@ -40,9 +40,12 @@ required — that is the standard working, not a finding.
 Scope, stated honestly: this rule carries no corpus counts. It is a new
 prevention rule shipped alongside the clause, not a promotion from
 repeated judged findings, and it is expected to fire rarely. The instance
-that justifies shipping it at all is real and in the tree — the six
-consecutive `if vc.X, err = unescape(fields[N]); err != nil` guards in
-`DecodeVC` (`biz/baggage.go`), where the sweep that applied the clause
-split one "read fields 1 through 6" step into six paragraphs. It is left
-as it stands: restructuring the money codec is not a whitespace PR's
-business, and it is the worked example of what this rule is for.
+that justifies shipping it at all is real and in the tree: the six
+consecutive `if vc.X, err = <decode>(fields[N]); err != nil` guards in
+`DecodeVC` (`biz/baggage.go`) — five calling `unescape`, one calling
+`strconv.ParseInt` — where the sweep that applied the clause split one
+"read fields 1 through 6" step into six paragraphs. Note that the bodies
+are identical and only the decoder differs, so this does not meet the
+"bodies differ in shape" exclusion above. It is left as it stands:
+restructuring the money codec is not a whitespace PR's business, and it
+is the worked example of what this rule is for.

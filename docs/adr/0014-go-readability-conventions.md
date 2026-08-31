@@ -67,8 +67,9 @@ gofmt + go vet remain the mechanical baseline. On top of them:
   violates the rule — so the convention rides the required `core checks`
   job with no gate wiring. The checker parses with `go/parser` and
   compares `token.Position` lines rather than matching text, which is why
-  a composite literal and a one-line `if err != nil { return err }` cannot
-  be mistaken for blocks. It excludes nothing: every tracked `.go` file is
+  a composite literal and a wrapped call cannot be mistaken for blocks; a
+  one-line block is block-bodied and is skipped instead because its braces
+  share a line, leaving no break to require. It excludes nothing: every tracked `.go` file is
   checked, generated and test files included.
 
 ### Ordering and grouping

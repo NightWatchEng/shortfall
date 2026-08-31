@@ -15,11 +15,15 @@
 //
 // The check is an AST walk (go/parser, go/ast, go/token), not a line
 // regex: it compares the line of a statement's closing brace against the
-// line the next statement in the same list begins on. A multi-line
-// composite literal, a wrapped call, a `defer`/`go` with a function
-// literal, and a one-line `if err != nil { return err }` all end in a
-// brace or paren without being blocks; they are outside the rule and are
-// never flagged.
+// line the next statement in the same list begins on. Two different
+// mechanisms keep it narrow. A multi-line composite literal, a wrapped
+// call and a `defer`/`go` with a function literal end in a brace or paren
+// without being block-bodied statements, so the walk never considers them.
+// A block written entirely on one line IS block-bodied, and is skipped by
+// the line comparison instead — its closing brace shares a line with its
+// opening one, so there is no break to require. gofmt, which this repo
+// gates on, expands almost every such form anyway; `select {}` is the one
+// it leaves alone.
 //
 // Run `go run ./test/blankline` from the repo root to list violations as
 // file:line, and `go run ./test/blankline -fix` to insert the blank lines

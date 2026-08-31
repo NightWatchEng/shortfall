@@ -26,9 +26,11 @@ replace github.com/NightWatchEng/shortfall => ../shortfall
 
 replace github.com/NightWatchEng/shortfall/adapters/export/prometheus => ../shortfall/adapters/export/prometheus
 EOF
-
-go mod tidy
 ```
+
+A `replace` says *where* a module is, not that you want it. `go mod tidy`
+comes in step 4, once there is code importing them — run it now and it
+resolves nothing.
 
 The exporter is a separate module, so you pull only the backend you use —
 hence the second `replace`.
@@ -172,7 +174,8 @@ reads 1.
 ## 4. Run it
 
 ```sh
-go run .                                        # in one terminal
+go mod tidy      # now that main.go names its imports
+go run .         # leave this running
 ```
 
 ```sh
@@ -224,13 +227,18 @@ sum by (flow, currency) (rate(biz_value_total{outcome="failed"}[5m])) * 60
 ## Next
 
 Getting the four-leg impact report out of these signals needs a query
-adapter pointed at wherever they land — the CLI reads Prometheus and SQL:
+adapter pointed at wherever they land — the CLI reads Prometheus and SQL.
+Run it from the clone, as in step 2:
 
 ```sh
-shortfall impact --registry registry.yaml \
+(cd ../shortfall && go run ./cmd/shortfall impact \
+  --registry ../shortfall-demo/registry.yaml \
   --from 2026-08-27T14:00:00Z --to 2026-08-27T15:00:00Z \
-  --flow invoice.pay --prometheus http://prometheus:9090
+  --flow invoice.pay --prometheus http://prometheus:9090)
 ```
+
+After the flip, `go install` puts a `shortfall` binary on your PATH and
+this is one line.
 
 Metrics alone ground the deferred and unrealized legs and a realized
 upper bound; the exact, de-duplicated realized figure and the customer

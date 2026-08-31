@@ -477,6 +477,19 @@ func TestEveryTrackedGoFileBreaksAfterItsBlocks(t *testing.T) {
 		t.Fatalf("scanning tracked files: %v", err)
 	}
 
+	// A sparse or filtered checkout makes git ls-files return nothing, and
+	// a scan of no files reports no violations — green having looked at
+	// nothing. scripts/ci-go.sh refuses a zero module count for the same
+	// reason.
+	files, err := trackedGoFiles("../..")
+	if err != nil {
+		t.Fatalf("listing tracked files: %v", err)
+	}
+
+	if len(files) < 100 {
+		t.Fatalf("only %d tracked .go file(s) found — the guard is vacuous", len(files))
+	}
+
 	if len(found) > 0 {
 		var at []string
 		for _, v := range found {
