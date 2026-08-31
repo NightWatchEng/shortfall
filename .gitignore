@@ -24,3 +24,4 @@ test/licensehdr/licensehdr
 # without this a `git add -A` stages them as embedded repositories and every
 # `warden verify` reports a dirty tree.
 .claude/worktrees/
+test/wikisync/wikisync

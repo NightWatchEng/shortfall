@@ -21,9 +21,27 @@ func TestPageName(t *testing.T) {
 		{"README.md", "README"},
 	}
 	for _, c := range cases {
-		if got := pageName(c.path); got != c.want {
-			t.Errorf("pageName(%q) = %q, want %q", c.path, got, c.want)
-		}
+		t.Run(c.path, func(t *testing.T) {
+			if got := pageName(c.path); got != c.want {
+				t.Errorf("pageName(%q) = %q, want %q", c.path, got, c.want)
+			}
+		})
+	}
+}
+
+func TestDocPagesRejectsColliding(t *testing.T) {
+	root := writeRepo(t)
+	// docs/adr-0004-metric-label-set.md flattens to the same page name as
+	// docs/adr/0004-metric-label-set.md; the generator must refuse rather
+	// than let one silently overwrite the other.
+	clash := filepath.Join(root, "docs", "adr-0004-metric-label-set.md")
+	if err := os.WriteFile(clash, []byte("impostor"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := docPages(root); err == nil {
+		t.Fatal("docPages accepted two sources mapping to one wiki page")
+	} else if !strings.Contains(err.Error(), "adr-0004-metric-label-set") {
+		t.Errorf("collision error does not name the page: %v", err)
 	}
 }
 
@@ -32,10 +50,10 @@ func writeRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	files := map[string]string{
-		"README.md":               "see [adapters](docs/adapters.md)",
-		"docs/quickstart.md":      "read [the transport ADR](adr/0002-outcome-event-transport.md) and [money](money.md#units)",
-		"docs/money.md":           "plain page",
-		"docs/adapters.md":        "code at [exporters](../adapters/export) and [vector](../testkit/vectors/outcome-event.json); web [semconv](https://opentelemetry.io/)",
+		"README.md":          "see [adapters](docs/adapters.md)",
+		"docs/quickstart.md": "read [the transport ADR](adr/0002-outcome-event-transport.md) and [money](money.md#units)",
+		"docs/money.md":      "plain page",
+		"docs/adapters.md":   "code at [exporters](../adapters/export) and [vector](../testkit/vectors/outcome-event.json); web [semconv](https://opentelemetry.io/)",
 		"docs/adr/0002-outcome-event-transport.md": "see [labels](0004-metric-label-set.md) and [money](../money.md)",
 		"docs/adr/0004-metric-label-set.md":        "history",
 		"adapters/export/README.md":                "not docs",
@@ -75,9 +93,21 @@ func TestRewriteLinks(t *testing.T) {
 		{"docs/adapters.md", "[w](https://opentelemetry.io/)", "[w](https://opentelemetry.io/)"},
 	}
 	for _, c := range cases {
-		if got := rewriteLine(root, c.src, pages, c.in); got != c.want {
-			t.Errorf("rewriteLine(%s, %q)\n got %q\nwant %q", c.src, c.in, got, c.want)
-		}
+		t.Run(c.in, func(t *testing.T) {
+			if got := rewriteLine(root, c.src, pages, c.in); got != c.want {
+				t.Errorf("rewriteLine(%s, %q)\n got %q\nwant %q", c.src, c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRewriteSkipsInlineCodeSpans(t *testing.T) {
+	root := writeRepo(t)
+	pages := collectPages(t, root)
+	in := "write `[label](money.md)` to link [money](money.md)"
+	want := "write `[label](money.md)` to link [money](money)"
+	if got := rewriteLine(root, "docs/quickstart.md", pages, in); got != want {
+		t.Errorf("inline code span rewritten:\n got %q\nwant %q", got, want)
 	}
 }
 
