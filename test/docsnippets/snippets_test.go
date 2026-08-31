@@ -82,6 +82,8 @@ type ProviderWebhook struct {
 	AmountMinor     int64
 }
 
+var accessKey, secretKey string
+
 func hash(s string) string                        { return "h:" + s }
 func body(ProviderWebhook) io.Reader              { return nil }
 func processWebhook(context.Context) error        { return nil }

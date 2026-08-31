@@ -145,7 +145,9 @@ the same PR. The docs-accuracy review rule flags departures.
 
 `docs/` is the source of truth and the wiki is a generated mirror —
 `test/wikisync` regenerates the whole page set on every push to main, so
-wiki-side edits are overwritten. A new page under `docs/` is mirrored
+wiki-side edits are overwritten. `docs/internal/` is the exception: it holds
+founder- and maintainer-facing records that have no reader on a public docs
+site, and the generator skips it. Everything else under `docs/` is mirrored
 automatically, which means it can be published with nothing linking to it,
 so every page must be reachable one of two ways: a new guide gets an entry
 in `test/wikisync`'s curated navigation, and a new ADR gets a row in

@@ -32,8 +32,15 @@ func pageName(p string) string {
 	return strings.ReplaceAll(p, "/", "-")
 }
 
+// notMirrored names directories under docs/ the wiki does not publish.
+// docs/internal holds founder- and maintainer-facing records (the go-public
+// checklist) that have no reader on a public docs site; mirroring them would
+// put project bookkeeping in the same nav as the guides.
+var notMirrored = map[string]bool{"docs/internal": true}
+
 // docPages returns repo-relative source path -> wiki page name for every
-// mirrored markdown file: README.md plus each .md under docs/.
+// mirrored markdown file: README.md plus each .md under docs/, except the
+// directories notMirrored names.
 func docPages(root string) (map[string]string, error) {
 	pages := map[string]string{}
 	owner := map[string]string{} // page name -> source path that claimed it
@@ -52,14 +59,24 @@ func docPages(root string) (map[string]string, error) {
 		}
 	}
 	err := filepath.WalkDir(filepath.Join(root, "docs"), func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+		if err != nil {
 			return err
 		}
 		rel, err := filepath.Rel(root, p)
 		if err != nil {
 			return err
 		}
-		return claim(filepath.ToSlash(rel))
+		rel = filepath.ToSlash(rel)
+		if d.IsDir() {
+			if notMirrored[rel] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".md") {
+			return nil
+		}
+		return claim(rel)
 	})
 	if err != nil {
 		return nil, err
@@ -154,9 +171,11 @@ var sections = []section{
 		{"adapters", "Backends & adapters"},
 		{"registry", "Registry"},
 		{"money", "Money & the legs"},
-		{"semconv", "Semantic conventions"},
 		{"performance", "Performance"},
+	}},
+	{"Specification", []navEntry{
 		{"portability", "Portability contract"},
+		{"semconv", "Semantic conventions (draft)"},
 	}},
 	{"Architecture", []navEntry{
 		{"architecture-README", "Overview"},
@@ -167,9 +186,6 @@ var sections = []section{
 	}},
 	{"Design decisions", []navEntry{
 		{"adr-README", "All decision records"},
-	}},
-	{"Project", []navEntry{
-		{"go-public-checklist", "Go-public checklist"},
 	}},
 }
 

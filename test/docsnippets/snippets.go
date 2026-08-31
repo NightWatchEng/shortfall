@@ -124,10 +124,12 @@ var importsFor = map[string]string{
 	"gcp":        "github.com/NightWatchEng/shortfall/adapters/export/gcp",
 	"otlp":       "github.com/NightWatchEng/shortfall/adapters/export/otlp",
 	"promexport": "github.com/NightWatchEng/shortfall/adapters/export/prometheus",
+	"cwinsights": "github.com/NightWatchEng/shortfall/adapters/query/cwinsights",
 	"gcplogging": "github.com/NightWatchEng/shortfall/adapters/query/gcplogging",
 	"promql":     "github.com/NightWatchEng/shortfall/adapters/query/promql",
 	"sqlq":       "github.com/NightWatchEng/shortfall/adapters/query/sql",
 	"promhttp":   "github.com/prometheus/client_golang/prometheus/promhttp",
+	"query":      "github.com/NightWatchEng/shortfall/query",
 	"sql":        "database/sql",
 	"http":       "net/http",
 	"context":    "context",
@@ -284,6 +286,7 @@ require (
 	github.com/NightWatchEng/shortfall/adapters/export/gcp v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/otlp v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/prometheus v0.0.0
+	github.com/NightWatchEng/shortfall/adapters/query/cwinsights v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/gcplogging v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/promql v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/sql v0.0.0
@@ -298,6 +301,8 @@ replace github.com/NightWatchEng/shortfall/adapters/export/gcp => ROOT/adapters/
 replace github.com/NightWatchEng/shortfall/adapters/export/otlp => ROOT/adapters/export/otlp
 
 replace github.com/NightWatchEng/shortfall/adapters/export/prometheus => ROOT/adapters/export/prometheus
+
+replace github.com/NightWatchEng/shortfall/adapters/query/cwinsights => ROOT/adapters/query/cwinsights
 
 replace github.com/NightWatchEng/shortfall/adapters/query/gcplogging => ROOT/adapters/query/gcplogging
 

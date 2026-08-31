@@ -161,6 +161,10 @@ door, so the report is deterministic:
 | Deferred value | the backlog the tracker publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`) |
 | Customer impact | distinct hashed customers, segments and top accounts, from the ingest stamps |
 
+That is what the *signals* support. Which of them you can actually read
+back depends on the query adapters you wire, and with the CloudWatch
+wiring above two of them are not readable — see §5.
+
 **Webhook Lambdas down.** The entry itself is dark, so no per-event
 telemetry exists — which is what the **unrealized loss** leg is for. The
 engine compares observed entry-stage volume against the seasonal
@@ -170,18 +174,53 @@ fraction the provider redelivers.
 
 ## 5. The report
 
-```sh
-shortfall impact \
-  --registry registry.yaml \
-  --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
-  --flow payment.webhook --format markdown \
-  --prometheus http://prometheus:9090
+This example exports through `cloudwatch.New()`, and that decides how you
+read it back. **The CLI is not the path here:** `shortfall impact` speaks
+only `--prometheus` and `--sql`, so it cannot reach CloudWatch at all.
+`cwinsights` is a library adapter, used from a small reporting job:
+
+```go
+import (
+    "github.com/NightWatchEng/shortfall/adapters/query/cwinsights"
+    rpt "github.com/NightWatchEng/shortfall/engine/report"
+)
+
+func writeImpact(ctx context.Context, reg *registry.Registry, from, to time.Time) error {
+    q := cwinsights.New("us-east-1", "/aws/lambda/webhooks", accessKey, secretKey)
+    rep, err := engine.Compute(ctx, reg, q, engine.Request{
+        Window: query.TimeRange{From: from, To: to},
+        Flows:  []string{"payment.webhook"},
+    })
+    if err != nil {
+        return err
+    }
+    fmt.Println(rpt.RenderMarkdown(rep))
+    return nil
+}
 ```
 
-The CloudWatch wiring above reads back through the `cwinsights` querier
-instead — an events-only adapter used as a library rather than a CLI
-flag: a small reporting job hands it to `engine.Compute` and renders the
-same report. It grounds the event legs. The metric-grounded legs need a
-metrics-capable querier — today that is `promql` — because the EMF
-metric families land in CloudWatch's metric store, which no shipped
-querier reads yet. See [backends](adapters.md) for the full matrix.
+`cwinsights` reads the EMF records the exporter already wrote to CloudWatch
+Logs. It declares `Caps{Events: true, Metrics: false}`, which decides
+exactly which legs you get:
+
+| Leg | With CloudWatch alone | Why |
+|---|---|---|
+| Realized loss | ✅ grounded | events carry the amount and `EntityID`, so de-dup is exact |
+| Customer impact | ✅ grounded | events carry the hashed customer and segment |
+| Deferred value | ⚠️ unavailable | needs the `biz_inflight_*` gauges; those land in CloudWatch's **metric** store, which no shipped querier reads |
+| Unrealized loss | ⚠️ unavailable | needs `biz_txn_total` history for the baseline, same reason |
+| Coverage | via `shortfall reconcile` | needs a provider ledger, not a backend |
+
+Those two legs come back marked unavailable with a reason — not as zero.
+For this example that is a real gap, because "the Lambdas are down" is
+precisely the unrealized leg's case.
+
+**To ground all four**, pair a metrics querier with the events one. Ship
+metrics through `adapters/export/otlp` to a collector that writes to a
+Prometheus-compatible store, then hand the engine one adapter per signal
+kind. The engine takes a single `query.Querier`, so the pairing is a small
+type of your own that routes `QueryMetric` to `promql` and `QueryEvents` to
+`cwinsights`, and takes each `Capabilities()` field from the backend that
+owns it — the CLI does exactly this behind `--prometheus` and `--sql`, but
+its `combined` type is unexported. See
+[backends & adapters](adapters.md) for the full matrix.

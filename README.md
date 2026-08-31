@@ -41,7 +41,7 @@ the kind of evidence behind it:
 | **Realized loss** | Terminally failed transactions, summed, de-duplicated by entity, net of anything that later succeeded | deterministic |
 | **Deferred value** | In-flight and backlogged value by age bucket, with the registry's SLA deciding what has become lost | deterministic |
 | **Unrealized loss** | Demand that never arrived, sized against a seasonal baseline — always a range | estimate |
-| **Customer impact** | Distinct entities, segments, top accounts | deterministic |
+| **Customer impact** | Distinct affected accounts, a per-segment breakdown, and the top accounts by failed value | deterministic |
 | **Coverage ratio** | Of the money the provider's ledger recorded, how much your telemetry also saw | trust |
 
 Coverage is what makes the other four defensible. It is computed per
@@ -118,6 +118,11 @@ de-duplication and customer impact. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. `shortfall reconcile --ledger` adds the coverage ratio.
 
+The CLI reads Prometheus and SQL. If you export to CloudWatch or Cloud
+Logging, as the snippet above does, you read back through that backend's
+query adapter from a small reporting job instead — same `engine.Compute`,
+same report. The [worked example](docs/example-webhooks.md) shows it.
+
 ## Design rules
 
 These are decisions, not defaults. If you disagree with one, you will
@@ -132,9 +137,9 @@ disagree with the library.
 - **Amounts and ids ride events, never metric labels.** Metric families
   carry a fixed label vocabulary; a customer id in a label set is an
   unbounded-cardinality incident waiting to happen (ADR-0004).
-- **A leg that cannot be grounded says so.** An events-only backend
-  reports the deferred leg as `NotAvailable` with a reason, because a
-  zero is a claim (ADR-0017).
+- **A leg that cannot be grounded says so.** On an events-only backend
+  the deferred leg comes back marked unavailable, with a caveat naming
+  why, because a zero is a claim (ADR-0017).
 - **No severity ladder in the registry means no severity suggestion.**
 - **PII is fenced in code.** Raw emails, PANs and IBANs are rejected at
   the `biz.*` boundary, not discouraged in a style guide.
@@ -165,9 +170,11 @@ The [wiki](https://github.com/NightWatchEng/shortfall/wiki) mirrors
 - [Backends & adapters](docs/adapters.md) — which backend grounds which leg.
 - [Registry](docs/registry.md) — every field of the flow registry.
 - [Money & the legs](docs/money.md) — what a "dollar" means here, for Finance.
-- [Semantic conventions](docs/semconv.md) — the `biz.*` attribute and metric shapes (draft).
 - [Performance](docs/performance.md) — scaling numbers and where they stop applying.
-- [Portability](docs/portability.md) — what another implementation must satisfy.
+
+**Specification**
+- [Portability contract](docs/portability.md) — what another implementation, or an external adapter, must satisfy.
+- [Semantic conventions](docs/semconv.md) — the `biz.*` attribute and metric shapes (draft).
 
 **Design**
 - [Architecture](docs/architecture/README.md) — C4 levels 1–3 and the money-path sequences.
