@@ -18,6 +18,9 @@ import (
 // the compile failure names it.
 var checkedDocs = map[string]string{
 	"README.md": "",
+	// The quickstart's fence is a complete program the reader runs; it
+	// needs no stub, and it must compile or the first five minutes fail.
+	"docs/quickstart.md": "",
 	"docs/adapters.md": `package docsnippet
 
 import (
@@ -177,6 +180,24 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 // TestExtractFences pins the parser's input/output behavior, unclosed
 // fences included — a fence the parser drops is a fence outside
 // governance.
+func TestStripPackageClause(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"complete program", "package main\n\nfunc main() {}\n", "\nfunc main() {}\n"},
+		{"leading comment then package", "// doc\npackage main\nx()\n", "x()\n"},
+		{"no package clause", "x := 1\n", "x := 1\n"},
+		{"package word inside code is not a clause", "call(\"package main\")\n", "call(\"package main\")\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := stripPackageClause(c.in); got != c.want {
+				t.Errorf("stripPackageClause(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestExtractFences(t *testing.T) {
 	cases := []struct {
 		name      string

@@ -139,6 +139,25 @@ var importsFor = map[string]string{
 	"time":       "time",
 }
 
+// stripPackageClause removes a fence's own `package X` line. A quickstart
+// shows a complete, copy-pasteable program, and the synthesized file
+// supplies its own package clause — two would not compile, which would
+// push exactly the fence a reader is most likely to run out of governance.
+func stripPackageClause(body string) string {
+	lines := strings.Split(body, "\n")
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "//") {
+			continue
+		}
+		if strings.HasPrefix(t, "package ") {
+			return strings.Join(lines[i+1:], "\n")
+		}
+		break
+	}
+	return body
+}
+
 // splitLeadingImports separates a fence's own leading import block from
 // the rest of its body. Docs that teach wiring open a fence with the
 // interesting imports and continue with statements ("mixed" fences);
@@ -200,7 +219,7 @@ func synthesize(f fence, n int, discard []string) string {
 	var b strings.Builder
 	b.WriteString("package docsnippet\n\n")
 
-	ownSpecs, body := splitLeadingImports(f.body)
+	ownSpecs, body := splitLeadingImports(stripPackageClause(f.body))
 	f.body = body
 
 	used := map[string]bool{}

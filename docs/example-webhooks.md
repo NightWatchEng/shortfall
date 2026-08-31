@@ -164,9 +164,10 @@ door, so the report is deterministic:
 | Deferred value | the backlog the tracker publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`) |
 | Customer impact | distinct hashed customers, segments and top accounts, from the ingest stamps |
 
-That is what the *signals* support. Which of them you can actually read
-back depends on the query adapters you wire, and with the CloudWatch
-wiring above two of them are not readable — see §5.
+That is what the *signals* support. Which of them you can read back
+depends on the query adapters you wire: with the CloudWatch wiring above,
+deferred value is the one leg in this table you cannot — and unrealized
+loss, the leg the next paragraph turns on, is the other. See §5.
 
 **Webhook Lambdas down.** The entry itself is dark, so no per-event
 telemetry exists — which is what the **unrealized loss** leg is for. The
@@ -204,16 +205,24 @@ func writeImpact(ctx context.Context, reg *registry.Registry, from, to time.Time
 ```
 
 `cwinsights` reads the EMF records the exporter already wrote to CloudWatch
-Logs. It declares `Caps{Events: true, Metrics: false}`, which decides
-exactly which legs you get:
+Logs. **One querier reads one log group** — `New` takes a single
+`logGroup` and sends it as the sole `logGroupName` — and this flow spans
+two systems: the Lambda writes `ingest` and payments-service writes
+`process`. Pointed at the Lambda's group alone, as above, the report covers
+the entry stage only. Ship both systems' EMF to one log group, or run a
+querier per group and merge, before reading the table below as covering the
+whole flow.
+
+It declares `Caps{Events: true, Metrics: false}`, which decides which legs
+you get:
 
 | Leg | With CloudWatch alone | Why |
 |---|---|---|
-| Realized loss | ✅ grounded | events carry the amount and `EntityID`, so de-dup is exact |
-| Customer impact | ✅ grounded | events carry the hashed customer and segment |
+| Realized loss | ✅ grounded, for the stages you read | events carry the amount and `EntityID`, so de-dup is exact |
+| Customer impact | ✅ grounded, for the stages you read | events carry the hashed customer and segment |
 | Deferred value | ⚠️ unavailable | needs the `biz_inflight_*` gauges; those land in CloudWatch's **metric** store, which no shipped querier reads |
 | Unrealized loss | ⚠️ unavailable | needs `biz_txn_total` history for the baseline, same reason |
-| Coverage | via `shortfall reconcile` | needs a provider ledger, not a backend |
+| Coverage | ✅ via `engine.Coverage` | takes the same events-only querier plus a ledger; **not** `shortfall reconcile`, which builds its querier from `--prometheus`/`--sql` exactly as `impact` does |
 
 Those two legs come back marked unavailable with a reason — not as zero.
 For this example that is a real gap, because "the Lambdas are down" is
