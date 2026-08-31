@@ -1,4 +1,4 @@
-## 7. What is still moving
+# 7. What is still moving
 
 Stated plainly, because a port needs to know where to expect churn more
 than it needs a comforting guarantee.

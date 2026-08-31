@@ -137,7 +137,7 @@ func TestDocGoFencesCompile(t *testing.T) {
 // TestDocRegistryFencesValidate loads every complete registry example
 // (version: + flows:, no "..." elision) through registry.Load.
 //
-// docs/portability.md is governed here but deliberately NOT in
+// docs/portability/registry.md is governed here but deliberately NOT in
 // checkedDocs: it specifies the cross-language contract for readers
 // writing Java and Python, so it carries no Go fences at all (and
 // checkedDocs fails a doc that has none). Its registry example still has
@@ -151,7 +151,7 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 		"docs/quickstart.md",
 		"docs/registry.md",
 		"docs/adapters.md",
-		"docs/portability.md",
+		"docs/portability/registry.md",
 		"docs/integration.md",
 	}
 	found := 0

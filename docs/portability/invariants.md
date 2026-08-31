@@ -1,4 +1,4 @@
-## 6. Behavioural invariants
+# 6. Behavioural invariants
 
 These are not data shapes, and a port that reproduces every byte above
 while breaking one of these has not ported shortfall. They are the

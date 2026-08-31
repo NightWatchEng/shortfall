@@ -1,4 +1,4 @@
-## 5. Metrics and the outcome event
+# 5. Metrics and the outcome event
 
 Governing ADRs: [ADR-0004](../adr/0004-metric-label-set.md) (label sets),
 [ADR-0002](../adr/0002-outcome-event-transport.md) (event transport and

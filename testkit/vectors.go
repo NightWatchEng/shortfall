@@ -48,7 +48,8 @@ const (
 const VectorsVersion = 1
 
 // VCErrorClasses are the biz.vc rejection classes the contract defines.
-// Each must be named in docs/portability.md and exercised by at least one
+// Each must be named somewhere in the portability contract — its index or
+// a chapter under docs/portability/ — and exercised by at least one
 // vector — both enforced in vectors_test.go.
 var VCErrorClasses = []string{
 	"oversize",

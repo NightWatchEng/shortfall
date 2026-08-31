@@ -1,4 +1,4 @@
-## 4. The flow registry
+# 4. The flow registry
 
 Governing ADRs: [ADR-0003](../adr/0003-value-context-propagation.md) (the
 propagation allowlist), [ADR-0004](../adr/0004-metric-label-set.md) (the

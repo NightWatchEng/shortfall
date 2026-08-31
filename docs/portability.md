@@ -57,14 +57,16 @@ through it on every CI run — the first two by `testkit/vectors_test.go`, the
 third by each event-capable exporter's own contract test, which
 `TestEveryExporterChecksTheEventContract` requires it to have. So the files,
 the Go code, and this document cannot drift apart silently. The
-same test asserts that every rejection class named below appears in this
-file — a class added to the vectors without a line here fails CI.
+same test asserts that every rejection class appears somewhere in this
+contract — index or chapter — so a class added to the vectors without a
+line documenting it fails CI.
 
 Two fields need explaining before you use them:
 
 - **`error`** is a stable rejection *class*. It is the portable part: your
   implementation MUST reject the same input, and SHOULD be able to say
-  which class it hit. Class names are listed in the tables below.
+  which class it hit. Class names are listed in the rejection tables of
+  parts 2 and 4.
 - **`reference_message`** is the Go implementation's exact diagnostic
   text. It is **not** part of the contract — it is recorded so that a
   wording change shows up as a reviewed diff instead of an invisible one.

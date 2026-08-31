@@ -1,4 +1,4 @@
-## 1. Money
+# 1. Money
 
 Governing ADR: [ADR-0001](../adr/0001-money-representation.md). Reader-facing
 explanation: [money.md](../money.md).

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command genvectors regenerates the committed conformance vectors —
-// the language-neutral, executable half of docs/portability.md. Run from
+// the language-neutral, executable half of the portability contract. Run from
 // the repo root:
 //
 //	go run ./testkit/cmd/genvectors
@@ -81,7 +81,7 @@ func unixOf(rfc3339 string) int64 {
 	return t.Unix()
 }
 
-// referenceVC is the worked example docs/portability.md walks through.
+// referenceVC is the worked example docs/portability/wire-codec.md walks through.
 func referenceVC() testkit.VC {
 	return testkit.VC{
 		Flow:         "invoice.pay",
@@ -125,7 +125,7 @@ func buildVCVectors() testkit.VCVectors {
 		name, note string
 		vc         testkit.VC
 	}{
-		{"reference", "the worked example in docs/portability.md", referenceVC()},
+		{"reference", "the worked example in docs/portability/wire-codec.md", referenceVC()},
 		{"no_optional_fields", "empty customer, empty segment, no deadline, flags 0", bare},
 		{"escaping_all_reserved", "every byte the escape rule covers: delimiter, escape, baggage-forbidden, space, control", esc},
 		{"utf8_escaped_bytewise", "escaping is over UTF-8 BYTES, not code points or UTF-16 units", utf8VC},

@@ -1,4 +1,4 @@
-## 8. Conformance checklist
+# 8. Conformance checklist
 
 A claim of parity means all of these, in order. Anything less is an
 assertion.
@@ -26,9 +26,9 @@ assertion.
 
 **Propagation**
 
-- [ ] the operations in 3.1 carry the in-scope context
-- [ ] the context survives every boundary in 3.2
-- [ ] the egress fence in 3.5 holds, including the strip-and-rebuild
+- [ ] the operations in [3.1](propagation.md#31-operations-that-must-carry-the-value-context) carry the in-scope context
+- [ ] the context survives every boundary in [3.2](propagation.md#32-boundaries-the-context-must-survive)
+- [ ] the egress fence in [3.5](propagation.md#35-the-egress-fence) holds, including the strip-and-rebuild
       behaviour and the per-redirect re-evaluation
 - [ ] every `host_allowlist` vector matches
 - [ ] a failed injection is loud
@@ -43,9 +43,9 @@ assertion.
 
 **Metrics and events**
 
-- [ ] exactly the six families of 5.2, with exactly their label sets
+- [ ] exactly the six families of [5.2](telemetry.md#52-metric-families), with exactly their label sets
 - [ ] the frozen value enumerations
-- [ ] the label fallbacks of 5.3
+- [ ] the label fallbacks of [5.3](telemetry.md#53-label-fallbacks)
 - [ ] ids never appear on a metric
 - [ ] counter points are deltas stamped with the observation's own time
 - [ ] the PII guard covers entity id, customer id, source, and error text

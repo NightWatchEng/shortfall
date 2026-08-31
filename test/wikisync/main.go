@@ -219,9 +219,11 @@ var indexes = []indexed{
 	{"portability-", "docs/portability.md"},
 }
 
-// indexFor returns the index owning page, if any. The index page itself
-// carries no prefix of its own — docs/portability.md is "portability",
-// not "portability-…" — so it never matches and stays curated.
+// indexFor returns the index owning page, if any. An index page may match
+// its own prefix — docs/adr/README.md is the page adr-README — so callers
+// compare the source path against ix.src to keep the index itself on the
+// curated route. Exempting it there instead would let one deleted nav line
+// orphan the whole set behind it.
 func indexFor(page string) (indexed, bool) {
 	for _, ix := range indexes {
 		if strings.HasPrefix(page, ix.prefix) {
@@ -235,9 +237,9 @@ func indexFor(page string) (indexed, bool) {
 // navFor renders the curated navigation, and fails on a page nothing would
 // link to. A new doc under docs/ is mirrored automatically, so without this
 // the wiki grows pages reachable only by URL (CONTRIBUTING, "Documentation
-// accuracy"). A page is reachable two ways: a nav section names it, or it
-// is an ADR the ADR index links — and the index itself takes the first
-// route, so nothing is exempt.
+// accuracy"). A page is reachable two ways: a nav section names it, or an
+// index in indexes links it. Every index takes the first route itself, so
+// nothing is exempt.
 func navFor(root string, pages map[string]string) (string, error) {
 	linked := map[string]map[string]bool{}
 	for _, ix := range indexes {
@@ -251,6 +253,8 @@ func navFor(root string, pages map[string]string) (string, error) {
 
 	uncovered := make(map[string]string, len(pages)) // page -> why it is unreachable
 	for src, page := range pages {
+		// src != ix.src keeps an index page curated even when its own name
+		// carries the prefix; see indexFor.
 		if ix, ok := indexFor(page); ok && src != ix.src {
 			if !linked[ix.src][path.Base(src)] {
 				uncovered[page] = "link it from " + ix.src

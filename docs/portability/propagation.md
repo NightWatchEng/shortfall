@@ -1,4 +1,4 @@
-## 3. Context propagation
+# 3. Context propagation
 
 Governing ADR: [ADR-0003](../adr/0003-value-context-propagation.md).
 

@@ -1,4 +1,4 @@
-## 2. The `biz.vc` wire codec
+# 2. The `biz.vc` wire codec
 
 Governing ADR: [ADR-0003](../adr/0003-value-context-propagation.md).
 

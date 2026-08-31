@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package eventline decodes the exporters' shared biz.* outcome line — the
-// JSON shape the CloudWatch EMF exporter writes (docs/semconv.md) — back
+// JSON shape the CloudWatch EMF exporter writes (docs/internal/semconv.md) — back
 // into a biz.Outcome. It is the read half of that convention: the
 // log-store querier (cwinsights) fetches raw lines, parses them here, and
 // delegates aggregation to the memq reference.
