@@ -15,6 +15,7 @@ take, and **the visibility flip itself is the founder's alone**.
 | SECURITY.md | ✅ | `SECURITY.md` — private advisory reporting; webhook signatures, PII guard, egress allowlist, and secret handling named in scope |
 | Name clearance: GitHub account/repo | ✅ | `github.com/NightWatchEng/shortfall` exists and is ours (NightWatchEng is a personal account, not an org) |
 | Name clearance: pkg.go.dev | ⏳ at flip | pkg.go.dev indexes on first public fetch; the module path is unclaimed by others by construction (it is this repo's path) |
+| Name clearance: Go ecosystem | ✅ first pass only | no module-path or well-known-package collision found in a first-pass search; a first pass is not clearance, and it does not substitute for the trademark row below |
 | Name clearance: trademark search | 👤 **founder** | a real clearance search is a legal judgment; not executed by automation |
 | Employer IP review email | 👤 **founder** | a personal action ("one email now beats a problem later") |
 | Versioning policy stated | ✅ | README **Status**: v0.x instability; v1.0.0 only after the frozen interfaces survive two external adapters |
