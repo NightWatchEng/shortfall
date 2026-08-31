@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "666d936df45ca2d2f515ff3bd8b3c8c8f7434908",
+  "base_sha": "42c08cb34f8c8beab016b2409a7389057228a29c",
+  "rules_version": "665bf6d03117",
+  "reviewed_at": "2026-08-31T01:09:24+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude sonnet, headless isolated process (trivial doc-only diff: combined reviewer+examiner pass per protocol; fork agent cannot spawn subagents). Verified the credential claim against .github/workflows/ci.yml, template agreement, and swept all docs for contradicting contribution-flow wording."
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same combined pass \u2014 self-adversarial refutation only. With zero candidate findings this round carried no independent judgment (single-finder round: a loop, not a gauntlet, per graph.yaml's declared topology)."
+    }
+  ],
+  "records": []
+}
