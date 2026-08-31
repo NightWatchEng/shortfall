@@ -1,0 +1,18 @@
+{
+  "bead": "workspace-5f4",
+  "head_sha": "87593ab50605008a385da09da3b7785044a96828",
+  "base_sha": "87593ab50605008a385da09da3b7785044a96828",
+  "rules_version": "665bf6d03117",
+  "decided_at": "2026-08-31T00:21:59+00:00",
+  "decided": "workspace-5f4: ci-go.sh's fmt scan logic is CORRECT and stays untouched; the fix is auditability \u2014 every run now prints the resolved root it scans, so a wrong-tree invocation is visible in the transcript instead of silently green. workspace-53y: the commit/PR-title convention gains ONE multi-id form \u2014 space-separated ids inside the existing parens, '(workspace-a workspace-b)' \u2014 comma forms remain rejected, the 100-byte cap is unchanged.",
+  "why": "5f4 was root-caused by direct repro: the exact pre-fix otlp_test.go from PR #106 (commit cb45c90) IS flagged by ./scripts/ci-go.sh fmt locally \u2014 same go1.27.0/gofmt as CI, tested in both the repo checkout and an agent worktree (exit 1, file printed twice: nested-module pass and root recursive pass). The reported local green therefore cannot have run against a tree containing that content; worktree agents inherit absolute parent-repo paths, making a wrong-tree run the one remaining explanation, and today the script's output does not say which root it scanned, so that mistake is undetectable after the fact. 53y: one canonical separator keeps every downstream consumer trivial \u2014 ids remain extractable as /workspace-[a-z0-9.]+/g regardless of count \u2014 and a single-space separator costs the fewest bytes under the cap.",
+  "cost_if_wrong": "5f4: if a genuine scan bug exists that this session failed to reproduce, the divergence recurs \u2014 but the new root line then localizes it to a tree and a run immediately, which is exactly the evidence PR #106's incident lacked. 53y: if the space-separated form proves awkward, the regex alternation is one line to amend and every already-merged single-id title stays valid; the risk of a too-loose regex admitting garbage is pinned by new negative test cases.",
+  "alternatives": [
+    "5f4: rewrite the fmt walk to iterate git ls-files per module \u2014 rejected: changes a mechanism proven correct on an unreproduced theory",
+    "5f4: trap-based diagnostics dumping env on failure \u2014 rejected: heavier, same visibility for more surface",
+    "53y: comma-separated ids \u2014 rejected: a second separator byte per id and a wider char class; this script's history (byte-vs-char cap) argues for minimal syntax",
+    "53y: accept both comma and space \u2014 rejected: two canonical spellings of one convention is exactly the drift review-charter item 8 exists to prevent",
+    "53y: leave titles single-id and rely on PR bodies \u2014 rejected: the founder's bundling instruction makes the squash header the audit record on main, and it should name every bead it closes"
+  ],
+  "scope": "scripts/ci-go.sh (one output line), scripts/commit-lint.sh (regex alternation + usage text), scripts/commit-lint-test.sh (new positive/negative cases), CONTRIBUTING.md (convention wording). Gate-surface edit, sanctioned because both tracked items are explicitly CI/policy items."
+}

@@ -12,9 +12,10 @@ Delete a comment block once you have filled its section in.
 ## Tracked item
 
 <!--
-The id that authorises this change, e.g. `workspace-abc`. If no tracked item
-applies, write `no-bead: <reason>` — the same form the commit header takes
-(CONTRIBUTING.md, "Commits"). The id belongs in the commit header and here,
+The id that authorises this change, e.g. `workspace-abc` — or every id a
+bundled PR closes, single-space separated, e.g. `workspace-a workspace-b`.
+If no tracked item applies, write `no-bead: <reason>` — the same forms the
+commit header takes (CONTRIBUTING.md, "Commits"). The id belongs in the commit header and here,
 and never in a code comment (docs/adr/0014-go-readability-conventions.md).
 -->
 

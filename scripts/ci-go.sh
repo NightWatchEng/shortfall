@@ -132,6 +132,13 @@ run_lint() {
 # basename, so a stray 'djangogo.mod' never matches).
 modules="$(cd "$root" && git ls-files 'go.mod' '*/go.mod')"
 
+# Name the tree being checked. A run in the wrong checkout (an agent
+# worktree's inherited absolute paths point at the parent repo, for one) is
+# otherwise indistinguishable from a green run on the right one; a local
+# pass that CI then contradicts needs this line to be explainable after
+# the fact.
+echo "ci-go.sh: $mode under $root" >&2
+
 count=0
 fail=0
 for modfile in $modules; do

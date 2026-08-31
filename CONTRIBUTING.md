@@ -52,7 +52,10 @@ in-flight bucketing, engine `Compute`, baseline fit) carry Go benchmarks.
 
 Conventional commits: `type: summary (tracked-item-id)`, or
 `type: summary (no-bead: reason)` when no tracked item applies — the id
-lives in the commit header and the PR body, never in code comments. Types:
+lives in the commit header and the PR body, never in code comments. A PR
+that closes several tracked items lists every id in the one parens,
+single-space separated: `fix: close both (workspace-a workspace-b)` — that
+is the only multi-id spelling; commas are rejected. Types:
 feat, fix, docs, chore, test, refactor, perf, ci, build, revert — no
 scopes. Title cap: 100 bytes (bytes, not characters, so macOS and CI
 agree); squash merge appends ` (#N)` on main, which sits outside the cap.
