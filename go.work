@@ -37,4 +37,6 @@ use ./test/loggolden
 
 use ./test/docsnippets
 
+use ./test/licensehdr
+
 use ./adapters/query/gcplogging

@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package conformance is the exporter conformance suite: the invariants
 // every emit.Exporter must honor, run against a concrete exporter through a
 // harness the adapter provides. It lives in the core module and imports only

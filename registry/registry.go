@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package registry loads and validates the flow registry: the versioned,
 // Finance-co-signed YAML that answers up front the five questions
 // otherwise relitigated during every incident — what counts as money,

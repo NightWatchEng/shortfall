@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package loggolden proves the log-store querier returns the same
 // EventGroups as the in-memory reference for a golden scenario's real
 // export wire format: the cloudwatch exporter's EMF records put into a

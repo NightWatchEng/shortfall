@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package query defines the only questions the engine may ask a backend:
 // sum, count, group-by, and time range over metrics, and filter, group-by,
 // order and distinct-count over events. Query adapters translate this

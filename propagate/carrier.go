@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package propagate carries ValueContext across message queues as one
 // header — the biz.vc member (ADR-0003) — so async consumers re-attach
 // the same context. It defines the Carrier seam (Get/Set/Keys over

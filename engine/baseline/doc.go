@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package baseline estimates expected stage-entry volume with an interval —
 // the counterfactual the unrealized leg measures loss against. v0 is the
 // hour-of-week robust median of ADR-0006: explainable to Finance in one

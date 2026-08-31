@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package amqp carries ValueContext across AMQP header tables without
 // importing an AMQP client library. AMQP headers are a Table
 // (map[string]interface{}); this package adapts that shape directly, so a

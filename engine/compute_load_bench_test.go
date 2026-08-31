@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 //go:build benchload
 
 // The engine.Compute scaling series, deliberately kept out of the PR gate.

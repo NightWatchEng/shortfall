@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package checkout is the synthetic reference system: a three-stage
 // payment lifecycle (auth, capture, settle) with seeded traffic on an
 // hour-of-week curve, fault-injection knobs for the degradation loci,

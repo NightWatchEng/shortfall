@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package testkit runs harness scenarios against ground truth and turns a
 // simulation result into the expected impact numbers the engine is judged
 // against. The exporter conformance suite every adapter must pass lives in

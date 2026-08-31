@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package prometheus is a metrics-only shortfall exporter: it maps the
 // bounded biz_* metric families (ADR-0004) onto native
 // prometheus/client_golang collectors, so a Prometheus shop scrapes

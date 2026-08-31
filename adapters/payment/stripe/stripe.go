@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package stripe adapts Stripe to shortfall on two paths: an inbound webhook
 // receiver (webhook.go) that verifies the Stripe-Signature and maps events to
 // biz.Outcome, and an outbound stripe.Backend decorator (client.go) that

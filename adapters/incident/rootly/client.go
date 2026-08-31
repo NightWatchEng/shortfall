@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package rootly writes a shortfall impact summary into a Rootly incident.
 // Rootly is a consumer of the number, not a producer: this is a thin writer
 // over the JSON:API incident update — a plain *http.Client, no SDK, base

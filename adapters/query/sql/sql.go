@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package sql is an events-only query.Querier over a SQL table of outcome
 // events (the ledger the reconciler also writes). It implements QueryEvents
 // with parameterized GROUP BY / SUM / COUNT / COUNT(DISTINCT) matching the

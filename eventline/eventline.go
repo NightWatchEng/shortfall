@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package eventline decodes the exporters' shared biz.* outcome line — the
 // JSON shape the CloudWatch EMF exporter writes (docs/semconv.md) — back
 // into a biz.Outcome. It is the read half of that convention: the

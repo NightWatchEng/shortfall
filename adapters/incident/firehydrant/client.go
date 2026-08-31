@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package firehydrant writes a shortfall impact summary into a FireHydrant
 // incident. FireHydrant is a consumer of the number, not a producer: a thin
 // writer over PATCH /v1/incidents — plain *http.Client, no SDK, base URL

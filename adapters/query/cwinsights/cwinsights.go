@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package cwinsights is an events-only query.Querier backed by CloudWatch
 // Logs Insights: it queries the log group the cloudwatch exporter's EMF
 // records land in, keeps only the records marked event="biz.outcome" (the

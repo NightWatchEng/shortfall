@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package cloudwatch is a CloudWatch exporter built on the Embedded Metric
 // Format: it writes EMF JSON records (metrics and outcome events) to an
 // io.Writer — os.Stdout under the CloudWatch agent, or a log stream via

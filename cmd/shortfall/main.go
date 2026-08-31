@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Command shortfall is the CLI: validate a flow registry, compute an
 // impact report for an incident window, reconcile telemetry against a
 // ledger. The arg surface stays hand-rolled

@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package promql is a metrics-only query.Querier backed by a Prometheus HTTP
 // API endpoint. It translates the frozen query AST into PromQL chosen to match
 // the in-memory reference (query/memq) rather than PromQL's rate helpers:

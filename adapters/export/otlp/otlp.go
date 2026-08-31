@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package otlp exports shortfall's two signal kinds over OpenTelemetry:
 // bounded metrics through the OTLP metric exporter and per-transaction
 // outcome events through the OTLP Log exporter (event.name=biz.outcome),

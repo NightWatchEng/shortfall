@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package slack posts a shortfall impact report to a Slack channel and keeps it
 // fresh while an incident is open.
 //
