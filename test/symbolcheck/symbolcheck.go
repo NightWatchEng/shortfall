@@ -139,6 +139,7 @@ var allowSelectors = map[string]string{
 	"context.Context":   "stdlib: what the value context rides on",
 	"http.Client":       "stdlib net/http: what the egress fence wraps",
 	"http.RoundTripper": "stdlib net/http: the interface the fence implements",
+	"math.Exp":          "stdlib: the harness's arrival sampling; its cross-platform variance is why the demo's figures are platform-qualified",
 	"sync.Mutex":        "stdlib: named in the contention discussion",
 
 	"decimal.Decimal":           "shopspring/decimal: the Go answer to Java BigDecimal",
