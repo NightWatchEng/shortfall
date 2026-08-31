@@ -76,6 +76,7 @@ func LoadScenario(path string) (Scenario, error) {
 	if err != nil {
 		return Scenario{}, fmt.Errorf("scenario %s: %w", path, err)
 	}
+
 	return ParseScenario(raw)
 }
 
@@ -87,9 +88,11 @@ func ParseScenario(raw []byte) (Scenario, error) {
 	if err := dec.Decode(&doc); err != nil {
 		return Scenario{}, fmt.Errorf("scenario: %w", err)
 	}
+
 	if doc.Name == "" {
 		return Scenario{}, fmt.Errorf("scenario: name is required")
 	}
+
 	if !doc.Start.Before(doc.End) {
 		return Scenario{}, fmt.Errorf("scenario %s: window [%v, %v) is empty or inverted", doc.Name, doc.Start, doc.End)
 	}
@@ -107,18 +110,22 @@ func ParseScenario(raw []byte) (Scenario, error) {
 		if p == nil {
 			return 0, nil // absent: Run applies the default
 		}
+
 		if *p <= 0 {
 			return 0, fmt.Errorf("scenario %s: %s: %d is not expressible — a down consumer is a queue-consumer-stall fault over the window, not a capacity", doc.Name, field, *p)
 		}
+
 		return *p, nil
 	}
 	var err error
 	if cfg.CaptureCapacityPerMin, err = capKnob("capture_capacity_per_min", doc.CaptureCapacityPerMin); err != nil {
 		return Scenario{}, err
 	}
+
 	if cfg.SettleCapacityPerMin, err = capKnob("settle_capacity_per_min", doc.SettleCapacityPerMin); err != nil {
 		return Scenario{}, err
 	}
+
 	for i, fd := range doc.Faults {
 		f := FaultSpec{
 			Kind:              fd.Kind,
@@ -133,32 +140,42 @@ func ParseScenario(raw []byte) (Scenario, error) {
 			if err != nil {
 				return Scenario{}, fmt.Errorf("scenario %s: faults[%d].recovery_within: %w", doc.Name, i, err)
 			}
+
 			f.RecoveryWithin = d
 		}
+
 		if err := f.Validate(); err != nil {
 			return Scenario{}, fmt.Errorf("scenario %s: faults[%d]: %w", doc.Name, i, err)
 		}
+
 		if f.From.Before(doc.Start) || f.To.After(doc.End) {
 			return Scenario{}, fmt.Errorf("scenario %s: faults[%d]: window [%v, %v) outside the run window", doc.Name, i, f.From, f.To)
 		}
+
 		cfg.Faults = append(cfg.Faults, f)
 	}
+
 	sc := Scenario{Name: doc.Name, Config: cfg}
 	if doc.Golden != nil {
 		if !doc.Golden.From.Before(doc.Golden.To) {
 			return Scenario{}, fmt.Errorf("scenario %s: golden window [%v, %v) is empty or inverted", doc.Name, doc.Golden.From, doc.Golden.To)
 		}
+
 		if doc.Golden.From.Before(doc.Start) || doc.Golden.To.After(doc.End) {
 			return Scenario{}, fmt.Errorf("scenario %s: golden window outside the run window", doc.Name)
 		}
+
 		if !doc.Golden.From.Equal(doc.Golden.From.Truncate(time.Minute)) || !doc.Golden.To.Equal(doc.Golden.To.Truncate(time.Minute)) {
 			return Scenario{}, fmt.Errorf("scenario %s: golden window [%v, %v) must be minute-aligned — off-grid bounds silently shift window membership and the snapshot", doc.Name, doc.Golden.From, doc.Golden.To)
 		}
+
 		d, err := time.ParseDuration(doc.Golden.CaptureSLA)
 		if err != nil || d <= 0 {
 			return Scenario{}, fmt.Errorf("scenario %s: golden.capture_sla: %q invalid", doc.Name, doc.Golden.CaptureSLA)
 		}
+
 		sc.Golden = GoldenWindow{From: doc.Golden.From, To: doc.Golden.To, CaptureSLA: d}
 	}
+
 	return sc, nil
 }

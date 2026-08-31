@@ -38,6 +38,7 @@ func TestDocPagesRejectsColliding(t *testing.T) {
 	if err := os.WriteFile(clash, []byte("impostor"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := docPages(root); err == nil {
 		t.Fatal("docPages accepted two sources mapping to one wiki page")
 	} else if !strings.Contains(err.Error(), "adr-0004-metric-label-set") {
@@ -67,10 +68,12 @@ func writeRepo(t *testing.T) string {
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
+
 		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	return root
 }
 
@@ -122,6 +125,7 @@ func TestRewriteSkipsCodeFences(t *testing.T) {
 	if !strings.Contains(got, "// [m](money.md) stays verbatim") {
 		t.Errorf("fenced content was rewritten:\n%s", got)
 	}
+
 	if strings.Count(got, "](money)") != 2 {
 		t.Errorf("prose links not rewritten twice:\n%s", got)
 	}
@@ -133,6 +137,7 @@ func TestGenerateEmitsEveryPagePlusHomeAndSidebar(t *testing.T) {
 	if err := generate(root, out); err != nil {
 		t.Fatal(err)
 	}
+
 	for _, want := range []string{
 		"Home.md", "_Sidebar.md", "README.md",
 		"quickstart.md", "money.md", "adapters.md",
@@ -142,20 +147,25 @@ func TestGenerateEmitsEveryPagePlusHomeAndSidebar(t *testing.T) {
 			t.Errorf("missing generated page %s", want)
 		}
 	}
+
 	body, err := os.ReadFile(filepath.Join(out, "quickstart.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(string(body), "docs/quickstart.md") || !strings.Contains(string(body), "source of truth") {
 		t.Errorf("mirrored page lacks source-of-truth footer:\n%s", body)
 	}
+
 	home, err := os.ReadFile(filepath.Join(out, "Home.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(string(home), "[Quickstart](quickstart)") {
 		t.Errorf("Home navigation misses quickstart:\n%s", home)
 	}
+
 	if !strings.Contains(string(home), "### Start here") {
 		t.Errorf("Home navigation lost its curated sections:\n%s", home)
 	}
@@ -206,6 +216,7 @@ func TestNavRefusesAnUnreachablePage(t *testing.T) {
 			if err == nil {
 				t.Fatal("generate accepted a page nothing links to")
 			}
+
 			if !strings.Contains(err.Error(), c.wantNamed) {
 				t.Errorf("error does not name the unreachable page %q: %v", c.wantNamed, err)
 			}
@@ -220,6 +231,7 @@ func writeDoc(t *testing.T, root, rel, body string) {
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -239,8 +251,10 @@ func withoutNavEntry(t *testing.T, page string) {
 				kept = append(kept, e)
 			}
 		}
+
 		trimmed = append(trimmed, section{title: s.title, entries: kept})
 	}
+
 	sections = trimmed
 }
 
@@ -253,15 +267,18 @@ func TestDocsInternalIsNotMirrored(t *testing.T) {
 	if err := generate(root, out); err != nil {
 		t.Fatalf("generate rejected a tree with docs/internal: %v", err)
 	}
+
 	for _, name := range []string{"internal-go-public-checklist.md", "go-public-checklist.md"} {
 		if _, err := os.Stat(filepath.Join(out, name)); err == nil {
 			t.Errorf("docs/internal was mirrored as %s", name)
 		}
 	}
+
 	nav, err := os.ReadFile(filepath.Join(out, "_Sidebar.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if strings.Contains(string(nav), "go-public-checklist") {
 		t.Errorf("internal record reached the sidebar:\n%s", nav)
 	}
@@ -278,13 +295,16 @@ func TestThisRepoNavigationCoversEveryPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	pages, err := docPages(root)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(pages) == 0 {
 		t.Fatal("docPages found no docs in this repo — the check would be vacuous")
 	}
+
 	if _, err := navFor(root, pages); err != nil {
 		t.Errorf("this repository has %v", err)
 	}
@@ -296,5 +316,6 @@ func collectPages(t *testing.T, root string) map[string]string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return pages
 }

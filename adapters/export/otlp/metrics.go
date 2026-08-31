@@ -57,9 +57,11 @@ func buildResourceMetrics(batch []emit.MetricPoint, res *resource.Resource) (*me
 		if !gaugeFamilies[p.Name] && !counterFamilies[p.Name] {
 			return nil, &unknownFamilyError{name: p.Name}
 		}
+
 		if _, seen := byName[p.Name]; !seen {
 			order = append(order, p.Name)
 		}
+
 		byName[p.Name] = append(byName[p.Name], metricdata.DataPoint[int64]{
 			Attributes: attrsOf(p.Labels),
 			Time:       p.At,
@@ -80,6 +82,7 @@ func buildResourceMetrics(batch []emit.MetricPoint, res *resource.Resource) (*me
 				IsMonotonic: true,
 			}
 		}
+
 		metrics = append(metrics, metricdata.Metrics{Name: name, Data: data})
 	}
 
@@ -104,6 +107,7 @@ func defaultResource() *resource.Resource {
 	if err != nil || host == "" {
 		host = "unknown"
 	}
+
 	return resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName("shortfall"),
@@ -119,5 +123,6 @@ func attrsOf(labels map[string]string) attribute.Set {
 	for k, v := range labels {
 		kvs = append(kvs, attribute.String(k, v))
 	}
+
 	return attribute.NewSet(kvs...)
 }

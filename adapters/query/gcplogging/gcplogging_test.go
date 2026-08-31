@@ -48,6 +48,7 @@ func TestCapabilities(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if got := q.Capabilities(); got != c.want {
 				t.Fatalf("caps = %+v, want %+v", got, c.want)
 			}
@@ -62,10 +63,12 @@ func TestQueryMetricIsUnsupported(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	series, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_value_total"})
 	if !errors.Is(err, query.ErrUnsupported) {
 		t.Fatalf("err = %v, want query.ErrUnsupported", err)
 	}
+
 	if series != nil {
 		t.Fatalf("series = %v, want nil alongside ErrUnsupported", series)
 	}
@@ -131,12 +134,15 @@ func TestGeneratedSQL(t *testing.T) {
 		if mode, _ := srv.lastBody["parameterMode"].(string); mode != "NAMED" {
 			t.Fatalf("parameterMode = %q, want NAMED", mode)
 		}
+
 		if legacy, _ := srv.lastBody["useLegacySql"].(bool); legacy {
 			t.Fatal("useLegacySql must be false — the statement is GoogleSQL")
 		}
+
 		if loc, _ := srv.lastBody["location"].(string); loc != "us" {
 			t.Fatalf("location = %q, want us", loc)
 		}
+
 		if srv.lastAuth != "Bearer ya29.test" {
 			t.Fatalf("Authorization = %q", srv.lastAuth)
 		}
@@ -195,9 +201,11 @@ func TestWindowBoundsStayASuperset(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
+
 			if got := srv.lastParams["@window_from"]; got != c.wantFrom {
 				t.Fatalf("@window_from = %q, want %q", got, c.wantFrom)
 			}
+
 			if got := srv.lastParams["@window_to"]; got != c.want {
 				t.Fatalf("@window_to = %q, want %q", got, c.want)
 			}
@@ -220,6 +228,7 @@ func TestSubMicrosecondWindowKeepsTheBoundaryEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(groups) != 1 || groups[0].Count != 1 || groups[0].SumMinor != 14900 {
 		t.Fatalf("groups = %+v, want the boundary event (the reference admits it: %v < %v)",
 			groups, edge, end)
@@ -235,15 +244,18 @@ func TestServerWaitFitsInsideTheClientDeadline(t *testing.T) {
 	if serverWait >= defaultHTTPTimeout {
 		t.Fatalf("serverWait %v must be below the client deadline %v", serverWait, defaultHTTPTimeout)
 	}
+
 	if margin := defaultHTTPTimeout - serverWait; margin < 10*time.Second {
 		t.Fatalf("margin %v is too tight: connect, TLS and body read all share the client deadline", margin)
 	}
+
 	srv := newFakeBigQuery(t, nil)
 	if _, err := srv.querier(t).QueryEvents(context.Background(), query.EventQuery{
 		Range: window(), Filters: map[string]string{"currency": "USD"},
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 	if got, _ := srv.lastBody["timeoutMs"].(float64); int64(got) != serverWait.Milliseconds() {
 		t.Fatalf("request timeoutMs = %v, want serverWait %v", got, serverWait.Milliseconds())
 	}
@@ -258,6 +270,7 @@ func TestWithViewNamesTheView(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 	mustContain(t, srv.lastQuery, "FROM `my-project.logs_analytics.outcomes_view`")
 }
 
@@ -301,8 +314,10 @@ func TestIdentifierValidation(t *testing.T) {
 				if err != nil {
 					t.Fatalf("err = %v, want nil", err)
 				}
+
 				return
 			}
+
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 			}
@@ -347,8 +362,10 @@ func TestUnknownLabelIsRefused(t *testing.T) {
 				if err != nil {
 					t.Fatalf("err = %v, want nil", err)
 				}
+
 				return
 			}
+
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 			}
@@ -388,13 +405,16 @@ func TestCurrencyInvariant(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(groups) != 2 {
 			t.Fatalf("groups = %+v, want one per currency", groups)
 		}
+
 		byCur := map[string]int64{}
 		for _, g := range groups {
 			byCur[g.Key["currency"]] = g.SumMinor
 		}
+
 		if byCur["USD"] != 14900 || byCur["EUR"] != 5000 {
 			t.Fatalf("per-currency sums = %v, want USD 14900 and EUR 5000", byCur)
 		}
@@ -407,6 +427,7 @@ func TestCurrencyInvariant(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(groups) != 1 || groups[0].Count != 2 {
 			t.Fatalf("groups = %+v, want one group counting 2 distinct customers", groups)
 		}
@@ -421,6 +442,7 @@ func TestPagingAndPollingCollectEveryRow(t *testing.T) {
 		events = append(events, outcome("invoice.pay", "capture", "failed",
 			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", int64(100*(i+1)), from.Add(time.Duration(i)*time.Minute)))
 	}
+
 	srv := newFakeBigQuery(t, entriesFor(events))
 	srv.pageSize = 3
 	srv.stallOnce = true
@@ -432,9 +454,11 @@ func TestPagingAndPollingCollectEveryRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(groups) != 1 {
 		t.Fatalf("groups = %+v, want 1", groups)
 	}
+
 	if groups[0].Count != 7 || groups[0].SumMinor != 2800 { // 100+200+...+700
 		t.Fatalf("group = %+v, want count 7 sum 2800", groups[0])
 	}
@@ -449,6 +473,7 @@ func TestTruncationIsLoud(t *testing.T) {
 		events = append(events, outcome("invoice.pay", "capture", "failed",
 			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", 100, from.Add(time.Duration(i)*time.Minute)))
 	}
+
 	// pageSize 0 means "one page"; the cases that set it force the cap and
 	// the paging loop to interact, which is where the loop's own bound
 	// (len(all) <= maxRows) lives. Without a case that crosses a page
@@ -474,6 +499,7 @@ func TestTruncationIsLoud(t *testing.T) {
 			if c.pageSize > 0 {
 				srv.pageSize = c.pageSize
 			}
+
 			groups, err := srv.querier(t, WithMaxRows(c.maxRows)).QueryEvents(context.Background(), query.EventQuery{
 				Range: window(), Filters: map[string]string{"currency": "USD"},
 			})
@@ -481,18 +507,23 @@ func TestTruncationIsLoud(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 					t.Fatalf("err = %v, want a loud truncation error", err)
 				}
+
 				if groups != nil {
 					t.Fatalf("groups = %+v, want nil alongside the truncation error", groups)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatalf("err = %v, want nil", err)
 			}
+
 			var sum int64
 			for _, g := range groups {
 				sum += g.SumMinor
 			}
+
 			if sum != c.wantSum {
 				t.Fatalf("sum = %d, want %d — the whole window, not a truncated part of it", sum, c.wantSum)
 			}
@@ -509,6 +540,7 @@ func TestPagingFailuresAreLoud(t *testing.T) {
 		events = append(events, outcome("invoice.pay", "capture", "failed",
 			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", 100, from.Add(time.Duration(i)*time.Minute)))
 	}
+
 	cases := []struct {
 		name      string
 		configure func(*fakeBigQuery)
@@ -536,6 +568,7 @@ func TestPagingFailuresAreLoud(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 			}
+
 			if groups != nil {
 				t.Fatalf("groups = %+v, want nil rather than a partial answer", groups)
 			}
@@ -553,6 +586,7 @@ func TestPollAndPageURLsCarryTheLocation(t *testing.T) {
 		events = append(events, outcome("invoice.pay", "capture", "failed",
 			fmt.Sprintf("inv_%d", i), "h:c1", "smb", "USD", 100, from.Add(time.Duration(i)*time.Minute)))
 	}
+
 	srv := newFakeBigQuery(t, entriesFor(events))
 	srv.pageSize = 2
 	srv.stallOnce = true // one poll, then two pages
@@ -561,9 +595,11 @@ func TestPollAndPageURLsCarryTheLocation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 	if len(srv.pollLocations) < 2 {
 		t.Fatalf("saw %d getQueryResults calls, want the poll plus at least one page", len(srv.pollLocations))
 	}
+
 	for i, loc := range srv.pollLocations {
 		if loc != "us" {
 			t.Fatalf("getQueryResults %d carried location %q, want \"us\"", i, loc)
@@ -682,6 +718,7 @@ func TestFailurePaths(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+
 				return q
 			},
 			q:       usd,
@@ -694,6 +731,7 @@ func TestFailurePaths(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 			}
+
 			if groups != nil {
 				t.Fatalf("groups = %+v, want nil alongside the error", groups)
 			}
@@ -721,6 +759,7 @@ func TestForeignEntriesAreSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(groups) != 1 || groups[0].Count != 1 || groups[0].SumMinor != 14900 {
 		t.Fatalf("groups = %+v, want exactly the one outcome event", groups)
 	}
@@ -787,18 +826,23 @@ func TestWrongPayloadColumnIsLoud(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 					t.Fatalf("err = %v, want containing %q", err, c.wantErr)
 				}
+
 				if groups != nil {
 					t.Fatalf("groups = %+v, want nil alongside the error", groups)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			var sum int64
 			for _, g := range groups {
 				sum += g.SumMinor
 			}
+
 			if sum != c.want {
 				t.Fatalf("sum = %d, want %d", sum, c.want)
 			}

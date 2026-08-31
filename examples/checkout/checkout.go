@@ -157,6 +157,7 @@ func (c *Config) applyDefaults() {
 		curve := DefaultCurve()
 		c.Curve = &curve
 	}
+
 	for i, r := range c.Curve {
 		// Finiteness first, and here it is not merely a matter of the right
 		// message: NaN passes a bound written as two comparisons, and
@@ -167,10 +168,12 @@ func (c *Config) applyDefaults() {
 		if math.IsNaN(r) || math.IsInf(r, 0) {
 			panic(fmt.Sprintf("checkout: curve[%d] = %v is not a finite number — scenario config error", i, r))
 		}
+
 		if r < 0 || r > maxRatePerMinute {
 			panic(fmt.Sprintf("checkout: curve[%d] = %v outside [0, %v] — scenario config error", i, r, maxRatePerMinute))
 		}
 	}
+
 	switch {
 	case c.EnterpriseFraction == 0:
 		c.EnterpriseFraction = 0.1
@@ -181,9 +184,11 @@ func (c *Config) applyDefaults() {
 	case c.EnterpriseFraction < 0 || c.EnterpriseFraction > 1:
 		panic(fmt.Sprintf("checkout: EnterpriseFraction %v invalid — scenario config error", c.EnterpriseFraction))
 	}
+
 	if c.Customers == 0 {
 		c.Customers = 3000
 	}
+
 	c.CaptureDelayMin = delayKnob("CaptureDelayMin", c.CaptureDelayMin, 2)
 	c.SettleDelayMin = delayKnob("SettleDelayMin", c.SettleDelayMin, 5)
 	c.CaptureCapacityPerMin = capacityKnob("CaptureCapacityPerMin", c.CaptureCapacityPerMin)
@@ -193,6 +198,7 @@ func (c *Config) applyDefaults() {
 			panic("checkout: " + err.Error())
 		}
 	}
+
 	// Overlapping blackouts are rejected rather than resolved: each minute
 	// of a blackout is governed by exactly one recovery model, so "which
 	// spec wins" must never depend on slice order.
@@ -202,6 +208,7 @@ func (c *Config) applyDefaults() {
 			blackouts = append(blackouts, f)
 		}
 	}
+
 	sort.Slice(blackouts, func(i, j int) bool { return blackouts[i].From.Before(blackouts[j].From) })
 	for i := 1; i < len(blackouts); i++ {
 		if blackouts[i].From.Before(blackouts[i-1].To) {
@@ -220,6 +227,7 @@ func delayKnob(name string, v, def int) int {
 	case v < 0:
 		panic(fmt.Sprintf("checkout: %s = %d invalid (use InstantStage for a literal zero) — scenario config error", name, v))
 	}
+
 	return v
 }
 
@@ -230,6 +238,7 @@ func capacityKnob(name string, v int) int {
 	case v < 0:
 		panic(fmt.Sprintf("checkout: %s = %d invalid — scenario config error", name, v))
 	}
+
 	return v
 }
 
@@ -256,6 +265,7 @@ func newStage(delayMin, capacity int, queue Queue, faults []FaultSpec) *stage {
 	if capacity < 1 {
 		panic(fmt.Sprintf("checkout: stage %s capacity %d < 1 — knob validation should have caught this", queue, capacity))
 	}
+
 	s := &stage{
 		delay:    time.Duration(delayMin) * time.Minute,
 		capacity: capacity,
@@ -266,6 +276,7 @@ func newStage(delayMin, capacity int, queue Queue, faults []FaultSpec) *stage {
 			raw = append(raw, interval{f.From, f.To})
 		}
 	}
+
 	// Merge into a disjoint sorted union: overlapping stall specs mean
 	// overlapping outage causes, and the outage is their union — counting
 	// an overlap twice would over-extend frozen work. With disjoint
@@ -276,10 +287,13 @@ func newStage(delayMin, capacity int, queue Queue, faults []FaultSpec) *stage {
 			if iv.to.After(s.stalls[n-1].to) {
 				s.stalls[n-1].to = iv.to
 			}
+
 			continue
 		}
+
 		s.stalls = append(s.stalls, iv)
 	}
+
 	return s
 }
 
@@ -289,6 +303,7 @@ func (s *stage) stalled(t time.Time) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -302,15 +317,18 @@ func (s *stage) schedule(eligible time.Time) time.Time {
 	if eligible.Before(s.lastEligible) {
 		panic(fmt.Sprintf("checkout: stage eligibility went backwards (%v after %v) — the FIFO cursor model's precondition is broken", eligible, s.lastEligible))
 	}
+
 	s.lastEligible = eligible
 	if s.cursor.Before(eligible) {
 		s.cursor = eligible
 		s.used = 0
 	}
+
 	for s.stalled(s.cursor) || s.used >= s.capacity {
 		s.cursor = s.cursor.Add(time.Minute)
 		s.used = 0
 	}
+
 	s.used++
 	completion := s.cursor.Add(s.delay)
 	// Disjoint + sorted, so one forward pass applies exact freeze/resume:
@@ -321,6 +339,7 @@ func (s *stage) schedule(eligible time.Time) time.Time {
 			completion = completion.Add(iv.to.Sub(iv.from))
 		}
 	}
+
 	return completion
 }
 
@@ -362,6 +381,7 @@ func Run(cfg Config) Result {
 			if !f.active(t) {
 				continue
 			}
+
 			switch f.Kind {
 			case FaultAPILatency:
 				if rng.Float64() < f.Rate {
@@ -373,6 +393,7 @@ func Run(cfg Config) Result {
 				}
 			}
 		}
+
 		if txn.State == StateAbandoned || txn.State == StateAuthFail {
 			ledger.Txns = append(ledger.Txns, txn)
 			return
@@ -391,6 +412,7 @@ func Run(cfg Config) Result {
 				txn.State = StateSettled
 			}
 		}
+
 		ledger.Txns = append(ledger.Txns, txn)
 	}
 
@@ -402,6 +424,7 @@ func Run(cfg Config) Result {
 				return f, true
 			}
 		}
+
 		return FaultSpec{}, false
 	}
 
@@ -434,15 +457,18 @@ func Run(cfg Config) Result {
 					reroll(f.From)
 				}
 			}
+
 			for _, source := range due {
 				reroll(source)
 			}
+
 			continue
 		}
 
 		for i := 0; i < arrivals; i++ {
 			process(t, time.Time{})
 		}
+
 		for _, source := range due {
 			process(t, source)
 		}
@@ -460,6 +486,7 @@ func newTxn(rng *rand.Rand, cfg Config, n int, t time.Time) Txn {
 		seg = SegmentEnterprise
 		amount = int64(31000) + rng.Int64N(120000)
 	}
+
 	return Txn{
 		ID:          fmt.Sprintf("inv_%08d", n),
 		CustomerID:  fmt.Sprintf("h:c%06d", rng.IntN(cfg.Customers)),
@@ -486,6 +513,7 @@ func poisson(rng *rand.Rand, lambda float64) int {
 	if lambda <= 0 {
 		return 0
 	}
+
 	l := math.Exp(-lambda)
 	k := 0
 	p := 1.0
@@ -494,6 +522,7 @@ func poisson(rng *rand.Rand, lambda float64) int {
 		if p <= l {
 			return k
 		}
+
 		k++
 	}
 }

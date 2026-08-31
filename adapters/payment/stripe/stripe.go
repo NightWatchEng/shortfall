@@ -57,6 +57,7 @@ func WithStripeMetadata(p MetadataSetter, vc biz.ValueContext) {
 	if p == nil {
 		return
 	}
+
 	p.AddMetadata(MetaFlow, vc.Flow)
 	p.AddMetadata(MetaEntity, vc.EntityID)
 	p.AddMetadata(MetaCustomer, vc.CustomerID)
@@ -115,10 +116,12 @@ func VerifyAndMap(payload []byte, sigHeader, secret string) (biz.Outcome, bool, 
 	if err != nil {
 		return biz.Outcome{}, false, fmt.Errorf("stripe: signature verification failed: %w", err)
 	}
+
 	m, ok := eventMap[event.Type]
 	if !ok {
 		return biz.Outcome{}, false, nil // verified, but not an event we map
 	}
+
 	var obj object
 	if event.Data != nil && len(event.Data.Raw) > 0 {
 		if err := json.Unmarshal(event.Data.Raw, &obj); err != nil {
@@ -133,6 +136,7 @@ func VerifyAndMap(payload []byte, sigHeader, secret string) (biz.Outcome, bool, 
 	case amtDue:
 		amount = obj.AmountDue
 	}
+
 	currency := strings.ToUpper(obj.Currency)
 
 	out := biz.Outcome{

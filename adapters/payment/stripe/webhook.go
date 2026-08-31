@@ -32,6 +32,7 @@ func Handler(secret string, sink func(biz.Outcome)) http.Handler {
 			http.Error(w, "cannot read body", http.StatusBadRequest)
 			return
 		}
+
 		out, mapped, err := VerifyAndMap(body, r.Header.Get("Stripe-Signature"), secret)
 		if err != nil {
 			// Reject unverified payloads — a forged event must never be
@@ -39,9 +40,11 @@ func Handler(secret string, sink func(biz.Outcome)) http.Handler {
 			http.Error(w, "signature verification failed", http.StatusBadRequest)
 			return
 		}
+
 		if mapped && sink != nil {
 			sink(out)
 		}
+
 		w.WriteHeader(http.StatusOK)
 	})
 }

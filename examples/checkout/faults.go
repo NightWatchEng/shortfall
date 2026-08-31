@@ -62,17 +62,20 @@ func (f FaultSpec) Validate() error {
 	if !f.From.Before(f.To) {
 		return fmt.Errorf("fault %s: window [%v, %v) is empty or inverted", f.Kind, f.From, f.To)
 	}
+
 	// The simulation is a minute grid: off-grid boundaries would activate
 	// on rounded minutes while freeze math used exact sub-minute lengths,
 	// leaking off-grid timestamps into ground truth.
 	if !f.From.Equal(f.From.Truncate(time.Minute)) || !f.To.Equal(f.To.Truncate(time.Minute)) {
 		return fmt.Errorf("fault %s: window [%v, %v) must be minute-aligned", f.Kind, f.From, f.To)
 	}
+
 	switch f.Kind {
 	case FaultAPI5xx, FaultAPILatency:
 		if math.IsNaN(f.Rate) || math.IsInf(f.Rate, 0) {
 			return fmt.Errorf("fault %s: rate %v is not a finite number", f.Kind, f.Rate)
 		}
+
 		if f.Rate <= 0 || f.Rate > 1 {
 			return fmt.Errorf("fault %s: rate %v outside (0, 1]", f.Kind, f.Rate)
 		}
@@ -88,15 +91,18 @@ func (f FaultSpec) Validate() error {
 		if math.IsNaN(f.RecoveredFraction) || math.IsInf(f.RecoveredFraction, 0) {
 			return fmt.Errorf("fault %s: recovered_fraction %v is not a finite number", f.Kind, f.RecoveredFraction)
 		}
+
 		if f.RecoveredFraction < 0 || f.RecoveredFraction > 1 {
 			return fmt.Errorf("fault %s: recovered_fraction %v outside [0, 1]", f.Kind, f.RecoveredFraction)
 		}
+
 		if f.RecoveredFraction > 0 && f.RecoveryWithin <= 0 {
 			return fmt.Errorf("fault %s: recovered_fraction set but recovery_within missing", f.Kind)
 		}
 	default:
 		return fmt.Errorf("unknown fault kind %q", f.Kind)
 	}
+
 	return nil
 }
 

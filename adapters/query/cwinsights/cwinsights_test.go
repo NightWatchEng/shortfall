@@ -65,6 +65,7 @@ func resultsBody(events []biz.Outcome) string {
 			{"field": "@ptr", "value": 0},
 		})
 	}
+
 	b, _ := json.Marshal(map[string]any{"status": "Complete", "results": rows})
 	return string(b)
 }
@@ -89,6 +90,7 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 		if auth := req.Header.Get("Authorization"); !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 Credential=test/") {
 			t.Errorf("missing sigv4 auth, got %q", auth)
 		}
+
 		raw, _ := io.ReadAll(req.Body)
 		switch target {
 		case "Logs_20140328.StartQuery":
@@ -100,6 +102,7 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 				_, _ = fmt.Fprint(w, `{"status":"Running","results":[]}`)
 				return
 			}
+
 			_, _ = fmt.Fprint(w, resultsBody(events))
 		default:
 			t.Errorf("unexpected target %q", target)
@@ -122,17 +125,21 @@ func TestQueryEventsMatchesMemq(t *testing.T) {
 		if err != nil {
 			t.Fatalf("query %d memq: %v", i, err)
 		}
+
 		got, err := cq.QueryEvents(ctx, qy)
 		if err != nil {
 			t.Fatalf("query %d cwinsights: %v", i, err)
 		}
+
 		if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
 			t.Fatalf("query %d parity:\ncw  =%+v\nmemq=%+v", i, got, want)
 		}
 	}
+
 	if startBody["logGroupName"] != "/shortfall/prod" {
 		t.Fatalf("logGroupName = %v", startBody["logGroupName"])
 	}
+
 	if qs, _ := startBody["queryString"].(string); !strings.Contains(qs, `filter event = "biz.outcome"`) {
 		t.Fatalf("queryString = %q", qs)
 	}
@@ -162,6 +169,7 @@ func TestFailurePaths(t *testing.T) {
 	if !cq.Capabilities().Events || cq.Capabilities().Metrics {
 		t.Fatal("caps must be events-only")
 	}
+
 	if _, err := cq.QueryMetric(context.Background(), query.Query{}); err != query.ErrUnsupported {
 		t.Fatalf("QueryMetric err = %v, want ErrUnsupported", err)
 	}
@@ -191,6 +199,7 @@ func TestFailurePaths(t *testing.T) {
 					_, _ = fmt.Fprint(w, `{"queryId":"q-1"}`)
 					return
 				}
+
 				_, _ = fmt.Fprint(w, c.results)
 			}))
 			defer srv.Close()

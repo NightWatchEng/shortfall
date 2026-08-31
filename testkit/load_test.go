@@ -68,6 +68,7 @@ func (s *loadSink) ExportMetrics(_ context.Context, batch []emit.MetricPoint) er
 		for _, lk := range sortedKeys(p.Labels) {
 			key += "|" + lk + "=" + p.Labels[lk]
 		}
+
 		s.series[key] = struct{}{}
 		switch p.Name {
 		case "biz_dropped_events_total":
@@ -76,6 +77,7 @@ func (s *loadSink) ExportMetrics(_ context.Context, batch []emit.MetricPoint) er
 			s.inflight[key] = p.Value
 		}
 	}
+
 	return nil
 }
 
@@ -84,6 +86,7 @@ func (s *loadSink) ExportEvents(_ context.Context, batch []biz.Outcome) error {
 	for _, o := range batch {
 		minor += o.VC.Money.Amount
 	}
+
 	s.events.Add(int64(len(batch)))
 	s.amountMinor.Add(minor)
 	return nil
@@ -112,6 +115,7 @@ func (s *loadSink) inflightResidue() int64 {
 	for _, v := range s.inflight {
 		residue += v
 	}
+
 	return residue
 }
 
@@ -151,6 +155,7 @@ func (r *loadReport) latencyAt(q float64) time.Duration {
 	if len(r.latencies) == 0 {
 		return 0
 	}
+
 	i := int(q * float64(len(r.latencies)-1))
 	return r.latencies[i]
 }
@@ -167,6 +172,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 	if err != nil {
 		tb.Fatal(err)
 	}
+
 	sink := newLoadSink()
 	quiet := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 	em, err := emit.New(&reg, sink,
@@ -176,6 +182,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 	if err != nil {
 		tb.Fatal(err)
 	}
+
 	tracker := emit.NewInFlightTracker(em, emit.WithTrackerLogger(quiet))
 	tracker.Start(25 * time.Millisecond)
 
@@ -193,6 +200,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 			pool = append(pool, txn)
 		}
 	}
+
 	if len(pool) == 0 {
 		tb.Fatal("seeded ledger produced no terminal transactions")
 	}
@@ -248,6 +256,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 				if now.After(deadline) {
 					return
 				}
+
 				n := next.Add(1)
 				txn := pool[int(n)%len(pool)]
 				// Unique per-replay entity id: reconciliation needs
@@ -269,10 +278,12 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 					tb.Error(err)
 					return
 				}
+
 				result := biz.ResultSuccess
 				if txn.State != checkout.StateSettled {
 					result = biz.ResultFailed
 				}
+
 				recordStart := time.Now()
 				em.Record(ctx, "capture", result)
 				lat := time.Since(recordStart)
@@ -284,6 +295,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 					lats = append(lats, lat)
 					latMu.Unlock()
 				}
+
 				if cfg.leakEvery > 0 && n%int64(cfg.leakEvery) == 0 {
 					hold := make(chan struct{})
 					leakMu.Lock()
@@ -298,6 +310,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 			}
 		}(w)
 	}
+
 	wg.Wait()
 	close(stopSampling)
 	samplerWG.Wait()
@@ -310,6 +323,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 	if err := em.Flush(context.Background()); err != nil {
 		report.problemf("final flush: %v", err)
 	}
+
 	if err := em.Close(context.Background()); err != nil {
 		report.problemf("close: %v", err)
 	}
@@ -326,15 +340,19 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 	if got := sink.events.Load(); got != report.issued {
 		report.problemf("outcome events: sink received %d, ledger replay issued %d", got, report.issued)
 	}
+
 	if got := sink.amountMinor.Load(); got != report.issuedMinor {
 		report.problemf("outcome value: sink summed %d minor units, replay issued %d", got, report.issuedMinor)
 	}
+
 	if d := sink.droppedTotal(); d != 0 {
 		report.problemf("biz_dropped_events_total = %d on the wire; the accept path was not the whole path", d)
 	}
+
 	if tracker.Overflowed() != 0 || tracker.Rejected() != 0 {
 		report.problemf("tracker overflowed=%d rejected=%d", tracker.Overflowed(), tracker.Rejected())
 	}
+
 	if residue := sink.inflightResidue(); residue != 0 {
 		report.problemf("in-flight gauges left nonzero after quiesce: residue %d", residue)
 	}
@@ -354,6 +372,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 			for i, s := range ss {
 				hs[i] = s.heapInuse
 			}
+
 			sort.Slice(hs, func(i, j int) bool { return hs[i] < hs[j] })
 			return hs[len(hs)/2]
 		}
@@ -361,14 +380,17 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 		if a, b := medHeap(firstHalf), medHeap(half); b > a+a/3+heapSlack {
 			report.problemf("heap growth: median HeapInuse %d in the first half, %d in the second", a, b)
 		}
+
 		grMin, grMax := half[0].goroutines, half[0].goroutines
 		for _, s := range half {
 			grMin = min(grMin, s.goroutines)
 			grMax = max(grMax, s.goroutines)
 		}
+
 		if grMax > grMin+cfg.workers {
 			report.problemf("goroutine growth in the second half: %d -> %d", grMin, grMax)
 		}
+
 		if a, b := half[0].series, half[len(half)-1].series; b > a {
 			report.problemf("metric series still growing in the second half: %d -> %d (cardinality must not follow transaction count)", a, b)
 		}
@@ -378,6 +400,7 @@ func runSustainedLoad(tb testing.TB, cfg loadConfig) loadReport {
 	for _, hold := range leaked {
 		close(hold)
 	}
+
 	leakMu.Unlock()
 	return report
 }
@@ -388,6 +411,7 @@ func loadEnv(name string, def float64) float64 {
 			return f
 		}
 	}
+
 	return def
 }
 
@@ -399,6 +423,7 @@ func TestSustainedLoadReconciles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("sustained load skipped in -short")
 	}
+
 	cfg := loadConfig{
 		rate:     loadEnv("SHORTFALL_LOAD_RATE", 1200),
 		duration: time.Duration(loadEnv("SHORTFALL_LOAD_SECONDS", 3) * float64(time.Second)),
@@ -408,6 +433,7 @@ func TestSustainedLoadReconciles(t *testing.T) {
 	for _, p := range report.problems {
 		t.Error(p)
 	}
+
 	t.Logf("sustained load: issued=%d offered=%.0f/s achieved=%.0f/s p50=%v p99=%v max=%v samples=%d",
 		report.issued, cfg.rate, report.achievedRate,
 		report.latencyAt(0.50), report.latencyAt(0.99), report.latencyAt(1.0), len(report.samples))
@@ -421,6 +447,7 @@ func TestSustainedLoadCatchesSeededLeak(t *testing.T) {
 	if testing.Short() {
 		t.Skip("sustained load skipped in -short")
 	}
+
 	report := runSustainedLoad(t, loadConfig{
 		rate:      800,
 		duration:  2 * time.Second,
@@ -430,5 +457,6 @@ func TestSustainedLoadCatchesSeededLeak(t *testing.T) {
 	if len(report.problems) == 0 {
 		t.Fatal("a seeded goroutine+buffer leak produced no problems; the growth assertions are vacuous")
 	}
+
 	t.Logf("seeded leak detected as: %v", report.problems)
 }

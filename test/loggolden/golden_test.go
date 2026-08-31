@@ -74,13 +74,16 @@ func assertParity(t *testing.T, name string, q query.Querier, events []biz.Outco
 		if err != nil {
 			t.Fatalf("query %d memq: %v", i, err)
 		}
+
 		if i == 0 && len(want) == 0 {
 			t.Fatal("parity is vacuous: the api-5xx scenario produced no failed groups")
 		}
+
 		got, err := q.QueryEvents(ctx, qy)
 		if err != nil {
 			t.Fatalf("query %d %s: %v", i, name, err)
 		}
+
 		if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
 			t.Fatalf("query %d parity mismatch:\n%s=%+v\nmemq=%+v", i, name, got, want)
 		}
@@ -94,12 +97,15 @@ func requireDocker(t *testing.T, image string) {
 	if os.Getenv("SHORTFALL_GOLDEN") == "" {
 		t.Skip("set SHORTFALL_GOLDEN=1 (and have Docker) to run the live log-store golden harness")
 	}
+
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Fatal("SHORTFALL_GOLDEN is set but docker is not on PATH; the parity gate cannot run")
 	}
+
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Fatalf("SHORTFALL_GOLDEN is set but the docker daemon is not running: %v", err)
 	}
+
 	if out, err := exec.Command("docker", "pull", image).CombinedOutput(); err != nil {
 		t.Fatalf("docker pull %s: %v: %s", image, err, out)
 	}
@@ -113,12 +119,14 @@ func startContainer(t *testing.T, image, port string, env []string, args ...stri
 	for _, e := range env {
 		runArgs = append(runArgs, "-e", e)
 	}
+
 	runArgs = append(runArgs, image)
 	runArgs = append(runArgs, args...)
 	out, err := exec.Command("docker", runArgs...).Output()
 	if err != nil {
 		t.Fatalf("docker run: %v: %s", err, out)
 	}
+
 	fields := strings.Fields(string(out))
 	id := fields[len(fields)-1]
 	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", id).Run() })
@@ -131,11 +139,14 @@ func startContainer(t *testing.T, image, port string, env []string, args ...stri
 			hostPort = line[strings.LastIndex(line, ":")+1:]
 			break
 		}
+
 		time.Sleep(500 * time.Millisecond)
 	}
+
 	if hostPort == "" {
 		t.Fatalf("no published port for %s", image)
 	}
+
 	return "http://127.0.0.1:" + hostPort
 }
 
@@ -151,8 +162,10 @@ func waitHTTP(t *testing.T, url, needle string) {
 				return
 			}
 		}
+
 		time.Sleep(time.Second)
 	}
+
 	t.Fatalf("%s never became ready", url)
 }
 
@@ -171,6 +184,7 @@ func TestCWInsightsParityAgainstLocalStack(t *testing.T) {
 	if err := exp.ExportEvents(context.Background(), events); err != nil {
 		t.Fatalf("cloudwatch export: %v", err)
 	}
+
 	if err := exp.Shutdown(context.Background()); err != nil { // flush the buffered writer
 		t.Fatalf("cloudwatch flush: %v", err)
 	}
@@ -197,18 +211,22 @@ func TestCWInsightsParityAgainstLocalStack(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			t.Fatalf("EMF line: %v", err)
 		}
+
 		puts = append(puts, logEvent{Timestamp: rec.AWS.Timestamp, Message: line})
 	}
+
 	sort.Slice(puts, func(i, j int) bool { return puts[i].Timestamp < puts[j].Timestamp })
 	for i := 0; i < len(puts); i += 1000 {
 		end := i + 1000
 		if end > len(puts) {
 			end = len(puts)
 		}
+
 		cw.call(t, "PutLogEvents", map[string]any{
 			"logGroupName": group, "logStreamName": stream, "logEvents": puts[i:end],
 		})
 	}
+
 	time.Sleep(2 * time.Second) // ingest settles
 
 	q := cwinsights.New("us-east-1", group, "test", "test",
@@ -232,6 +250,7 @@ func (r *rawLogs) call(t *testing.T, action string, body map[string]any) {
 	if err != nil {
 		t.Fatalf("%s: %v", action, err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		out := make([]byte, 512)

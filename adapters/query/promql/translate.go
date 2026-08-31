@@ -59,9 +59,11 @@ func translate(q query.Query) (promExpr, error) {
 	if q.Agg == query.AggCount {
 		return promExpr{}, fmt.Errorf("promql: AggCount is not supported; the engine reads counts as AggSum over biz_txn_total")
 	}
+
 	if q.Step > 0 {
 		return promExpr{}, fmt.Errorf("promql: translate handles Step==0 only; stepped queries use translateStepped")
 	}
+
 	matchers := labelMatchers(q.Filters)
 	by := groupBy(q.GroupBy)
 
@@ -129,9 +131,11 @@ func translateStepped(q query.Query) ([]steppedBucket, error) {
 	if q.Agg == query.AggCount {
 		return nil, fmt.Errorf("promql: AggCount is not supported; the engine reads counts as AggSum over biz_txn_total")
 	}
+
 	if q.Step <= 0 {
 		return nil, fmt.Errorf("promql: translateStepped needs Step>0; window queries use translate")
 	}
+
 	matchers := labelMatchers(q.Filters)
 	by := groupBy(q.GroupBy)
 	gauge := gaugeFamilies[q.Metric]
@@ -150,6 +154,7 @@ func translateStepped(q query.Query) ([]steppedBucket, error) {
 		if end.After(q.Range.To) {
 			end = q.Range.To
 		}
+
 		var expr string
 		if gauge {
 			expr = boundary(end)
@@ -157,11 +162,13 @@ func translateStepped(q query.Query) ([]steppedBucket, error) {
 			e, s := boundary(end), boundary(start)
 			expr = fmt.Sprintf("%s - (%s or (%s * 0))", e, s, e)
 		}
+
 		out = append(out, steppedBucket{
 			ex:    promExpr{expr: expr, at: end.Add(-time.Millisecond)},
 			start: start,
 		})
 	}
+
 	return out, nil
 }
 
@@ -170,15 +177,18 @@ func labelMatchers(filters map[string]string) string {
 	if len(filters) == 0 {
 		return ""
 	}
+
 	keys := make([]string, 0, len(filters))
 	for k := range filters {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%q", k, filters[k]))
 	}
+
 	return "{" + strings.Join(parts, ",") + "}"
 }
 
@@ -187,6 +197,7 @@ func groupBy(labels []string) string {
 	if len(labels) == 0 {
 		return ""
 	}
+
 	sorted := append([]string(nil), labels...)
 	sort.Strings(sorted)
 	return "by (" + strings.Join(sorted, ", ") + ") "
@@ -199,6 +210,7 @@ func promDuration(d time.Duration) string {
 	if secs < 1 {
 		secs = 1
 	}
+
 	return fmt.Sprintf("%ds", secs)
 }
 

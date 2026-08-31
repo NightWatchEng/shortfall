@@ -21,6 +21,7 @@ func SuggestSeverity(reg *registry.Registry, r Report) string {
 	if reg == nil || len(reg.Severity) == 0 {
 		return ""
 	}
+
 	minutes := r.Request.Window.To.Sub(r.Request.Window.From).Minutes()
 	if minutes <= 0 {
 		return ""
@@ -31,6 +32,7 @@ func SuggestSeverity(reg *registry.Registry, r Report) string {
 	for cur, v := range r.Realized.ByCurrency {
 		atRisk[cur] += v
 	}
+
 	for cur, v := range r.Deferred.ByCurrency {
 		atRisk[cur] += v
 	}
@@ -45,12 +47,15 @@ func SuggestSeverity(reg *registry.Registry, r Report) string {
 				if i < best {
 					best = i
 				}
+
 				break // most-severe threshold this currency clears
 			}
 		}
 	}
+
 	if best == len(reg.Severity) {
 		return ""
 	}
+
 	return reg.Severity[best].Sev
 }

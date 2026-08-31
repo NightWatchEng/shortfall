@@ -69,6 +69,7 @@ func New(baseURL string, opts ...Option) *Querier {
 	for _, o := range opts {
 		o(q)
 	}
+
 	return q
 }
 
@@ -90,13 +91,16 @@ func (q *Querier) QueryMetric(ctx context.Context, qy query.Query) (query.Series
 	if !qy.Range.To.After(qy.Range.From) {
 		return nil, fmt.Errorf("promql: empty range [%s,%s)", qy.Range.From, qy.Range.To)
 	}
+
 	if qy.Step > 0 {
 		return q.stepped(ctx, qy)
 	}
+
 	ex, err := translate(qy)
 	if err != nil {
 		return nil, err
 	}
+
 	return q.instant(ctx, ex)
 }
 
@@ -119,6 +123,7 @@ func (q *Querier) stepped(ctx context.Context, qy query.Query) (query.Series, er
 	if err != nil {
 		return nil, err
 	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -136,15 +141,18 @@ func (q *Querier) stepped(ctx context.Context, qy query.Query) (query.Series, er
 				errs[i] = ctx.Err()
 				return
 			}
+
 			vec, err := q.instant(ctx, b.ex)
 			if err != nil {
 				errs[i] = err
 				cancel()
 				return
 			}
+
 			vecs[i] = vec
 		}(i, b)
 	}
+
 	wg.Wait()
 	// Prefer the first real failure over cancellations it induced.
 	var firstErr error
@@ -152,11 +160,13 @@ func (q *Querier) stepped(ctx context.Context, qy query.Query) (query.Series, er
 		if err != nil && firstErr == nil {
 			firstErr = err
 		}
+
 		if err != nil && !errors.Is(err, context.Canceled) {
 			firstErr = err
 			break
 		}
 	}
+
 	if firstErr != nil {
 		return nil, firstErr
 	}
@@ -169,6 +179,7 @@ func (q *Querier) stepped(ctx context.Context, qy query.Query) (query.Series, er
 			if len(ss.Points) == 0 || (!gauge && ss.Points[0].Value == 0) {
 				continue
 			}
+
 			k := sortedLabelKey(ss.Labels)
 			s, ok := merged[k]
 			if !ok {
@@ -176,14 +187,17 @@ func (q *Querier) stepped(ctx context.Context, qy query.Query) (query.Series, er
 				merged[k] = s
 				keys = append(keys, k)
 			}
+
 			s.Points = append(s.Points, query.Point{At: b.start, Value: ss.Points[0].Value})
 		}
 	}
+
 	sort.Strings(keys)
 	out := make(query.Series, 0, len(keys))
 	for _, k := range keys {
 		out = append(out, *merged[k])
 	}
+
 	return out, nil
 }
 
@@ -193,6 +207,7 @@ func sortedLabelKey(labels map[string]string) string {
 	for k := range labels {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	var b strings.Builder
 	for _, k := range keys {
@@ -201,6 +216,7 @@ func sortedLabelKey(labels map[string]string) string {
 		b.WriteString(labels[k])
 		b.WriteByte(';')
 	}
+
 	return b.String()
 }
 
@@ -222,6 +238,7 @@ func (q *Querier) instant(ctx context.Context, ex promExpr) (query.Series, error
 	if err != nil {
 		return nil, err
 	}
+
 	return parseVector(body)
 }
 
@@ -231,18 +248,22 @@ func (q *Querier) get(ctx context.Context, path string, v url.Values) ([]byte, e
 	if err != nil {
 		return nil, fmt.Errorf("promql: request: %w", err)
 	}
+
 	resp, err := q.doer.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("promql: do: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("promql: read: %w", err)
 	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("promql: status %d: %s", resp.StatusCode, string(body))
 	}
+
 	return body, nil
 }
 
@@ -252,6 +273,7 @@ func parseVector(body []byte) (query.Series, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	out := make(query.Series, 0, len(env.Data.Result))
 	for _, raw := range env.Data.Result {
 		var r struct {
@@ -261,12 +283,15 @@ func parseVector(body []byte) (query.Series, error) {
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("promql: decode vector sample: %w", err)
 		}
+
 		ts, val, err := sample(r.Value)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, query.SeriesSlice{Labels: r.Metric, Points: []query.Point{{At: ts, Value: val}}})
 	}
+
 	return out, nil
 }
 
@@ -275,9 +300,11 @@ func decodeEnvelope(body []byte) (promResponse, error) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		return promResponse{}, fmt.Errorf("promql: decode envelope: %w", err)
 	}
+
 	if env.Status != "success" {
 		return promResponse{}, fmt.Errorf("promql: query failed: %s", env.Error)
 	}
+
 	return env, nil
 }
 
@@ -288,19 +315,23 @@ func sample(pair [2]json.RawMessage) (time.Time, float64, error) {
 	if err := json.Unmarshal(pair[0], &tsF); err != nil {
 		return time.Time{}, 0, fmt.Errorf("promql: decode timestamp: %w", err)
 	}
+
 	var valStr string
 	if err := json.Unmarshal(pair[1], &valStr); err != nil {
 		return time.Time{}, 0, fmt.Errorf("promql: decode value: %w", err)
 	}
+
 	val, err := strconv.ParseFloat(valStr, 64)
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("promql: parse value %q: %w", valStr, err)
 	}
+
 	// Reject NaN/±Inf: Prometheus can return these as literal strings, and a
 	// non-finite value poisons every downstream sum. memq never produces one.
 	if math.IsNaN(val) || math.IsInf(val, 0) {
 		return time.Time{}, 0, fmt.Errorf("promql: non-finite value %q", valStr)
 	}
+
 	sec := int64(tsF)
 	nsec := int64((tsF - float64(sec)) * 1e9)
 	return time.Unix(sec, nsec).UTC(), val, nil

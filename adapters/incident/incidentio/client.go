@@ -53,6 +53,7 @@ func New(token, customFieldID string, opts ...Option) *Client {
 	for _, o := range opts {
 		o(c)
 	}
+
 	return c
 }
 
@@ -80,22 +81,26 @@ func (c *Client) WriteImpact(ctx context.Context, incidentID string, r engine.Re
 	if err != nil {
 		return err
 	}
+
 	url := fmt.Sprintf("%s/v2/incidents/%s/actions/edit", c.baseURL, neturl.PathEscape(incidentID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("incidentio: edit: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("incidentio: edit: status %d: %s", resp.StatusCode, snippet)
 	}
+
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }

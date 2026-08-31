@@ -18,6 +18,7 @@ func TestCustomersCSV(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := strings.Join([]string{
 		"customer_id,segment,currency,amount_minor",
 		"h:c000002,enterprise,USD,900000",

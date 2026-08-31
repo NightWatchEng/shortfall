@@ -30,20 +30,24 @@ func (b cwBackend) counts() (metrics, events int) {
 		if len(line) == 0 {
 			continue
 		}
+
 		var m map[string]any
 		if err := json.Unmarshal(line, &m); err != nil {
 			return -1, -1 // force a conformance failure on malformed output
 		}
+
 		if aws, ok := m["_aws"].(map[string]any); ok {
 			if _, isMetric := aws["CloudWatchMetrics"]; isMetric {
 				metrics++
 				continue
 			}
 		}
+
 		if m["event"] == "biz.outcome" {
 			events++
 		}
 	}
+
 	return metrics, events
 }
 

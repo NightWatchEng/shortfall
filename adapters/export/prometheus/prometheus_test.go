@@ -29,6 +29,7 @@ func newExp(t *testing.T) (*Exporter, prometheus.Gatherer) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return e, e.Gatherer()
 }
 
@@ -39,22 +40,28 @@ func sampleValue(t *testing.T, g prometheus.Gatherer, name string) float64 {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, mf := range mfs {
 		if mf.GetName() != name {
 			continue
 		}
+
 		if len(mf.Metric) != 1 {
 			t.Fatalf("%s: want exactly 1 series, got %d", name, len(mf.Metric))
 		}
+
 		m := mf.Metric[0]
 		if m.Counter != nil {
 			return m.Counter.GetValue()
 		}
+
 		if m.Gauge != nil {
 			return m.Gauge.GetValue()
 		}
+
 		t.Fatalf("%s: neither counter nor gauge", name)
 	}
+
 	t.Fatalf("%s: family not found", name)
 	return 0
 }
@@ -116,11 +123,14 @@ func TestExportMetricsMapping(t *testing.T) {
 				if err == nil {
 					t.Fatal("want error, got nil")
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+
 			if got := sampleValue(t, g, c.family); got != c.want {
 				t.Fatalf("%s = %v, want %v", c.family, got, c.want)
 			}
@@ -178,6 +188,7 @@ func TestInflightGaugeHonorsAtOrdering(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+
 			if got := sampleValue(t, g, "biz_inflight_value"); got != c.want {
 				t.Fatalf("gauge = %v, want %v", got, c.want)
 			}
@@ -201,10 +212,12 @@ func TestExportEventsIsHonestNoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExportEvents must not error: %v", err)
 	}
+
 	mfs, err := g.Gather()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(mfs) != 0 {
 		t.Fatalf("events must not create any series, got %d families", len(mfs))
 	}
@@ -215,6 +228,7 @@ func TestDoubleRegisterErrors(t *testing.T) {
 	if _, err := New(WithRegisterer(reg, reg)); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := New(WithRegisterer(reg, reg)); err == nil {
 		t.Fatal("registering the same collectors twice must error, not panic")
 	}
@@ -247,6 +261,7 @@ func TestMetricsGolden(t *testing.T) {
 	if *update {
 		must(os.WriteFile(golden, got, 0o644))
 	}
+
 	want, err := os.ReadFile(golden)
 	must(err)
 	if !bytes.Equal(got, want) {
@@ -260,6 +275,7 @@ func render(t *testing.T, g prometheus.Gatherer) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var buf bytes.Buffer
 	enc := expfmt.NewEncoder(&buf, expfmt.NewFormat(expfmt.TypeTextPlain))
 	for _, mf := range mfs {
@@ -267,6 +283,7 @@ func render(t *testing.T, g prometheus.Gatherer) []byte {
 			t.Fatal(err)
 		}
 	}
+
 	return buf.Bytes()
 }
 

@@ -19,6 +19,7 @@ func RenderJSON(r engine.Report) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("report: json: %w", err)
 	}
+
 	return b, nil
 }
 
@@ -29,15 +30,18 @@ func money(byCur map[string]int64) string {
 	if len(byCur) == 0 {
 		return "none"
 	}
+
 	curs := make([]string, 0, len(byCur))
 	for c := range byCur {
 		curs = append(curs, c)
 	}
+
 	sort.Strings(curs)
 	parts := make([]string, 0, len(curs))
 	for _, c := range curs {
 		parts = append(parts, fmt.Sprintf("%s %d", c, byCur[c]))
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -50,6 +54,7 @@ func RenderText(r engine.Report) string {
 	if flows == "" {
 		flows = "(all flows)"
 	}
+
 	fmt.Fprintf(&b, "BUSINESS IMPACT — %s\n", flows)
 	fmt.Fprintf(&b, "window %s → %s · registry v%d · %s\n",
 		r.Request.Window.From.UTC().Format("2006-01-02T15:04Z"),
@@ -66,9 +71,11 @@ func RenderText(r engine.Report) string {
 	for _, c := range r.Deferred.Caveats {
 		fmt.Fprintf(&b, "           caveat: %s\n", c)
 	}
+
 	if len(r.Deferred.ProjectedLostMinor) > 0 {
 		fmt.Fprintf(&b, "           projected lost if SLAs breach: %s\n", money(r.Deferred.ProjectedLostMinor))
 	}
+
 	if r.Deferred.OldestAgeMinutes > 0 {
 		fmt.Fprintf(&b, "           oldest in-flight ≥ %d min\n", r.Deferred.OldestAgeMinutes)
 	}
@@ -104,6 +111,7 @@ func RenderText(r engine.Report) string {
 	if r.Severity != "" {
 		fmt.Fprintf(&b, "\nSeverity: %s (suggested)\n", r.Severity)
 	}
+
 	return b.String()
 }
 
@@ -112,10 +120,12 @@ func segmentList(bySeg map[string]int64) string {
 	if len(bySeg) == 0 {
 		return "no segments"
 	}
+
 	segs := make([]string, 0, len(bySeg))
 	for s := range bySeg {
 		segs = append(segs, s)
 	}
+
 	sort.Strings(segs)
 	parts := make([]string, 0, len(segs))
 	for _, s := range segs {
@@ -123,8 +133,10 @@ func segmentList(bySeg map[string]int64) string {
 		if label == "" {
 			label = "(unsegmented)"
 		}
+
 		parts = append(parts, fmt.Sprintf("%s %d", label, bySeg[s]))
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -135,6 +147,7 @@ func RenderMarkdown(r engine.Report) string {
 	if flows == "" {
 		flows = "(all flows)"
 	}
+
 	fmt.Fprintf(&b, "# Business impact — %s\n\n", flows)
 	fmt.Fprintf(&b, "Window `%s → %s` · registry v%d · %s\n\n",
 		r.Request.Window.From.UTC().Format("2006-01-02T15:04Z"),
@@ -163,17 +176,21 @@ func RenderMarkdown(r engine.Report) string {
 		fmt.Fprintf(&b, "> - Realized caveat: %s\n", c)
 		hasLabels = true
 	}
+
 	for _, c := range r.Deferred.Caveats {
 		fmt.Fprintf(&b, "> - Deferred caveat: %s\n", c)
 		hasLabels = true
 	}
+
 	for _, n := range r.Unrealized.Notes {
 		fmt.Fprintf(&b, "> - Unrealized note: %s\n", n)
 		hasLabels = true
 	}
+
 	if hasLabels {
 		b.WriteString("\n")
 	}
+
 	b.WriteString("> Unrealized is an estimate range and must not be added to realized.\n\n")
 
 	b.WriteString("## Customers\n\n")
@@ -186,6 +203,7 @@ func RenderMarkdown(r engine.Report) string {
 			for _, c := range r.Customers.TopN {
 				fmt.Fprintf(&b, "| %s | %s | %s |\n", c.CustomerID, c.Segment, money(c.ByCurrency))
 			}
+
 			b.WriteString("\n")
 		}
 	}
@@ -202,8 +220,10 @@ func RenderMarkdown(r engine.Report) string {
 			r.Coverage.Evidence,
 		)
 	}
+
 	if r.Severity != "" {
 		fmt.Fprintf(&b, "\n**Suggested severity:** %s\n", r.Severity)
 	}
+
 	return b.String()
 }

@@ -27,12 +27,15 @@ func CheckPII(field, s string) error {
 	if hasPAN(s) {
 		return fmt.Errorf("biz: %s contains what looks like a card number (Luhn-valid 13-19 digit run) — PAN must never enter biz.* attributes", field)
 	}
+
 	if emailRe.MatchString(s) {
 		return fmt.Errorf("biz: %s contains an email address — PII must never enter biz.* attributes", field)
 	}
+
 	if hasIBAN(s) {
 		return fmt.Errorf("biz: %s contains what looks like an IBAN (mod-97 checksum passes) — PII must never enter biz.* attributes", field)
 	}
+
 	return nil
 }
 
@@ -59,6 +62,7 @@ func hasPAN(s string) bool {
 			i++
 			continue
 		}
+
 		digits := make([]byte, 0, 40)
 		bounds := make([][2]int, 0, 8) // segment [start, end) into digits
 		segStart := 0
@@ -69,14 +73,17 @@ func hasPAN(s string) bool {
 				j++
 				continue
 			}
+
 			if (s[j] == ' ' || s[j] == '-') && j+1 < len(s) && isDigit(s[j+1]) {
 				bounds = append(bounds, [2]int{segStart, len(digits)})
 				segStart = len(digits)
 				j++
 				continue
 			}
+
 			break
 		}
+
 		bounds = append(bounds, [2]int{segStart, len(digits)})
 
 		// Every contiguous span of whole segments, PAN-length, Luhn-checked.
@@ -88,8 +95,10 @@ func hasPAN(s string) bool {
 				}
 			}
 		}
+
 		i = j
 	}
+
 	return false
 }
 
@@ -107,9 +116,11 @@ func luhnValid(digits []byte) bool {
 				d -= 9
 			}
 		}
+
 		sum += d
 		double = !double
 	}
+
 	return sum%10 == 0
 }
 
@@ -121,6 +132,7 @@ func hasIBAN(s string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -142,6 +154,7 @@ func ibanMod97(iban string) int {
 		default:
 			return false
 		}
+
 		return true
 	}
 	for i := 4; i < len(iban); i++ {
@@ -149,10 +162,12 @@ func ibanMod97(iban string) int {
 			return -1
 		}
 	}
+
 	for i := 0; i < 4; i++ {
 		if !feed(iban[i]) {
 			return -1
 		}
 	}
+
 	return rem
 }

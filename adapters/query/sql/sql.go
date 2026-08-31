@@ -71,9 +71,11 @@ func New(db *stdsql.DB, opts ...Option) (*Querier, error) {
 	for _, o := range opts {
 		o(q)
 	}
+
 	if !isBareIdentifier(q.table) {
 		return nil, fmt.Errorf("sql: invalid table name %q", q.table)
 	}
+
 	return q, nil
 }
 
@@ -96,6 +98,7 @@ func (q *Querier) QueryEvents(ctx context.Context, qy query.EventQuery) (query.E
 	if err != nil {
 		return nil, err
 	}
+
 	whereSQL, args, err := whereClause(qy)
 	if err != nil {
 		return nil, err
@@ -104,9 +107,11 @@ func (q *Querier) QueryEvents(ctx context.Context, qy query.EventQuery) (query.E
 	if qy.Agg == query.EventAggDistinctCount {
 		return q.distinctCount(ctx, groupCols, whereSQL, args)
 	}
+
 	if err := currencyInvariant(qy); err != nil {
 		return nil, err
 	}
+
 	return q.groups(ctx, qy, groupCols, whereSQL, args)
 }
 
@@ -120,11 +125,13 @@ func (q *Querier) distinctCount(ctx context.Context, groupCols []string, whereSQ
 	if len(groupCols) > 0 {
 		inner = "SELECT DISTINCT " + strings.Join(groupCols, ", ")
 	}
+
 	sqlText := fmt.Sprintf("SELECT COUNT(*) FROM (%s FROM %s%s)", inner, q.table, whereSQL)
 	var n int64
 	if err := q.db.QueryRowContext(ctx, sqlText, args...).Scan(&n); err != nil {
 		return nil, fmt.Errorf("sql: distinct count: %w", err)
 	}
+
 	return query.EventGroups{{Count: n}}, nil
 }
 
@@ -134,18 +141,22 @@ func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []s
 	if wantMax {
 		sel += ", COALESCE(MAX(amount_minor), 0)" // representative per group (ADR-0009)
 	}
+
 	if len(groupCols) > 0 {
 		sel = strings.Join(groupCols, ", ") + ", " + sel
 	}
+
 	sqlText := fmt.Sprintf("SELECT %s FROM %s%s", sel, q.table, whereSQL)
 	if len(groupCols) > 0 {
 		sqlText += " GROUP BY " + strings.Join(groupCols, ", ")
 	}
+
 	if ord := orderClause(qy.OrderBy, tiebreakCols(qy.GroupBy)); ord != "" {
 		sqlText += ord
 	} else if qy.Limit > 0 {
 		return nil, fmt.Errorf("sql: Limit requires an OrderBy (OrderNone + Limit>0 is undefined)")
 	}
+
 	if qy.Limit > 0 {
 		sqlText += fmt.Sprintf(" LIMIT %d", qy.Limit)
 	}
@@ -154,6 +165,7 @@ func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []s
 	if err != nil {
 		return nil, fmt.Errorf("sql: group query: %w", err)
 	}
+
 	defer func() { _ = rows.Close() }()
 
 	var out query.EventGroups
@@ -163,32 +175,40 @@ func (q *Querier) groups(ctx context.Context, qy query.EventQuery, groupCols []s
 		for i := range groupCols {
 			scanTargets = append(scanTargets, &keyVals[i])
 		}
+
 		var count, sum, maxAmt int64
 		scanTargets = append(scanTargets, &count, &sum)
 		if wantMax {
 			scanTargets = append(scanTargets, &maxAmt)
 		}
+
 		if err := rows.Scan(scanTargets...); err != nil {
 			return nil, fmt.Errorf("sql: scan: %w", err)
 		}
+
 		// An aggregate without GROUP BY yields one row even over zero
 		// matches; the reference returns no groups — drop the empty row.
 		if len(groupCols) == 0 && count == 0 {
 			continue
 		}
+
 		key := map[string]string{}
 		for i, col := range qy.GroupBy {
 			key[col] = keyVals[i].String
 		}
+
 		eg := query.EventGroup{Key: key, Count: count, SumMinor: sum}
 		if wantMax {
 			eg.MaxMinor = maxAmt
 		}
+
 		out = append(out, eg)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("sql: rows: %w", err)
 	}
+
 	return out, nil
 }
 
@@ -200,8 +220,10 @@ func columns(labels []string) ([]string, error) {
 		if !ok {
 			return nil, fmt.Errorf("sql: unknown group/filter label %q", l)
 		}
+
 		cols = append(cols, c)
 	}
+
 	return cols, nil
 }
 
@@ -216,15 +238,18 @@ func whereClause(qy query.EventQuery) (string, []any, error) {
 	for k := range qy.Filters {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	for _, k := range keys {
 		col, ok := labelColumns[k]
 		if !ok {
 			return "", nil, fmt.Errorf("sql: unknown filter label %q", k)
 		}
+
 		conds = append(conds, col+" = ?")
 		args = append(args, qy.Filters[k])
 	}
+
 	return " WHERE " + strings.Join(conds, " AND "), args, nil
 }
 
@@ -241,10 +266,12 @@ func orderClause(o query.EventOrder, tiebreakCols []string) string {
 	default:
 		return ""
 	}
+
 	terms := []string{primary}
 	for _, c := range tiebreakCols {
 		terms = append(terms, c+" ASC")
 	}
+
 	return " ORDER BY " + strings.Join(terms, ", ")
 }
 
@@ -260,6 +287,7 @@ func tiebreakCols(groupBy []string) []string {
 			cols = append(cols, c)
 		}
 	}
+
 	return cols
 }
 
@@ -269,11 +297,13 @@ func currencyInvariant(qy query.EventQuery) error {
 	if _, pinned := qy.Filters["currency"]; pinned {
 		return nil
 	}
+
 	for _, g := range qy.GroupBy {
 		if g == "currency" {
 			return nil
 		}
 	}
+
 	return fmt.Errorf("sql: event sum would cross currencies — pin currency in Filters or add it to GroupBy")
 }
 
@@ -283,6 +313,7 @@ func isBareIdentifier(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	for i, r := range s {
 		switch {
 		case r == '_':
@@ -292,5 +323,6 @@ func isBareIdentifier(s string) bool {
 			return false
 		}
 	}
+
 	return true
 }

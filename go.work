@@ -43,3 +43,7 @@ use (
 	./adapters/query/gcplogging
 	./test/wikisync
 )
+
+use ./test/blankline
+
+use ./test/symbolcheck

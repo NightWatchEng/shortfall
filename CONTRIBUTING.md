@@ -118,11 +118,17 @@ or publishing.
 gofmt and go vet are the mechanical baseline (CI-gated). What they leave
 open, ADR-0014 decides: method chains break after the dot; multi-line
 calls and literals go one item per line with a trailing comma; long
-conditions break after the operator; exported identifiers carry terse
-godoc contracts; inline comments state only what the code cannot show,
-cite ADRs instead of restating them, and never carry tracked-item ids,
-change history, or ALL-CAPS emphasis. Reviewers block on departures by
-citing the ADR.
+conditions break after the operator; a blank line follows the `}` that
+closes an `if`, `for`, `switch`, type switch or `select` whenever more code
+follows at that level — the exceptions being `else`/`else if`,
+`case`/`default`, the enclosing `}`, and a block written on one line;
+exported identifiers carry terse godoc contracts; inline comments state
+only what the code cannot show, cite ADRs instead of restating them, and
+never carry tracked-item ids, change history, or ALL-CAPS emphasis.
+Reviewers block on departures by citing the ADR. The blank-line clause is
+enforced deterministically rather than by eye: `test/blankline` fails the
+core test step on any tracked `.go` file that breaks it, and
+`go run ./test/blankline -fix` inserts the missing lines.
 
 ## Tests
 
@@ -156,7 +162,12 @@ generator over this repository and fails on a page neither route covers,
 naming the page and which route it needs. Fenced Go and registry examples in the
 guide docs are compiled and validated by `test/docsnippets` in the core CI
 job — adding a fence with a new doc-implied identifier extends that
-module's stub, and the compile failure names it.
+module's stub, and the compile failure names it. Prose is checked too:
+`test/symbolcheck` resolves every backticked `pkg.Symbol` in the guide
+docs against the real packages, so a renamed or deleted symbol fails the
+build naming the doc and line. An identifier that is not this
+repository's — standard library, a vendor SDK, a provider payload field —
+goes in that module's `allowSelectors` with its reason.
 
 ## Architecture diagrams
 

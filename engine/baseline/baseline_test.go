@@ -28,6 +28,7 @@ func TestMedianAndMAD(t *testing.T) {
 			if got := median(c.xs); got != c.med {
 				t.Fatalf("median = %v, want %v", got, c.med)
 			}
+
 			if got := mad(c.xs, c.med); got != c.mad {
 				t.Fatalf("mad = %v, want %v", got, c.mad)
 			}
@@ -75,16 +76,19 @@ func TestExpectedIntervalAndEmptyBucket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Monday 00:00 bucket: median 104, MAD median(|100-104|,|108-104|)=4,
 	// band = 2*1.4826*4 = 11.8608 -> [92.14, 115.86], N=2.
 	got := exp[0]
 	if got.N != 2 || got.Expected != 104 {
 		t.Fatalf("expected = %+v, want N2 median 104", got)
 	}
+
 	wantBand := 2 * 1.4826 * 4
 	if math.Abs(got.Upper-(104+wantBand)) > 1e-9 || math.Abs(got.Lower-(104-wantBand)) > 1e-9 {
 		t.Fatalf("interval = [%v,%v], want [%v,%v]", got.Lower, got.Upper, 104-wantBand, 104+wantBand)
 	}
+
 	// Monday 01:00 has no history -> empty bucket -> zero-value estimate, N=0.
 	if exp[1].N != 0 || exp[1].Expected != 0 || exp[1].Upper != 0 {
 		t.Fatalf("empty bucket = %+v, want N0 zeros", exp[1])
@@ -104,6 +108,7 @@ func TestExpectedLowerClampedAtZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if exp[0].Lower < 0 {
 		t.Fatalf("lower = %v, must be clamped at 0", exp[0].Lower)
 	}
@@ -123,6 +128,7 @@ func TestHolidayExclusion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// The holiday spike must not enter the bucket: median 100, N 2.
 	if exp[0].N != 2 || exp[0].Expected != 100 {
 		t.Fatalf("holiday sample leaked into the estimate: %+v", exp[0])
@@ -145,6 +151,7 @@ func TestLookbackBoundsHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if exp[0].N != 2 || exp[0].Expected != 100 {
 		t.Fatalf("lookback bounding wrong: %+v, want N2 median 100 (only the two in-window samples)", exp[0])
 	}
@@ -165,6 +172,7 @@ func TestConstantBucketYieldsZeroWidthInterval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if exp[0].Expected != 50 || exp[0].Lower != 50 || exp[0].Upper != 50 {
 		t.Fatalf("constant bucket = %+v, want a zero-width interval at 50", exp[0])
 	}
@@ -182,8 +190,10 @@ func knownCurve() [hoursPerWeek]float64 {
 		if dow >= 5 { // weekend lull
 			weekdayScale = 0.6
 		}
+
 		c[i] = 400 + daily*weekdayScale
 	}
+
 	return c
 }
 
@@ -204,6 +214,7 @@ func TestAccuracyUnderFivePercentOnKnownCurve(t *testing.T) {
 			hist = append(hist, Sample{At: at, Count: curve[h] * (1 + noise)})
 		}
 	}
+
 	// Evaluate over a 4-week window (ADR-0006's evaluation window), all hours
 	// estimated from the 8 prior weeks.
 	const evalWeeks = 4
@@ -211,6 +222,7 @@ func TestAccuracyUnderFivePercentOnKnownCurve(t *testing.T) {
 	for h := 0; h < evalWeeks*hoursPerWeek; h++ {
 		target = append(target, base.Add(time.Duration(weeks*hoursPerWeek+h)*time.Hour))
 	}
+
 	exp, err := (HourOfWeek{}).Expected(hist, target, Config{LookbackWeeks: weeks})
 	if err != nil {
 		t.Fatal(err)
@@ -224,20 +236,24 @@ func TestAccuracyUnderFivePercentOnKnownCurve(t *testing.T) {
 		if e.Upper > e.Lower {
 			band++
 		}
+
 		if truth >= e.Lower && truth <= e.Upper {
 			contained++
 		}
 	}
+
 	// ADR-0006 accuracy bar: median absolute percentage error < 5%.
 	if mape := median(apes); mape >= 0.05 {
 		t.Fatalf("median absolute percentage error = %.3f, want < 0.05", mape)
 	}
+
 	// Every hour is reported as a non-degenerate range (the leg is a range or
 	// nothing), and the band — a robust spread of the samples, not a CI on the
 	// mean — contains the truth for the large majority of hours.
 	if band != len(exp) {
 		t.Fatalf("%d/%d hours had a degenerate (zero-width) interval", len(exp)-band, len(exp))
 	}
+
 	if contained < len(exp)*8/10 {
 		t.Fatalf("interval contained truth for only %d/%d hours, want >= 80%%", contained, len(exp))
 	}
@@ -254,10 +270,12 @@ func BenchmarkExpected(b *testing.B) {
 			hist = append(hist, Sample{At: at, Count: curve[h]})
 		}
 	}
+
 	var target []time.Time
 	for h := 0; h < hoursPerWeek; h++ {
 		target = append(target, base.Add(time.Duration(weeks*hoursPerWeek+h)*time.Hour))
 	}
+
 	cfg := Config{LookbackWeeks: weeks}
 	bl := HourOfWeek{}
 	b.ReportAllocs()

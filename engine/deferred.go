@@ -44,6 +44,7 @@ func Deferred(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 	if !q.Capabilities().Metrics {
 		return DeferredLeg{}, fmt.Errorf("engine: deferred leg needs a metric source (biz_inflight_value); this backend serves no metrics")
 	}
+
 	leg := DeferredLeg{
 		Leg: Leg{
 			ByCurrency: map[string]int64{},
@@ -64,17 +65,20 @@ func Deferred(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		if err != nil {
 			return DeferredLeg{}, fmt.Errorf("engine: deferred inflight query: %w", err)
 		}
+
 		for _, s := range series {
 			level := lastLevel(s)
 			if level == 0 {
 				continue
 			}
+
 			bucket := s.Labels["age_bucket"]
 			currency := s.Labels["currency"]
 
 			if leg.ByAgeBucket[bucket] == nil {
 				leg.ByAgeBucket[bucket] = map[string]int64{}
 			}
+
 			leg.ByAgeBucket[bucket][currency] += level
 			leg.ByCurrency[currency] += level
 
@@ -97,6 +101,7 @@ func Deferred(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 	if err := fillDeferredCounts(ctx, reg, q, req, &leg); err != nil {
 		return DeferredLeg{}, err
 	}
+
 	return leg, nil
 }
 
@@ -115,11 +120,13 @@ func fillDeferredCounts(ctx context.Context, reg *registry.Registry, q query.Que
 		if err != nil {
 			return fmt.Errorf("engine: deferred inflight count query: %w", err)
 		}
+
 		for _, s := range series {
 			count := lastLevel(s)
 			if count == 0 {
 				continue
 			}
+
 			sawCount = true
 			leg.Count += count
 			// SLABreaches counts every transaction past its SLA deadline —
@@ -129,12 +136,14 @@ func fillDeferredCounts(ctx context.Context, reg *registry.Registry, q query.Que
 			}
 		}
 	}
+
 	// Caveat only when in-flight value exists but no count gauge counted it —
 	// an older, value-only source. No in-flight at all needs no caveat.
 	if !sawCount && len(leg.ByAgeBucket) > 0 {
 		leg.Caveats = append(leg.Caveats,
 			"in-flight and SLA-breach transaction COUNTS are unavailable — this source emits biz_inflight_value but not biz_inflight_count (ADR-0012); breach is reported as projected-lost value")
 	}
+
 	return nil
 }
 
@@ -145,6 +154,7 @@ func lastLevel(s query.SeriesSlice) int64 {
 	for _, p := range s.Points {
 		v += int64(p.Value)
 	}
+
 	return v
 }
 
@@ -155,6 +165,7 @@ func bucketIndex(bucket string) int {
 			return i
 		}
 	}
+
 	return -1
 }
 
@@ -172,14 +183,17 @@ func breached(reg *registry.Registry, flow, stage, bucket string) bool {
 	if !ok {
 		return false
 	}
+
 	sla, ok := f.SLA[stage]
 	if !ok {
 		return false
 	}
+
 	floorMin, ok := ageBucketFloorMinutes[bucket]
 	if !ok {
 		return false
 	}
+
 	return sla.Deadline <= time.Duration(floorMin)*time.Minute
 }
 
@@ -191,9 +205,11 @@ func breachedAndLost(reg *registry.Registry, flow, stage, bucket string) bool {
 	if !ok {
 		return false
 	}
+
 	if sla, ok := f.SLA[stage]; !ok || sla.OnBreach != registry.BreachLost {
 		return false
 	}
+
 	return breached(reg, flow, stage, bucket)
 }
 
@@ -204,17 +220,21 @@ func inflightFilters(req Request) []map[string]string {
 	for k, v := range req.Scope {
 		scope[k] = v
 	}
+
 	if len(req.Flows) == 0 {
 		return []map[string]string{scope}
 	}
+
 	out := make([]map[string]string, 0, len(req.Flows))
 	for _, f := range req.Flows {
 		m := make(map[string]string, len(scope)+1)
 		for k, v := range scope {
 			m[k] = v
 		}
+
 		m["flow"] = f
 		out = append(out, m)
 	}
+
 	return out
 }

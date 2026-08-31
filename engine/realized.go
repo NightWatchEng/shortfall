@@ -51,20 +51,24 @@ func flowFilters(req Request, outcome string) []map[string]string {
 	for k, v := range req.Scope {
 		scope[k] = v
 	}
+
 	if len(req.Flows) == 0 {
 		scope["outcome"] = outcome
 		return []map[string]string{scope}
 	}
+
 	out := make([]map[string]string, 0, len(req.Flows))
 	for _, f := range req.Flows {
 		m := make(map[string]string, len(scope)+2)
 		for k, v := range scope {
 			m[k] = v
 		}
+
 		m["outcome"] = outcome
 		m["flow"] = f
 		out = append(out, m)
 	}
+
 	return out
 }
 
@@ -81,6 +85,7 @@ func realizedFromEvents(ctx context.Context, q query.Querier, req Request) (Leg,
 		if err != nil {
 			return Leg{}, fmt.Errorf("engine: realized success query: %w", err)
 		}
+
 		for _, g := range groups {
 			succeeded[g.Key["entity"]] = true
 		}
@@ -96,14 +101,17 @@ func realizedFromEvents(ctx context.Context, q query.Querier, req Request) (Leg,
 		if err != nil {
 			return Leg{}, fmt.Errorf("engine: realized failed query: %w", err)
 		}
+
 		for _, g := range groups {
 			if succeeded[g.Key["entity"]] {
 				continue // recovered on a later attempt
 			}
+
 			leg.ByCurrency[g.Key["currency"]] += g.MaxMinor
 			leg.Count++
 		}
 	}
+
 	return leg, nil
 }
 
@@ -121,23 +129,27 @@ func realizedFromMetrics(ctx context.Context, q query.Querier, req Request) (Leg
 		if err != nil {
 			return Leg{}, fmt.Errorf("engine: realized value metric: %w", err)
 		}
+
 		for _, s := range value {
 			for _, p := range s.Points {
 				leg.ByCurrency[s.Labels["currency"]] += int64(p.Value)
 			}
 		}
+
 		count, err := q.QueryMetric(ctx, query.Query{
 			Metric: "biz_txn_total", Agg: query.AggSum, Filters: filters, Range: req.Window,
 		})
 		if err != nil {
 			return Leg{}, fmt.Errorf("engine: realized count metric: %w", err)
 		}
+
 		for _, s := range count {
 			for _, p := range s.Points {
 				leg.Count += int64(p.Value)
 			}
 		}
 	}
+
 	return leg, nil
 }
 

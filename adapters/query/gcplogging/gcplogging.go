@@ -201,21 +201,27 @@ func New(projectID, dataset string, opts ...Option) (*Querier, error) {
 	for _, o := range opts {
 		o(q)
 	}
+
 	if !validProjectID(q.projectID) {
 		return nil, fmt.Errorf("gcplogging: invalid project id %q", q.projectID)
 	}
+
 	if !validBigQueryID(q.dataset) {
 		return nil, fmt.Errorf("gcplogging: invalid dataset id %q", q.dataset)
 	}
+
 	if !validBigQueryID(q.view) {
 		return nil, fmt.Errorf("gcplogging: invalid view id %q", q.view)
 	}
+
 	if q.maxRows <= 0 {
 		return nil, fmt.Errorf("gcplogging: max rows must be positive, got %d", q.maxRows)
 	}
+
 	if q.pollInterval <= 0 {
 		return nil, fmt.Errorf("gcplogging: poll interval must be positive, got %s", q.pollInterval)
 	}
+
 	return q, nil
 }
 
@@ -239,6 +245,7 @@ func (q *Querier) QueryEvents(ctx context.Context, qy query.EventQuery) (query.E
 	if err != nil {
 		return nil, err
 	}
+
 	return memq.New(memq.WithEvents(events)).QueryEvents(ctx, qy)
 }
 
@@ -248,17 +255,20 @@ func (q *Querier) fetch(ctx context.Context, qy query.EventQuery) ([]biz.Outcome
 	if err := checkLabels(qy); err != nil {
 		return nil, err
 	}
+
 	stmt, params := q.statement(qy)
 	rows, err := q.run(ctx, stmt, params)
 	if err != nil {
 		return nil, err
 	}
+
 	// The statement asks for maxRows+1 so a full page is distinguishable
 	// from a window that simply fit: more than the cap means BigQuery cut
 	// the window off and every aggregate below it would understate money.
 	if len(rows) > q.maxRows {
 		return nil, fmt.Errorf("gcplogging: the window returned more than the %d-row cap — it is truncated; narrow the window or raise WithMaxRows", q.maxRows)
 	}
+
 	return decodeRows(rows)
 }
 
@@ -271,11 +281,13 @@ func checkLabels(qy query.EventQuery) error {
 			return fmt.Errorf("gcplogging: unknown filter label %q", k)
 		}
 	}
+
 	for _, g := range qy.GroupBy {
 		if _, ok := payloadPaths[g]; !ok {
 			return fmt.Errorf("gcplogging: unknown group label %q", g)
 		}
 	}
+
 	return nil
 }
 
@@ -301,6 +313,7 @@ func (q *Querier) statement(qy query.EventQuery) (string, []queryParam) {
 	for k := range qy.Filters {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	for _, k := range keys {
 		name := "f_" + k
@@ -347,25 +360,31 @@ func decodeRows(rows []bqRow) ([]biz.Outcome, error) {
 		if len(r.F) != 2 {
 			return nil, fmt.Errorf("gcplogging: row %d has %d columns, want 2 (event_micros, payload)", i, len(r.F))
 		}
+
 		micros, err := strconv.ParseInt(r.F[0].V, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("gcplogging: row %d: unparsable event_micros %q: %w", i, r.F[0].V, err)
 		}
+
 		payload := []byte(r.F[1].V)
 		marked, isObject := outcomeMarker(payload)
 		if !isObject {
 			nonObjects++
 			continue
 		}
+
 		if !marked {
 			continue
 		}
+
 		o, err := eventline.Parse(payload, time.UnixMicro(micros).UTC())
 		if err != nil {
 			return nil, fmt.Errorf("gcplogging: row %d: %w", i, err)
 		}
+
 		out = append(out, o)
 	}
+
 	// Every row came back, and not one of them was a JSON object: the
 	// payload column is not the JSON column this adapter reads. Answering
 	// "no outcomes" there would be a measured zero on a money leg.
@@ -373,6 +392,7 @@ func decodeRows(rows []bqRow) ([]biz.Outcome, error) {
 		return nil, fmt.Errorf("gcplogging: all %d rows carry a payload that is not a JSON object — "+
 			"the view's payload column is not Log Analytics' json_payload; check WithView", len(rows))
 	}
+
 	return out, nil
 }
 
@@ -385,14 +405,17 @@ func outcomeMarker(payload []byte) (marked, isObject bool) {
 	if err := json.Unmarshal(payload, &probe); err != nil || probe == nil {
 		return false, false
 	}
+
 	raw, ok := probe["event"]
 	if !ok {
 		return false, true
 	}
+
 	var event string
 	if err := json.Unmarshal(raw, &event); err != nil {
 		return false, true
 	}
+
 	return event == eventMarker, true
 }
 
@@ -407,6 +430,7 @@ func validProjectID(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
@@ -415,6 +439,7 @@ func validProjectID(s string) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -424,6 +449,7 @@ func validBigQueryID(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
@@ -431,5 +457,6 @@ func validBigQueryID(s string) bool {
 			return false
 		}
 	}
+
 	return true
 }

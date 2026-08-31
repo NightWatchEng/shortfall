@@ -68,21 +68,27 @@ func TestVerifyAndMapEventTypes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if !mapped {
 				t.Fatal("event should be mapped")
 			}
+
 			if out.Stage != c.wantStage || out.Result != c.wantResult {
 				t.Fatalf("stage/result = %q/%q, want %q/%q", out.Stage, out.Result, c.wantStage, c.wantResult)
 			}
+
 			if out.VC.Money.Amount != c.wantAmount || out.VC.Money.Currency != c.wantCur || out.VC.Money.Exponent != c.wantExp {
 				t.Fatalf("money = %+v, want %d %s exp %d", out.VC.Money, c.wantAmount, c.wantCur, c.wantExp)
 			}
+
 			if out.VC.Flow != "invoice.pay" || out.VC.EntityID != "inv_1" || out.VC.CustomerID != "h:c1" {
 				t.Fatalf("VC metadata not read: %+v", out.VC)
 			}
+
 			if !out.At.Equal(created) {
 				t.Fatalf("At = %v, want the event's created time %v", out.At, created)
 			}
+
 			if out.Source != Source {
 				t.Fatalf("source = %q", out.Source)
 			}
@@ -109,10 +115,12 @@ func TestSignatureFailureIsRejected(t *testing.T) {
 			if c.name == "tampered payload" {
 				p = []byte(strings.Replace(string(payload), "99999", "1", 1)) // amount changed after signing
 			}
+
 			_, mapped, err := VerifyAndMap(p, c.sig, testSecret)
 			if err == nil {
 				t.Fatal("an invalid signature MUST be rejected — a forged event cannot invent a loss")
 			}
+
 			if mapped {
 				t.Fatal("a rejected payload must never be mapped")
 			}
@@ -126,6 +134,7 @@ func TestUnmappedEventIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a verified unmapped event must not error: %v", err)
 	}
+
 	if mapped {
 		t.Fatalf("customer.created should not map, got %+v", out)
 	}
@@ -137,6 +146,7 @@ func (f *fakeParams) AddMetadata(k, v string) {
 	if f.md == nil {
 		f.md = map[string]string{}
 	}
+
 	f.md[k] = v
 }
 
@@ -146,6 +156,7 @@ func TestWithStripeMetadataStamps(t *testing.T) {
 	if p.md[MetaFlow] != "invoice.pay" || p.md[MetaEntity] != "inv_9" || p.md[MetaCustomer] != "h:c9" {
 		t.Fatalf("metadata = %v", p.md)
 	}
+
 	// The real *stripe.Params and resource params satisfy MetadataSetter.
 	var _ MetadataSetter = &stripe.Params{}
 }
@@ -160,6 +171,7 @@ func TestHandlerVerifiesAndDelivers(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("valid webhook: code %d", rec.Code)
 	}
+
 	if len(got) != 1 || got[0].VC.Money.Amount != 14900 {
 		t.Fatalf("outcome not delivered: %+v", got)
 	}
@@ -170,6 +182,7 @@ func TestHandlerVerifiesAndDelivers(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad-signature webhook: code %d, want 400", rec.Code)
 	}
+
 	if len(got) != 0 {
 		t.Fatal("a bad-signature webhook must deliver nothing")
 	}

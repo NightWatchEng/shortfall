@@ -89,6 +89,7 @@ func pickIDs(t *testing.T, events []biz.Outcome, w query.TimeRange) (string, str
 			return e.VC.EntityID, e.VC.CustomerID
 		}
 	}
+
 	t.Fatal("fixture carries no in-window USD event with both ids — the id-filtered parity rows would be vacuous")
 	return "", ""
 }
@@ -139,44 +140,55 @@ func TestQuerierConformanceAgainstMemq(t *testing.T) {
 				if err != nil {
 					t.Fatalf("query %d memq: %v", i, err)
 				}
+
 				got, err := q.QueryEvents(ctx, qy)
 				if err != nil {
 					t.Fatalf("query %d gcplogging: %v", i, err)
 				}
+
 				if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
 					t.Fatalf("query %d parity mismatch:\ngcplogging=%+v\nmemq      =%+v", i, got, want)
 				}
+
 				if len(want) > 0 {
 					for label := range qy.Filters {
 						witnessed[label] = true
 					}
 				}
+
 				for _, g := range want {
 					if g.SumMinor != 0 || g.MaxMinor != 0 {
 						sawMoney = true
 					}
+
 					if len(g.Key) > 0 {
 						sawGroups = true
 					}
+
 					if qy.Agg == query.EventAggDistinctCount && g.Count > 0 {
 						sawDistinct = true
 					}
 				}
 			}
+
 			// Guard the assertions themselves: without these the loop
 			// above would pass on a scenario that produced nothing at all.
 			if !sawMoney {
 				t.Fatal("parity is vacuous: no query returned a non-zero money figure")
 			}
+
 			if !sawGroups {
 				t.Fatal("parity is vacuous: no query returned a keyed group")
 			}
+
 			if !sawDistinct {
 				t.Fatal("parity is vacuous: the distinct-count verb returned zero customers")
 			}
+
 			if srv.queries == 0 {
 				t.Fatal("parity is vacuous: the adapter never issued a query")
 			}
+
 			// The per-label witness. A label with no witness is a JSONPath
 			// this suite compares empty against empty — free to drift to any
 			// other key the exporter writes, which against real BigQuery is
@@ -184,6 +196,7 @@ func TestQuerierConformanceAgainstMemq(t *testing.T) {
 			if len(payloadPaths) == 0 {
 				t.Fatal("payloadPaths is empty — the witness check would pass vacuously")
 			}
+
 			for label, path := range payloadPaths {
 				if !witnessed[label] {
 					t.Errorf("label %q has no witness: no conformance query filters on it AND matches data, "+
@@ -215,9 +228,11 @@ func TestPayloadPathsMatchTheExporterRecord(t *testing.T) {
 	if err := json.Unmarshal([]byte(eventRecord(full)), &record); err != nil {
 		t.Fatal(err)
 	}
+
 	if len(payloadPaths) == 0 {
 		t.Fatal("payloadPaths is empty — this check would pass vacuously")
 	}
+
 	quoted := regexp.MustCompile(`^\$\."(.+)"$`)
 	for label, path := range payloadPaths {
 		m := quoted.FindStringSubmatch(path)
@@ -225,11 +240,13 @@ func TestPayloadPathsMatchTheExporterRecord(t *testing.T) {
 			t.Errorf("label %q: JSONPath %q is not the quoted $.\"key\" form a dotted key needs", label, path)
 			continue
 		}
+
 		if _, ok := record[m[1]]; !ok {
 			t.Errorf("label %q pushes down key %q, which the exporter's record does not carry (keys: %v)",
 				label, m[1], sortedKeys(record))
 		}
 	}
+
 	// The marker the decoder and the pushdown both key on is the
 	// exporter's too.
 	if got, _ := record["event"].(string); got != eventMarker {
@@ -242,6 +259,7 @@ func sortedKeys(m map[string]any) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -264,20 +282,25 @@ func TestRealizedLegParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("memq realized: %v", err)
 	}
+
 	got, err := engine.RealizedLeg(context.Background(), &reg, q, req)
 	if err != nil {
 		t.Fatalf("gcplogging realized: %v", err)
 	}
+
 	if want.Count == 0 || len(want.ByCurrency) == 0 {
 		t.Fatal("realized parity is vacuous: the oracle found no realized loss in the window")
 	}
+
 	var total int64
 	for _, v := range want.ByCurrency {
 		total += v
 	}
+
 	if total == 0 {
 		t.Fatal("realized parity is vacuous: the oracle's realized loss is zero minor units")
 	}
+
 	if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
 		t.Fatalf("realized leg mismatch:\ngcplogging=%+v\nmemq      =%+v", got, want)
 	}
@@ -307,13 +330,16 @@ func TestLaterSuccessExclusionMatchesMemq(t *testing.T) {
 	if err != nil {
 		t.Fatalf("memq realized: %v", err)
 	}
+
 	if want.Count != 1 || want.ByCurrency["USD"] != 14900 {
 		t.Fatalf("oracle disagrees with the hand-computed answer: %+v (want 1 entity, 14900 USD)", want)
 	}
+
 	got, err := engine.RealizedLeg(context.Background(), &reg, q, req)
 	if err != nil {
 		t.Fatalf("gcplogging realized: %v", err)
 	}
+
 	if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
 		t.Fatalf("realized leg mismatch:\ngcplogging=%+v\nmemq      =%+v", got, want)
 	}
@@ -345,6 +371,7 @@ func TestEventOrderIsFaithful(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			want := append([]biz.Outcome(nil), events...)
 			if c.wantWindowed {
 				var in []biz.Outcome
@@ -353,21 +380,26 @@ func TestEventOrderIsFaithful(t *testing.T) {
 						in = append(in, e)
 					}
 				}
+
 				want = in
 			}
+
 			sortByTime(want)
 			if len(want) == 0 {
 				t.Fatal("order assertion is vacuous: the fixture produced no events to order")
 			}
+
 			if len(got) != len(want) {
 				t.Fatalf("decoded %d events, want %d", len(got), len(want))
 			}
+
 			for i := range want {
 				if !got[i].At.Equal(want[i].At) || got[i].VC.EntityID != want[i].VC.EntityID ||
 					got[i].Result != want[i].Result || got[i].VC.Money != want[i].VC.Money {
 					t.Fatalf("event %d = %+v, want %+v", i, got[i], want[i])
 				}
 			}
+
 			// Order is only meaningful over a sequence that is not already
 			// sorted by accident of a single timestamp.
 			if got[0].At.Equal(got[len(got)-1].At) {
@@ -402,16 +434,20 @@ func eventRecord(o biz.Outcome) string {
 	if o.VC.Segment != "" {
 		rec["biz.segment"] = o.VC.Segment
 	}
+
 	if o.Source != "" {
 		rec["source"] = o.Source
 	}
+
 	if o.Err != "" {
 		rec["error"] = o.Err
 	}
+
 	b, err := json.Marshal(rec)
 	if err != nil {
 		panic(err)
 	}
+
 	return string(b)
 }
 
@@ -429,9 +465,11 @@ func entriesFor(events []biz.Outcome) []fakeRow {
 			payload: `{"message":"starting checkout worker","severity_hint":"info"}`,
 		})
 	}
+
 	for _, o := range sorted {
 		rows = append(rows, fakeRow{micros: o.At.UnixMicro(), payload: eventRecord(o)})
 	}
+
 	rows = append(rows, fakeRow{
 		micros:  time.Now().UnixMicro(),
 		payload: `{"event":"biz.flush","flushed":12}`,

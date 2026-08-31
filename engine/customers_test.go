@@ -32,9 +32,11 @@ func TestCustomersNotAvailableWithoutEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.NotAvailableReason == "" {
 		t.Fatal("metrics-only backend must yield a NotAvailableReason, not a zero leg")
 	}
+
 	if leg.Distinct != 0 || len(leg.TopN) != 0 {
 		t.Fatalf("unavailable leg must be empty, got %+v", leg)
 	}
@@ -53,19 +55,24 @@ func TestCustomersDistinctSegmentAndTopN(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Distinct != 3 {
 		t.Fatalf("distinct = %d, want 3 (c1,c2,c3; c4 only succeeded)", leg.Distinct)
 	}
+
 	if leg.BySegment["smb"] != 2 || leg.BySegment["enterprise"] != 1 {
 		t.Fatalf("BySegment = %v, want smb 2 enterprise 1", leg.BySegment)
 	}
+
 	if len(leg.TopN) != 2 {
 		t.Fatalf("TopN len = %d, want 2 (limited)", len(leg.TopN))
 	}
+
 	// Ranked by loss: c2 (900) then c1 (500).
 	if leg.TopN[0].CustomerID != "h:c2" || leg.TopN[0].ByCurrency["USD"] != 900 {
 		t.Fatalf("top = %+v, want c2 900", leg.TopN[0])
 	}
+
 	if leg.TopN[1].CustomerID != "h:c1" || leg.TopN[1].ByCurrency["USD"] != 500 {
 		t.Fatalf("second = %+v, want c1 500", leg.TopN[1])
 	}
@@ -84,11 +91,13 @@ func TestCustomersTopNRanksByLargestCurrencyNotCrossSum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// c2 ranks first: cross-currency summing (which would put c1 at 1200) is
 	// forbidden; ranking is by largest single-currency loss (c2 800 > c1 600).
 	if leg.TopN[0].CustomerID != "h:c2" {
 		t.Fatalf("top = %s, want h:c2 (max-currency ranking, no cross-sum)", leg.TopN[0].CustomerID)
 	}
+
 	// c1's ByCurrency preserves both currencies.
 	var c1 CustomerImpact
 	for _, ci := range leg.TopN {
@@ -96,6 +105,7 @@ func TestCustomersTopNRanksByLargestCurrencyNotCrossSum(t *testing.T) {
 			c1 = ci
 		}
 	}
+
 	if c1.ByCurrency["USD"] != 600 || c1.ByCurrency["EUR"] != 600 {
 		t.Fatalf("c1 ByCurrency = %v, want USD 600 EUR 600", c1.ByCurrency)
 	}
@@ -108,9 +118,11 @@ func TestCustomersEmptyWhenNoFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.NotAvailableReason != "" {
 		t.Fatal("events ARE available; no failures is a real zero, not NotAvailable")
 	}
+
 	if leg.Distinct != 0 || len(leg.TopN) != 0 {
 		t.Fatalf("no failures -> empty, got %+v", leg)
 	}
@@ -135,10 +147,12 @@ func TestCustomersMatchesGoldenScenario(t *testing.T) {
 			distinct[tx.CustomerID] = string(tx.Segment)
 		}
 	}
+
 	wantBySeg := map[string]int64{}
 	for _, seg := range distinct {
 		wantBySeg[seg]++
 	}
+
 	if len(distinct) == 0 {
 		t.Fatal("scenario produced no failed customers")
 	}
@@ -149,14 +163,17 @@ func TestCustomersMatchesGoldenScenario(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.Distinct != int64(len(distinct)) {
 		t.Fatalf("distinct = %d, want %d", leg.Distinct, len(distinct))
 	}
+
 	for seg, want := range wantBySeg {
 		if leg.BySegment[seg] != want {
 			t.Fatalf("BySegment[%s] = %d, want %d", seg, leg.BySegment[seg], want)
 		}
 	}
+
 	if len(leg.TopN) == 0 || len(leg.TopN) > 5 {
 		t.Fatalf("TopN len = %d, want 1..5", len(leg.TopN))
 	}

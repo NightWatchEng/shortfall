@@ -16,6 +16,20 @@ func TestEveryTrackedGoFileCarriesTheHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scanning tracked files: %v", err)
 	}
+
+	// A sparse or filtered checkout makes git ls-files return nothing, and
+	// a scan of no files reports nothing missing — green having looked at
+	// nothing. The sibling guards in test/blankline and test/symbolcheck
+	// carry the same floor, as does ci-go.sh's module count.
+	files, err := trackedGoFiles("../..")
+	if err != nil {
+		t.Fatalf("listing tracked files: %v", err)
+	}
+
+	if len(files) < 100 {
+		t.Fatalf("only %d tracked .go file(s) found — the guard is vacuous", len(files))
+	}
+
 	if len(missing) > 0 {
 		t.Errorf("%d file(s) missing the Apache-2.0 header (run: go run ./test/licensehdr -fix):\n%s",
 			len(missing), strings.Join(missing, "\n"))
@@ -75,6 +89,7 @@ func TestWithHeader(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s:\ngot:\n%s\nwant:\n%s", tc.name, got, tc.want)
 		}
+
 		if needsHeader([]byte(got)) {
 			t.Errorf("%s: fixed content still reported missing", tc.name)
 		}

@@ -32,6 +32,7 @@ func TestPutMetricDataAgainstLocalStack(t *testing.T) {
 	if endpoint == "" {
 		t.Skip("set LOCALSTACK_ENDPOINT (e.g. http://localhost:4566) to run")
 	}
+
 	ctx := context.Background()
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion("us-east-1"),
@@ -40,6 +41,7 @@ func TestPutMetricDataAgainstLocalStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	client := cloudwatch.NewFromConfig(cfg, func(o *cloudwatch.Options) {
 		o.BaseEndpoint = aws.String(endpoint)
 	})
@@ -53,6 +55,7 @@ func TestPutMetricDataAgainstLocalStack(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("export: %v", err)
 	}
+
 	if err := e.Shutdown(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -64,16 +67,20 @@ func TestPutMetricDataAgainstLocalStack(t *testing.T) {
 		if err != nil {
 			t.Fatalf("list metrics: %v", err)
 		}
+
 		seen := map[string]bool{}
 		for _, m := range out.Metrics {
 			seen[aws.ToString(m.MetricName)] = true
 		}
+
 		if seen["biz_value_total"] && seen["biz_txn_total"] {
 			return // round-trip confirmed
 		}
+
 		if time.Now().After(deadline) {
 			t.Fatalf("metrics not found in namespace %q within deadline; saw %v", ns, seen)
 		}
+
 		time.Sleep(time.Second)
 	}
 }

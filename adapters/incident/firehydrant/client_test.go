@@ -89,12 +89,15 @@ func TestWriteImpact(t *testing.T) {
 			if err := c.WriteImpact(context.Background(), "inc-7", fixtureReport()); err != nil {
 				t.Fatal(err)
 			}
+
 			if got.path != "PATCH /v1/incidents/inc-7" {
 				t.Fatalf("path = %q", got.path)
 			}
+
 			if got.auth != "Bearer fhb-token" || got.ct != "application/json" {
 				t.Fatalf("headers = %q / %q", got.auth, got.ct)
 			}
+
 			tc.check(t, got.body)
 		})
 	}
@@ -110,9 +113,11 @@ func TestAttachCustomersCSV(t *testing.T) {
 	if err := c.AttachCustomersCSV(context.Background(), "inc-7", fixtureReport()); err != nil {
 		t.Fatal(err)
 	}
+
 	if got.path != "POST /v1/incidents/inc-7/notes" {
 		t.Fatalf("path = %q", got.path)
 	}
+
 	body, _ := got.body["body"].(string)
 	if !strings.Contains(body, "customer_id,segment,currency,amount_minor") ||
 		!strings.Contains(body, "h:c000001,smb,USD,14900") {

@@ -37,11 +37,13 @@ func Inject(c Carrier, vc biz.ValueContext) error {
 	if err != nil {
 		return err
 	}
+
 	if !c.Set(biz.MemberKey, enc) {
 		return fmt.Errorf(
 			"propagate: carrier could not hold biz.vc (nil or unwritable backing store) — context not propagated",
 		)
 	}
+
 	return nil
 }
 
@@ -54,9 +56,11 @@ func Extract(c Carrier) (biz.ValueContext, bool, error) {
 	if raw == "" {
 		return biz.ValueContext{}, false, nil
 	}
+
 	vc, err := biz.DecodeVC(raw)
 	if err != nil {
 		return biz.ValueContext{}, false, err
 	}
+
 	return vc, true, nil
 }

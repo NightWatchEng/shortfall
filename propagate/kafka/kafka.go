@@ -36,11 +36,13 @@ func (c Carrier) Get(key string) string {
 	if c.Headers == nil {
 		return ""
 	}
+
 	for _, h := range *c.Headers {
 		if h.Key == key {
 			return string(h.Value)
 		}
 	}
+
 	return ""
 }
 
@@ -52,6 +54,7 @@ func (c Carrier) Set(key, value string) bool {
 	if c.Headers == nil {
 		return false
 	}
+
 	set := false
 	out := (*c.Headers)[:0]
 	for _, h := range *c.Headers {
@@ -59,14 +62,18 @@ func (c Carrier) Set(key, value string) bool {
 			if set {
 				continue // drop later duplicate
 			}
+
 			h.Value = []byte(value)
 			set = true
 		}
+
 		out = append(out, h)
 	}
+
 	if !set {
 		out = append(out, Header{Key: key, Value: []byte(value)})
 	}
+
 	*c.Headers = out
 	return true
 }
@@ -76,9 +83,11 @@ func (c Carrier) Keys() []string {
 	if c.Headers == nil {
 		return nil
 	}
+
 	out := make([]string, 0, len(*c.Headers))
 	for _, h := range *c.Headers {
 		out = append(out, h.Key)
 	}
+
 	return out
 }

@@ -52,9 +52,11 @@ func TestTelemetryOutcomeMapping(t *testing.T) {
 			if visible != c.wantVisible {
 				t.Fatalf("visible = %v, want %v", visible, c.wantVisible)
 			}
+
 			if !visible {
 				return
 			}
+
 			if stage != c.wantStage || result != c.wantResult || !at.Equal(c.wantAt) {
 				t.Fatalf("got (%q, %q, %v), want (%q, %q, %v)", stage, result, at, c.wantStage, c.wantResult, c.wantAt)
 			}
@@ -93,15 +95,18 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 		if !txn.AuthedAt.IsZero() {
 			wantEntered++
 		}
+
 		_, result, _, visible := telemetryOutcome(txn)
 		if !visible {
 			continue
 		}
+
 		wantTerminal++
 		currencies[txn.Currency] = true
 		if txn.State == checkout.StateAuthFail {
 			wantAuthFailed++
 		}
+
 		if result == biz.Result("failed") && txn.Currency == "USD" {
 			wantFailedValueUSD += txn.AmountMinor
 		}
@@ -122,20 +127,24 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		var got float64
 		for _, s := range series {
 			for _, p := range s.Points {
 				got += p.Value
 			}
 		}
+
 		return int(got)
 	}
 	if got := sumTxn(nil); got != wantTerminal+wantEntered {
 		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d)", got, wantTerminal+wantEntered, wantTerminal, wantEntered)
 	}
+
 	if wantAuthFailed == 0 {
 		t.Fatal("fixture produced no auth failures — the auth-failed half of the entry assertion would be vacuous")
 	}
+
 	if got := sumTxn(map[string]string{"stage": "auth"}); got != wantEntered+wantAuthFailed {
 		t.Fatalf("entry-stage biz_txn_total sum = %d, want %d entries (entered %d + auth-failed %d)", got, wantEntered+wantAuthFailed, wantEntered, wantAuthFailed)
 	}
@@ -150,10 +159,12 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var gotFailedUSD int64
 	for _, g := range groups {
 		gotFailedUSD += g.SumMinor
 	}
+
 	if gotFailedUSD != wantFailedValueUSD {
 		t.Fatalf("failed USD value = %d, want %d", gotFailedUSD, wantFailedValueUSD)
 	}
@@ -213,6 +224,7 @@ func TestInFlightGaugeSnapshotVisibleWithinWindow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if seen := len(series) > 0; seen != c.wantSeen {
 				t.Fatalf("gauge series seen = %v (%d series), want %v", seen, len(series), c.wantSeen)
 			}

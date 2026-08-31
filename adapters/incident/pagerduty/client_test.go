@@ -62,15 +62,19 @@ func TestWriteImpactPayload(t *testing.T) {
 	if err := c.WriteImpact(context.Background(), "PXYZ", fixtureReport()); err != nil {
 		t.Fatal(err)
 	}
+
 	if got.path != "PUT /incidents/PXYZ/custom_fields/values" {
 		t.Fatalf("path = %q", got.path)
 	}
+
 	if got.auth != "Token token=pd_key" || got.ct != "application/json" {
 		t.Fatalf("headers = %q / %q", got.auth, got.ct)
 	}
+
 	if got.from != "" {
 		t.Fatalf("custom-fields write must not send From, got %q", got.from)
 	}
+
 	f := got.body["custom_fields"].([]any)[0].(map[string]any)
 	if f["name"] != "Dollar impact" || !strings.Contains(f["value"].(string), "realized [deterministic] USD 16999") {
 		t.Fatalf("custom_fields = %v", f)
@@ -88,12 +92,15 @@ func TestAttachCustomersCSV(t *testing.T) {
 	if err := c.AttachCustomersCSV(context.Background(), "PXYZ", fixtureReport()); err != nil {
 		t.Fatal(err)
 	}
+
 	if got.path != "POST /incidents/PXYZ/notes" {
 		t.Fatalf("path = %q", got.path)
 	}
+
 	if got.from != "oncall@example.com" {
 		t.Fatalf("From = %q", got.from)
 	}
+
 	content := got.body["note"].(map[string]any)["content"].(string)
 	if !strings.Contains(content, "h:c000001,smb,USD,14900") {
 		t.Fatalf("note content = %q", content)

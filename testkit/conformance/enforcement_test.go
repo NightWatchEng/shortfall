@@ -33,6 +33,7 @@ func TestEveryExporterRunsTheSuite(t *testing.T) {
 		if os.IsNotExist(err) {
 			t.Skip("no adapters/export directory yet — nothing to enforce")
 		}
+
 		t.Fatalf("reading %s: %v", exportDir, err)
 	}
 
@@ -42,10 +43,12 @@ func TestEveryExporterRunsTheSuite(t *testing.T) {
 		if !e.IsDir() {
 			continue
 		}
+
 		modDir := filepath.Join(exportDir, e.Name())
 		if _, err := os.Stat(filepath.Join(modDir, "go.mod")); err != nil {
 			continue // not a Go module (no exporter to conform)
 		}
+
 		checked++
 		if !moduleRefsSuite(t, modDir) {
 			offenders = append(offenders, e.Name())
@@ -55,9 +58,11 @@ func TestEveryExporterRunsTheSuite(t *testing.T) {
 	if len(offenders) > 0 {
 		t.Fatalf("exporter module(s) %v do not reference conformance.RunExporter in any *_test.go — every exporter must wire up the conformance suite", offenders)
 	}
+
 	if checked == 0 {
 		t.Skip("no exporter modules found under adapters/export — nothing to enforce yet")
 	}
+
 	t.Logf("conformance enforced across %d exporter module(s)", checked)
 }
 
@@ -79,6 +84,7 @@ func moduleRefs(t *testing.T, modDir, importPath, defaultName, symbol string) bo
 	if err != nil {
 		t.Fatalf("globbing %s: %v", modDir, err)
 	}
+
 	fset := token.NewFileSet()
 	for _, f := range matches {
 		// Parse without comments: the AST then holds only real code, so a
@@ -87,10 +93,12 @@ func moduleRefs(t *testing.T, modDir, importPath, defaultName, symbol string) bo
 		if err != nil {
 			t.Fatalf("parsing %s: %v", f, err)
 		}
+
 		if fileRefs(file, importPath, defaultName, symbol) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -103,19 +111,23 @@ func fileRefs(file *ast.File, importPath, defaultName, symbol string) bool {
 	if name == "" {
 		return false // module doesn't import the suite at all
 	}
+
 	found := false
 	ast.Inspect(file, func(n ast.Node) bool {
 		if found {
 			return false
 		}
+
 		sel, ok := n.(*ast.SelectorExpr)
 		if !ok || sel.Sel.Name != symbol {
 			return true
 		}
+
 		if id, ok := sel.X.(*ast.Ident); ok && id.Name == name {
 			found = true
 			return false
 		}
+
 		return true
 	})
 	return found
@@ -129,15 +141,19 @@ func importNameFor(file *ast.File, path, defaultName string) string {
 		if imp.Path == nil {
 			continue
 		}
+
 		// imp.Path.Value is the quoted literal, e.g. "\"...\"".
 		if len(imp.Path.Value) < 2 || imp.Path.Value[1:len(imp.Path.Value)-1] != path {
 			continue
 		}
+
 		if imp.Name != nil {
 			return imp.Name.Name // aliased import
 		}
+
 		return defaultName
 	}
+
 	return ""
 }
 
@@ -160,33 +176,41 @@ func TestEveryExporterChecksTheEventContract(t *testing.T) {
 		if os.IsNotExist(err) {
 			t.Skip("no adapters/export directory yet — nothing to enforce")
 		}
+
 		t.Fatalf("reading %s: %v", exportDir, err)
 	}
+
 	var offenders []string
 	var checked int
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
+
 		modDir := filepath.Join(exportDir, e.Name())
 		if _, err := os.Stat(filepath.Join(modDir, "go.mod")); err != nil {
 			continue
 		}
+
 		// An exporter that declares Events=false has no event to check.
 		if !moduleDeclaresEvents(t, modDir) {
 			continue
 		}
+
 		checked++
 		if !moduleRefs(t, modDir, testkitPath, "testkit", "CheckOutcomeEvent") {
 			offenders = append(offenders, e.Name())
 		}
 	}
+
 	if len(offenders) > 0 {
 		t.Fatalf("event-capable exporter module(s) %v do not reference testkit.CheckOutcomeEvent in any *_test.go — every transport must be held to the outcome event's field set (ADR-0002)", offenders)
 	}
+
 	if checked == 0 {
 		t.Skip("no event-capable exporter modules found — nothing to enforce yet")
 	}
+
 	t.Logf("event contract enforced across %d exporter module(s)", checked)
 }
 
@@ -200,18 +224,22 @@ func moduleDeclaresEvents(t *testing.T, modDir string) bool {
 	if err != nil {
 		t.Fatalf("globbing %s: %v", modDir, err)
 	}
+
 	for _, f := range matches {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
 		}
+
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("reading %s: %v", f, err)
 		}
+
 		if strings.Contains(string(b), "Events:            true") || strings.Contains(string(b), "Events: true") {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -224,6 +252,7 @@ func repoRoot(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime.Caller failed — cannot locate repo root")
 	}
+
 	// enforcement_test.go -> conformance -> testkit -> <root>
 	return filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
 }

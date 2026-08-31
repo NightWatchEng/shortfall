@@ -58,6 +58,7 @@ func New(token, fieldName, fromEmail string, opts ...Option) *Client {
 	for _, o := range opts {
 		o(c)
 	}
+
 	return c
 }
 
@@ -81,6 +82,7 @@ func (c *Client) AttachCustomersCSV(ctx context.Context, incidentID string, r en
 	if err != nil {
 		return fmt.Errorf("pagerduty: %w", err)
 	}
+
 	body := map[string]any{
 		"note": map[string]any{
 			"content": "shortfall customers (top accounts, minor units):\n" + string(csv),
@@ -94,25 +96,30 @@ func (c *Client) call(ctx context.Context, method, path string, body map[string]
 	if err != nil {
 		return err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Authorization", "Token token="+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if withFrom {
 		req.Header.Set("From", c.fromEmail)
 	}
+
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("pagerduty: %s: %w", op, err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("pagerduty: %s: status %d: %s", op, resp.StatusCode, snippet)
 	}
+
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }

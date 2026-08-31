@@ -73,6 +73,7 @@ func (HourOfWeek) Expected(history []Sample, target []time.Time, cfg Config) ([]
 	if cfg.LookbackWeeks < 1 {
 		return nil, fmt.Errorf("baseline: lookback_weeks %d must be >= 1", cfg.LookbackWeeks)
 	}
+
 	if len(target) == 0 {
 		return nil, nil
 	}
@@ -87,6 +88,7 @@ func (HourOfWeek) Expected(history []Sample, target []time.Time, cfg Config) ([]
 			earliest = t
 		}
 	}
+
 	cutoff := earliest.AddDate(0, 0, -7*cfg.LookbackWeeks)
 
 	// Bucket the in-window, non-holiday history counts by hour-of-week.
@@ -95,9 +97,11 @@ func (HourOfWeek) Expected(history []Sample, target []time.Time, cfg Config) ([]
 		if s.At.Before(cutoff) || !s.At.Before(earliest) {
 			continue // outside the lookback, or during/after the target window
 		}
+
 		if cfg.Holiday != nil && cfg.Holiday(s.At) {
 			continue
 		}
+
 		h := hourOfWeek(s.At)
 		buckets[h] = append(buckets[h], s.Count)
 	}
@@ -114,10 +118,13 @@ func (HourOfWeek) Expected(history []Sample, target []time.Time, cfg Config) ([]
 			if e.Lower < 0 {
 				e.Lower = 0
 			}
+
 			e.Upper = med + band
 		}
+
 		out = append(out, e)
 	}
+
 	return out, nil
 }
 
@@ -139,6 +146,7 @@ func median(xs []float64) float64 {
 	if n%2 == 1 {
 		return s[n/2]
 	}
+
 	return (s[n/2-1] + s[n/2]) / 2
 }
 
@@ -150,7 +158,9 @@ func mad(xs []float64, med float64) float64 {
 		if d < 0 {
 			d = -d
 		}
+
 		dev[i] = d
 	}
+
 	return median(dev)
 }

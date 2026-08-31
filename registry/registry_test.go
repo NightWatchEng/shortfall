@@ -37,6 +37,7 @@ func nameOr(s string) string {
 	if s == "" {
 		return "empty"
 	}
+
 	return s
 }
 
@@ -46,6 +47,7 @@ func mustParse(t *testing.T) Registry {
 	if err != nil {
 		t.Fatalf("sample registry rejected: %v", err)
 	}
+
 	return r
 }
 
@@ -55,31 +57,40 @@ func TestParseSample(t *testing.T) {
 	if !ok {
 		t.Fatal("flow invoice.pay missing")
 	}
+
 	if f.Money.Kind != "fee" {
 		t.Fatalf("kind %q", f.Money.Kind)
 	}
+
 	if len(f.Stages) != 3 || f.Stages[1].Name != "capture" {
 		t.Fatalf("stages: %+v", f.Stages)
 	}
+
 	sla, ok := f.SLA["capture"]
 	if !ok || sla.Deadline != 30*time.Minute || sla.OnBreach != BreachLost {
 		t.Fatalf("capture sla: %+v", sla)
 	}
+
 	if d := f.SLA["settle"].Deadline; d != 24*time.Hour {
 		t.Fatalf("settle deadline %v", d)
 	}
+
 	if f.Recovery.RecoveredFraction != 0.6 || f.Recovery.Within != 2*time.Hour {
 		t.Fatalf("recovery: %+v", f.Recovery)
 	}
+
 	if f.Baseline.LookbackWeeks != 8 || f.Baseline.Seasonality != "hour_of_week" {
 		t.Fatalf("baseline: %+v", f.Baseline)
 	}
+
 	if !r.SegmentValid("smb") || r.SegmentValid("gov") {
 		t.Fatal("segment enumeration wrong")
 	}
+
 	if !f.StageValid("settle") || f.StageValid("refund") {
 		t.Fatal("stage lookup wrong")
 	}
+
 	// No declared reconcile stage: the value stage defaults to the last stage.
 	if vs := f.ValueStage(); vs != "settle" {
 		t.Fatalf("value stage default = %q, want settle", vs)
@@ -94,6 +105,7 @@ func TestReconcileStageDeclared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	f, _ := r.Flow("invoice.pay")
 	if f.Reconcile.Stage != "capture" || f.ValueStage() != "capture" {
 		t.Fatalf("declared reconcile stage: %+v, ValueStage %q", f.Reconcile, f.ValueStage())
@@ -148,6 +160,7 @@ func TestISODurations(t *testing.T) {
 			if c.ok && (err != nil || got != c.want) {
 				t.Errorf("ParseISODuration(%q) = %v, %v; want %v", c.s, got, err, c.want)
 			}
+
 			if !c.ok && err == nil {
 				t.Errorf("ParseISODuration(%q) accepted, want error", c.s)
 			}
@@ -162,6 +175,7 @@ func TestNegativeFixtures(t *testing.T) {
 		if !strings.Contains(sampleYAML, from) {
 			t.Fatalf("fixture mutation source %q not in sample", from)
 		}
+
 		return strings.Replace(sampleYAML, from, to, 1)
 	}
 	cases := []struct {
@@ -212,6 +226,7 @@ func TestNegativeFixtures(t *testing.T) {
 			if err == nil {
 				t.Fatal("accepted")
 			}
+
 			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(c.wantMsg)) {
 				t.Fatalf("error %q does not name %q", err, c.wantMsg)
 			}
@@ -241,6 +256,7 @@ flows:
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(reg.Severity) != 2 ||
 			reg.Severity[0].Sev != "SEV1" ||
 			reg.Severity[0].MinPerMinuteMinor != 100000 ||
@@ -253,6 +269,7 @@ flows:
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(reg.Severity) != 0 {
 			t.Fatalf("expected no ladder, got %+v", reg.Severity)
 		}
@@ -284,6 +301,7 @@ flows:
 			if err == nil {
 				t.Fatal("accepted an invalid ladder")
 			}
+
 			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(c.want)) {
 				t.Fatalf("error %q does not name %q", err, c.want)
 			}
@@ -319,6 +337,7 @@ func TestLoadFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reference registry rejected: %v", err)
 	}
+
 	if _, ok := r.Flow("invoice.pay"); !ok {
 		t.Fatal("reference registry missing invoice.pay")
 	}
@@ -342,6 +361,7 @@ func TestDurationOverflowRejected(t *testing.T) {
 			}
 		})
 	}
+
 	if got, err := ParseISODuration("P3650D"); err != nil || got != 3650*24*time.Hour {
 		t.Fatalf("ten-year ceiling itself must parse: %v %v", got, err)
 	}
@@ -372,6 +392,7 @@ func TestParseRejectsExtraDocumentsAndBadFences(t *testing.T) {
 			if err == nil {
 				t.Fatal("accepted")
 			}
+
 			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(c.want)) {
 				t.Fatalf("error %q does not name %q", err, c.want)
 			}
@@ -413,12 +434,15 @@ func TestFlowCopiesDoNotMutateTheRegistry(t *testing.T) {
 	if got, _ := fresh.EstimateMinor("smb"); got != 14200 {
 		t.Fatalf("estimator mutated through a Flow copy: %d", got)
 	}
+
 	if fresh.SLA["capture"].Deadline != 30*time.Minute {
 		t.Fatal("SLA mutated through a Flow copy")
 	}
+
 	if fresh.Stages[0].Signals[0] == "tampered" {
 		t.Fatal("signals mutated through a Flow copy")
 	}
+
 	if fresh.Currencies[0] != "USD" {
 		t.Fatal("currencies mutated through a Flow copy")
 	}

@@ -28,21 +28,26 @@ func TestAPI5xxFault(t *testing.T) {
 			if txn.CreatedAt.Before(day2(14, 0)) || !txn.CreatedAt.Before(day2(15, 0)) {
 				outsideFailed++
 			}
+
 			failed++
 			if !txn.AuthedAt.IsZero() || !txn.CapturedAt.IsZero() {
 				t.Fatalf("%s failed auth but has later timestamps: %+v", txn.ID, txn)
 			}
 		}
+
 		if !txn.CreatedAt.Before(day2(14, 0)) && txn.CreatedAt.Before(day2(15, 0)) {
 			inWindow++
 		}
 	}
+
 	if outsideFailed != 0 {
 		t.Fatalf("%d auth failures outside the fault window", outsideFailed)
 	}
+
 	if failed == 0 {
 		t.Fatal("no auth failures during a 50% 5xx hour")
 	}
+
 	// ~50% of in-window arrivals should fail; wide band, mean is ~150.
 	frac := float64(failed) / float64(inWindow)
 	if frac < 0.35 || frac > 0.65 {
@@ -63,11 +68,13 @@ func TestAbandonmentFault(t *testing.T) {
 			if !txn.AuthedAt.IsZero() {
 				t.Fatalf("%s abandoned but authed: %+v", txn.ID, txn)
 			}
+
 			if txn.CreatedAt.Before(day2(9, 0)) || !txn.CreatedAt.Before(day2(10, 0)) {
 				t.Fatalf("%s abandoned outside the fault window", txn.ID)
 			}
 		}
 	}
+
 	if abandoned == 0 {
 		t.Fatal("no abandonment during a 40% latency hour")
 	}
@@ -87,12 +94,14 @@ func TestConsumerStallFormsAndDrainsBacklog(t *testing.T) {
 		if txn.CapturedAt.IsZero() {
 			continue
 		}
+
 		// Strictly inside the window: a completion timestamp equal to the
 		// stall start marks work that finished at the boundary — its
 		// service minutes were all un-stalled.
 		if txn.CapturedAt.After(stallFrom) && txn.CapturedAt.Before(stallTo) {
 			duringStallCaptures++
 		}
+
 		lag := txn.CapturedAt.Sub(txn.AuthedAt).Minutes()
 		if lag > float64(res.Config.CaptureDelayMin) {
 			delayed++
@@ -101,16 +110,20 @@ func TestConsumerStallFormsAndDrainsBacklog(t *testing.T) {
 			}
 		}
 	}
+
 	if duringStallCaptures != 0 {
 		t.Fatalf("%d captures completed during the stall window", duringStallCaptures)
 	}
+
 	if delayed == 0 {
 		t.Fatal("stall produced no delayed captures")
 	}
+
 	// A txn authed at stall start waits ~45m + drain time.
 	if maxLagMin < 40 {
 		t.Fatalf("max capture lag %.0fm implausibly small for a 45m stall", maxLagMin)
 	}
+
 	// Everything eventually settles: the backlog drains at capacity after
 	// the stall, well before the window ends the next day.
 	for _, txn := range res.Ledger.Txns {
@@ -136,8 +149,10 @@ func TestBlackoutSuppressesAndRecovers(t *testing.T) {
 		if s.Minute.Before(from) || !s.Minute.Before(to) {
 			t.Fatalf("suppressed minute %v outside the blackout window", s.Minute)
 		}
+
 		suppressedTotal += s.Count
 	}
+
 	if suppressedTotal == 0 {
 		t.Fatal("blackout suppressed nothing during a peak hour")
 	}
@@ -147,6 +162,7 @@ func TestBlackoutSuppressesAndRecovers(t *testing.T) {
 		if !txn.CreatedAt.Before(from) && txn.CreatedAt.Before(to) {
 			arrivedInWindow++
 		}
+
 		if txn.Recovered {
 			recovered++
 			if txn.CreatedAt.Before(to) || txn.CreatedAt.After(to.Add(2*time.Hour)) {
@@ -154,9 +170,11 @@ func TestBlackoutSuppressesAndRecovers(t *testing.T) {
 			}
 		}
 	}
+
 	if arrivedInWindow != 0 {
 		t.Fatalf("%d transactions arrived during a total blackout", arrivedInWindow)
 	}
+
 	frac := float64(recovered) / float64(suppressedTotal)
 	if frac < 0.45 || frac > 0.75 {
 		t.Fatalf("recovered fraction %.2f outside [0.45, 0.75] (%d of %d)", frac, recovered, suppressedTotal)
@@ -215,20 +233,25 @@ faults:
 	if err := os.WriteFile(path, []byte(yamlDoc), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	sc, err := LoadScenario(path)
 	if err != nil {
 		t.Fatalf("LoadScenario: %v", err)
 	}
+
 	if sc.Name != "capture-stall" || len(sc.Config.Faults) != 1 {
 		t.Fatalf("unexpected scenario: %+v", sc)
 	}
+
 	f := sc.Config.Faults[0]
 	if f.Kind != FaultConsumerStall || f.Queue != QueueCapture {
 		t.Fatalf("unexpected fault: %+v", f)
 	}
+
 	if got := f.To.Sub(f.From); got != 45*time.Minute {
 		t.Fatalf("stall length %v, want 45m", got)
 	}
+
 	// And it runs.
 	res := Run(sc.Config)
 	if len(res.Ledger.Txns) == 0 {
@@ -276,12 +299,14 @@ func TestCommittedScenariosAllLoadAndRun(t *testing.T) {
 	if err != nil || len(matches) < 3 {
 		t.Fatalf("expected the three canonical scenarios, got %v (err %v)", matches, err)
 	}
+
 	for _, path := range matches {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			sc, err := LoadScenario(path)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if res := Run(sc.Config); len(res.Ledger.Txns) == 0 {
 				t.Fatal("run produced no transactions")
 			}
@@ -389,11 +414,13 @@ func TestGoldenBlockRejections(t *testing.T) {
 			}
 		})
 	}
+
 	ok := mk("  from: 2026-08-24T10:00:00Z\n  to: 2026-08-24T11:00:00Z\n  capture_sla: 30m\n")
 	sc, err := ParseScenario([]byte(ok))
 	if err != nil {
 		t.Fatalf("valid golden block rejected: %v", err)
 	}
+
 	if sc.Golden.CaptureSLA != 30*time.Minute {
 		t.Fatalf("golden block not carried: %+v", sc.Golden)
 	}
@@ -424,6 +451,7 @@ func TestRecoveryAttributionSurvivesResuppression(t *testing.T) {
 		if !txn.Recovered {
 			continue
 		}
+
 		switch {
 		case txn.RecoveredFrom.Equal(a.From):
 			fromA++
@@ -433,12 +461,15 @@ func TestRecoveryAttributionSurvivesResuppression(t *testing.T) {
 			t.Fatalf("recovered txn %s has unknown attribution %v", txn.ID, txn.RecoveredFrom)
 		}
 	}
+
 	if fromA == 0 {
 		t.Fatal("no recoveries kept blackout A's attribution through re-suppression")
 	}
+
 	if fromB == 0 {
 		t.Fatal("blackout B produced no attributed recoveries of its own")
 	}
+
 	// Fresh-demand-only suppression accounting: per-minute counts during
 	// B must not include A's re-suppressed re-arrivals beyond the fresh
 	// arrival rate's plausible ceiling. Structural check instead: total
@@ -450,13 +481,16 @@ func TestRecoveryAttributionSurvivesResuppression(t *testing.T) {
 		if !s.Minute.Before(a.From) && s.Minute.Before(a.To) {
 			supA += s.Count
 		}
+
 		if !s.Minute.Before(b.From) && s.Minute.Before(b.To) {
 			supB += s.Count
 		}
 	}
+
 	if supA == 0 || supB == 0 {
 		t.Fatal("expected fresh suppression in both blackout windows")
 	}
+
 	// A's recoveries (rf=1.0, within 1m) all land inside B; if they were
 	// double-counted as fresh suppression, supB would exceed ~3x its
 	// fresh share for these windows (rates ~5-6/min in both).

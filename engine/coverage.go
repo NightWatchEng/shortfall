@@ -51,16 +51,20 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		if r.Outcome != biz.ResultSuccess {
 			continue
 		}
+
 		if ledgerVal[r.Flow] == nil {
 			ledgerVal[r.Flow] = map[string]*acc{}
 		}
+
 		a := ledgerVal[r.Flow][r.Money.Currency]
 		if a == nil {
 			a = &acc{exponent: r.Money.Exponent}
 			ledgerVal[r.Flow][r.Money.Currency] = a
 		}
+
 		a.minor += r.Money.Amount
 	}
+
 	if len(ledgerVal) == 0 {
 		leg.Unavailable = "no ledger success rows to reconcile against"
 		return leg, nil, nil
@@ -83,6 +87,7 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		if lcur == nil {
 			continue // requested flow not in the ledger — nothing to reconcile
 		}
+
 		// Telemetry is read at the flow's value stage so per-stage success
 		// emission is counted once per transaction (a cross-stage sum
 		// multiply-counts, and the clamp would mask exporter drops). A
@@ -96,23 +101,28 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 			if !ok {
 				return CoverageLeg{}, nil, fmt.Errorf("engine: coverage: flow %q is not in the registry — an unanchored read could clamp-mask exporter drops", flow)
 			}
+
 			valueStage = f.ValueStage()
 		}
+
 		tel, err := telemetrySuccessValue(ctx, q, flow, valueStage, req.Window)
 		if err != nil {
 			return CoverageLeg{}, nil, fmt.Errorf("engine: coverage telemetry query for %q: %w", flow, err)
 		}
+
 		for currency, a := range lcur {
 			if a.minor <= 0 {
 				// Coverage of a $0 slice is undefined, not 0 — skipping keeps
 				// it from tanking the trust number.
 				continue
 			}
+
 			telMinor := tel[currency]
 			ratio := float64(telMinor) / float64(a.minor)
 			if ratio > 1 {
 				ratio = 1 // the ledger is the denominator; telemetry seeing more is full coverage, not >100%
 			}
+
 			slices = append(slices, CoverageSlice{
 				Flow:           flow,
 				Currency:       currency,
@@ -124,9 +134,11 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 			if ratio < worst {
 				worst = ratio
 			}
+
 			haveSlice = true
 		}
 	}
+
 	if !haveSlice {
 		// Either no requested flow was in the ledger, or every matching slice
 		// summed to zero value — in both cases there is nothing with value to
@@ -134,6 +146,7 @@ func Coverage(ctx context.Context, reg *registry.Registry, q query.Querier, req 
 		leg.Unavailable = "no ledger slice with value to reconcile for the requested flows"
 		return leg, nil, nil
 	}
+
 	leg.Ratio = worst
 	return leg, slices, nil
 }
@@ -150,6 +163,7 @@ func telemetrySuccessValue(ctx context.Context, q query.Querier, flow, valueStag
 	if valueStage != "" {
 		filters["stage"] = valueStage
 	}
+
 	switch {
 	case caps.Metrics:
 		series, err := q.QueryMetric(ctx, query.Query{
@@ -162,6 +176,7 @@ func telemetrySuccessValue(ctx context.Context, q query.Querier, flow, valueStag
 		if err != nil {
 			return nil, err
 		}
+
 		for _, s := range series {
 			for _, p := range s.Points {
 				out[s.Labels["currency"]] += int64(p.Value)
@@ -176,11 +191,13 @@ func telemetrySuccessValue(ctx context.Context, q query.Querier, flow, valueStag
 		if err != nil {
 			return nil, err
 		}
+
 		for _, g := range groups {
 			out[g.Key["currency"]] += g.SumMinor
 		}
 	default:
 		return nil, query.ErrUnsupported
 	}
+
 	return out, nil
 }

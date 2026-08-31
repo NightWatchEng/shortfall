@@ -70,16 +70,19 @@ func runImpact(args []string, stdout, stderr io.Writer) int {
 		wf(stderr, "registry: %v\n", err)
 		return 1
 	}
+
 	from, err := time.Parse(time.RFC3339, *fromStr)
 	if err != nil {
 		wf(stderr, "--from: %v\n", err)
 		return 2
 	}
+
 	to, err := time.Parse(time.RFC3339, *toStr)
 	if err != nil {
 		wf(stderr, "--to: %v\n", err)
 		return 2
 	}
+
 	scope, err := parseScopes(scopes)
 	if err != nil {
 		wf(stderr, "%v\n", err)
@@ -91,6 +94,7 @@ func runImpact(args []string, stdout, stderr io.Writer) int {
 		wf(stderr, "%v\n", err)
 		return 2
 	}
+
 	defer cleanup()
 
 	rep, err := engine.Compute(context.Background(), &reg, q, engine.Request{
@@ -114,11 +118,13 @@ func runImpact(args []string, stdout, stderr io.Writer) int {
 			wf(stderr, "render: %v\n", err)
 			return 1
 		}
+
 		wln(stdout, string(b))
 	default:
 		wf(stderr, "--format: unknown %q (want text|json|markdown)\n", *format)
 		return 2
 	}
+
 	return 0
 }
 
@@ -129,8 +135,10 @@ func parseScopes(scopes stringList) (engine.Scope, error) {
 		if !ok || k == "" {
 			return nil, fmt.Errorf("--scope %q: want k=v", kv)
 		}
+
 		s[k] = v
 	}
+
 	return s, nil
 }
 
@@ -145,16 +153,19 @@ func buildQuerier(promURL, sqlDSN, sqlDriver string) (query.Querier, func(), err
 	if promURL != "" {
 		metrics = promql.New(promURL)
 	}
+
 	if sqlDSN != "" {
 		db, err := stdsql.Open(sqlDriver, sqlDSN)
 		if err != nil {
 			return nil, noop, fmt.Errorf("--sql: open: %w", err)
 		}
+
 		eq, err := sqlq.New(db)
 		if err != nil {
 			_ = db.Close()
 			return nil, noop, fmt.Errorf("--sql: %w", err)
 		}
+
 		events = eq
 		cleanup = func() { _ = db.Close() }
 	}

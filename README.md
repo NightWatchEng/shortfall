@@ -51,11 +51,23 @@ trust number is a weakest-link number. When it reads 0.62,
 
 Deterministic and estimated legs are never summed into one figure.
 
+**Why "shortfall".** It is the finance word for exactly this — the gap
+between expected and actual — and it carries the nuance the report is
+built around: a shortfall can be recovered. Deferred value is the case in
+point. It is money that is late, not gone, and it becomes loss only when
+a deadline in the registry says so. A word meaning only *loss* would have
+prejudged it.
+
 ## Install
 
 ```sh
 go get github.com/NightWatchEng/shortfall
 ```
+
+**Not yet:** the repository is private, so the checksum database cannot
+verify the module and `go get` fails. Until the flip, clone it and use a
+`replace` directive — the [quickstart](docs/quickstart.md) has the exact
+steps.
 
 The core module pulls `otel` and `yaml.v3` and nothing else. Every
 adapter under `adapters/` is a separate nested module, so a Prometheus

@@ -506,9 +506,9 @@ carriers), the exporters and queriers under `adapters/`, and the
 `shortfall` CLI have no concurrency numbers. The `biz` codec figures below
 are single-goroutine only.
 
-**The gate runs tests without `-race`.** `scripts/ci-go.sh test` is a plain
-`go test ./...`, so the concurrency test described above is exercised
-without the detector in CI. It was run under `-race` by hand, including its
+**The gate runs tests without `-race`.** `scripts/ci-go.sh test` runs
+`go test -count=1 ./...` — no `-race` — so the concurrency test described
+above is exercised without the detector in CI. It was run under `-race` by hand, including its
 discrimination check, but nothing enforces that on every PR.
 
 **The tagged benchmarks are compiled but not run.** `ci-go.sh vet`

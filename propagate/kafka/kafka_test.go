@@ -23,6 +23,7 @@ func TestKafkaCarrierRoundTrip(t *testing.T) {
 	if err := propagate.Inject(c, vc()); err != nil {
 		t.Fatal(err)
 	}
+
 	got, ok, err := propagate.Extract(NewCarrier(&headers))
 	if err != nil || !ok || got.EntityID != "inv_1" {
 		t.Fatalf("round trip: %+v ok=%v err=%v", got, ok, err)
@@ -53,9 +54,11 @@ func TestKafkaCarrierGetSet(t *testing.T) {
 					t.Fatal("Set on a valid carrier must report true")
 				}
 			}
+
 			if got := cr.Get(c.getKey); got != c.wantGet {
 				t.Fatalf("Get(%q) = %q, want %q", c.getKey, got, c.wantGet)
 			}
+
 			if len(headers) != c.wantLen {
 				t.Fatalf("len = %d, want %d: %v", len(headers), c.wantLen, headers)
 			}
@@ -81,6 +84,7 @@ func TestKafkaSetCanonicalizesDuplicates(t *testing.T) {
 			val = string(h.Value)
 		}
 	}
+
 	if count != 1 || val != "FRESH" {
 		t.Fatalf("expected one canonical biz.vc=FRESH, got count=%d val=%q headers=%v", count, val, headers)
 	}
@@ -91,6 +95,7 @@ func TestKafkaNilSafe(t *testing.T) {
 	if c.Set("k", "v") {
 		t.Fatal("Set on a nil carrier must report false")
 	}
+
 	if c.Get("k") != "" || c.Keys() != nil {
 		t.Fatal("nil carrier should be inert")
 	}

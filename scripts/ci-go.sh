@@ -33,6 +33,17 @@
 # ci.yml, the PR template, CONTRIBUTING and the skills policy to keep them
 # from disagreeing, for no extra coverage. If a negated tag ever lands here,
 # that reasoning breaks and this must become its own mode.
+# -count=1 on the test mode disables Go's test result cache, and that is
+# load-bearing rather than paranoia. test/blankline, test/licensehdr and
+# test/symbolcheck each scan the whole tree, reaching files through
+# `git ls-files` rather than opening them by name. The cache keys on the
+# files a run actually opened, so a NEWLY ADDED violating file was opened by
+# no cached run and does not invalidate the entry: the guard returns a green
+# `(cached)` while the violation sits in the tree. CI restores GOCACHE
+# between runs (setup-go cache: true), so this would persist across PRs.
+# The cost is real and worth stating: ~25s uncached against ~2.5s fully
+# cached, across the whole tree. A guard that can pass without looking is
+# not worth the 22 seconds.
 BUILD_TAGS="benchload integration"
 
 set -eu
@@ -157,7 +168,7 @@ for modfile in $modules; do
       ;;
     vet)   (cd "$dir" && go vet -tags "$BUILD_TAGS" ./...) || fail=1 ;;
     build) (cd "$dir" && go build ./...) || fail=1 ;;
-    test)  (cd "$dir" && go test ./...) || fail=1 ;;
+    test)  (cd "$dir" && go test -count=1 ./...) || fail=1 ;;
     vuln)  (cd "$dir" && go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...) || fail=1 ;;
     lint)  run_lint "$dir" || fail=1 ;;
     *) echo "unknown mode: $mode" >&2; exit 2 ;;

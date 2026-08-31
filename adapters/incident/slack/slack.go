@@ -48,6 +48,7 @@ func New(token string, opts ...Option) *Client {
 	for _, o := range opts {
 		o(c)
 	}
+
 	return c
 }
 
@@ -64,9 +65,11 @@ func (c *Client) Post(ctx context.Context, channel string, r engine.Report) (str
 	}, &out); err != nil {
 		return "", err
 	}
+
 	if !out.OK {
 		return "", fmt.Errorf("slack: chat.postMessage failed: %s", out.Error)
 	}
+
 	return out.TS, nil
 }
 
@@ -81,9 +84,11 @@ func (c *Client) Update(ctx context.Context, channel, ts string, r engine.Report
 	}, &out); err != nil {
 		return err
 	}
+
 	if !out.OK {
 		return fmt.Errorf("slack: chat.update failed: %s", out.Error)
 	}
+
 	return nil
 }
 
@@ -95,10 +100,12 @@ func (c *Client) Refresh(ctx context.Context, channel string, r engine.Report, i
 	if interval <= 0 {
 		return fmt.Errorf("slack: refresh interval %v must be positive", interval)
 	}
+
 	ts, err := c.Post(ctx, channel, r)
 	if err != nil {
 		return err
 	}
+
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -110,9 +117,11 @@ func (c *Client) Refresh(ctx context.Context, channel string, r engine.Report, i
 			if err != nil {
 				return err
 			}
+
 			if !open {
 				return nil // incident closed; leave the last render in place
 			}
+
 			if err := c.Update(ctx, channel, ts, next); err != nil {
 				return err
 			}
@@ -131,22 +140,27 @@ func (c *Client) call(ctx context.Context, method string, body map[string]string
 	if err != nil {
 		return err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/"+method, bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("slack: %s: %w", method, err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("slack: %s: HTTP %d", method, resp.StatusCode)
 	}
+
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("slack: %s: decode: %w", method, err)
 	}
+
 	return nil
 }

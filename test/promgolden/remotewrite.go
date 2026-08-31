@@ -39,11 +39,13 @@ func cumulativeForPrometheus(points []emit.MetricPoint) []emit.MetricPoint {
 		for k, v := range p.Labels {
 			labels = append(labels, [2]string{k, v})
 		}
+
 		sort.Slice(labels, func(i, j int) bool { return labels[i][0] < labels[j][0] })
 		s := p.Name
 		for _, l := range labels {
 			s += "\x00" + l[0] + "=" + l[1]
 		}
+
 		return s
 	}
 
@@ -64,6 +66,7 @@ func cumulativeForPrometheus(points []emit.MetricPoint) []emit.MetricPoint {
 			out = append(out, p) // gauges pass through as levels
 			continue
 		}
+
 		k := key(p)
 		a := counters[k]
 		if a == nil {
@@ -71,14 +74,17 @@ func cumulativeForPrometheus(points []emit.MetricPoint) []emit.MetricPoint {
 			counters[k] = a
 			order = append(order, k)
 		}
+
 		a.perTS[p.At.UnixNano()] += p.Value
 	}
+
 	for _, k := range order {
 		a := counters[k]
 		tss := make([]int64, 0, len(a.perTS))
 		for ts := range a.perTS {
 			tss = append(tss, ts)
 		}
+
 		sort.Slice(tss, func(i, j int) bool { return tss[i] < tss[j] })
 		var running int64
 		for _, ts := range tss {
@@ -89,6 +95,7 @@ func cumulativeForPrometheus(points []emit.MetricPoint) []emit.MetricPoint {
 			out = append(out, p)
 		}
 	}
+
 	return out
 }
 
@@ -110,17 +117,20 @@ func remoteWrite(ctx context.Context, baseURL string, points []emit.MetricPoint)
 		for k, v := range p.Labels {
 			labels = append(labels, [2]string{k, v})
 		}
+
 		sort.Slice(labels, func(i, j int) bool { return labels[i][0] < labels[j][0] })
 		key := ""
 		for _, l := range labels {
 			key += l[0] + "\x00" + l[1] + "\x00"
 		}
+
 		s := byKey[key]
 		if s == nil {
 			s = &series{labels: labels}
 			byKey[key] = s
 			order = append(order, key)
 		}
+
 		s.samples = append(s.samples, [2]int64{int64(math.Float64bits(float64(p.Value))), p.At.UnixMilli()})
 	}
 
@@ -132,9 +142,11 @@ func remoteWrite(ctx context.Context, baseURL string, points []emit.MetricPoint)
 		for _, l := range s.labels {
 			ts = append(ts, field(1, lengthDelim(labelMsg(l[0], l[1])))...) // TimeSeries.labels
 		}
+
 		for _, smp := range s.samples {
 			ts = append(ts, field(2, lengthDelim(sampleMsg(math.Float64frombits(uint64(smp[0])), smp[1])))...) // TimeSeries.samples
 		}
+
 		wr = append(wr, field(1, lengthDelim(ts))...) // WriteRequest.timeseries
 	}
 
@@ -143,6 +155,7 @@ func remoteWrite(ctx context.Context, baseURL string, points []emit.MetricPoint)
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Content-Encoding", "snappy")
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
@@ -150,12 +163,14 @@ func remoteWrite(ctx context.Context, baseURL string, points []emit.MetricPoint)
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 {
 		b := make([]byte, 512)
 		n, _ := resp.Body.Read(b)
 		return fmt.Errorf("remote_write: HTTP %d: %s", resp.StatusCode, b[:n])
 	}
+
 	return nil
 }
 
@@ -196,6 +211,7 @@ func varint(v uint64) []byte {
 		b = append(b, byte(v)|0x80)
 		v >>= 7
 	}
+
 	return append(b, byte(v))
 }
 
@@ -206,6 +222,7 @@ func waitReady(ctx context.Context, baseURL string) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/-/ready", nil)
 		if resp, err := http.DefaultClient.Do(req); err == nil {
 			_ = resp.Body.Close()
@@ -213,6 +230,7 @@ func waitReady(ctx context.Context, baseURL string) error {
 				return nil
 			}
 		}
+
 		time.Sleep(200 * time.Millisecond)
 	}
 }

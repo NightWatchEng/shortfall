@@ -43,6 +43,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 		leg.Unavailable = true
 		return leg, nil
 	}
+
 	if !q.Capabilities().Metrics {
 		leg.Notes = []string{"unavailable: the counterfactual leg needs a metric source for stage-entry history"}
 		leg.Unavailable = true
@@ -73,10 +74,12 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			notes = append(notes, fmt.Sprintf("flow %q not in the registry (or has no stages) — skipped", flowName))
 			continue
 		}
+
 		if flow.Baseline.LookbackWeeks < 1 {
 			notes = append(notes, fmt.Sprintf("flow %q has no baseline lookback — skipped", flowName))
 			continue
 		}
+
 		// A querier declaring less metric history than the lookback needs is a
 		// retention gap: flag it, never compute a baseline from too little data.
 		// Declaring 0 weeks means "undeclared", not "zero" — no gap.
@@ -86,6 +89,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 				flowName, hw, flow.Baseline.LookbackWeeks))
 			continue
 		}
+
 		if flow.Baseline.Holidays != "" {
 			notes = append(notes, fmt.Sprintf(
 				"flow %q declares holiday calendar %q, which v0 does not yet apply",
@@ -93,6 +97,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 				flow.Baseline.Holidays,
 			))
 		}
+
 		entryStage := flow.Stages[0].Name
 
 		// Query observed over the aligned span [target[0], lastTarget+1h), not
@@ -104,6 +109,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 		if err != nil {
 			return EstLeg{}, fmt.Errorf("engine: unrealized history query: %w", err)
 		}
+
 		obs, err := hourlyEntriesByCurrency(ctx, q, flowName, entryStage, alignedWindow)
 		if err != nil {
 			return EstLeg{}, fmt.Errorf("engine: unrealized observed query: %w", err)
@@ -118,10 +124,12 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			if err != nil {
 				return EstLeg{}, fmt.Errorf("engine: unrealized baseline: %w", err)
 			}
+
 			aov, aovSource, warn, ok := aovMinor(ctx, q, flowName, currency, flow, req.Window)
 			if warn != "" {
 				notes = append(notes, warn)
 			}
+
 			if !ok {
 				notes = append(notes, fmt.Sprintf(
 					"flow %q currency %s: no observed AOV and no applicable registry estimator — not valued",
@@ -130,6 +138,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 				))
 				continue
 			}
+
 			if aovSource == "metric" && flow.Estimator != nil {
 				notes = append(notes, fmt.Sprintf(
 					"flow %q currency %s: AOV from the value counter may understate — this flow emits estimated successes the counter omits, and no event source was available to correct it",
@@ -137,6 +146,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 					currency,
 				))
 			}
+
 			recovery := clampFraction(flow.Recovery.RecoveredFraction)
 			observedAt := hourMap(obs[currency])
 			var low, mid, high float64
@@ -145,11 +155,13 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 					thin = true
 					continue // no history for this hour-of-week; the gap is noted below
 				}
+
 				o := observedAt[hourKey(target[i])]
 				low += shortfallValue(e.Lower, o, aov, recovery)
 				mid += shortfallValue(e.Expected, o, aov, recovery)
 				high += shortfallValue(e.Upper, o, aov, recovery)
 			}
+
 			leg.LowMinor[currency] += int64(math.Round(low))
 			leg.MidMinor[currency] += int64(math.Round(mid))
 			leg.HighMinor[currency] += int64(math.Round(high))
@@ -163,9 +175,11 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 	if thin {
 		notes = append(notes, "some incident hours had no baseline history (retention gap) and were excluded — see the coverage/retention note")
 	}
+
 	if hint := upstreamAttribution(ctx, q, req); hint != "" {
 		notes = append(notes, hint)
 	}
+
 	leg.Notes = notes
 	return leg, nil
 }
@@ -177,6 +191,7 @@ func shortfallValue(expected, observed float64, aovMinorUnits int64, recovery fl
 	if short <= 0 {
 		return 0
 	}
+
 	return short * float64(aovMinorUnits) * (1 - recovery)
 }
 
@@ -194,6 +209,7 @@ func hourlyEntriesByCurrency(ctx context.Context, q query.Querier, flow, entrySt
 	if err != nil {
 		return nil, err
 	}
+
 	out := map[string][]baseline.Sample{}
 	for _, s := range series {
 		cur := s.Labels["currency"]
@@ -201,6 +217,7 @@ func hourlyEntriesByCurrency(ctx context.Context, q query.Querier, flow, entrySt
 			out[cur] = append(out[cur], baseline.Sample{At: p.At, Count: p.Value})
 		}
 	}
+
 	return out, nil
 }
 
@@ -226,6 +243,7 @@ func aovMinor(ctx context.Context, q query.Querier, flow, currency string, f reg
 	if vs := f.ValueStage(); vs != "" {
 		filters["stage"] = vs
 	}
+
 	if q.Capabilities().Events {
 		groups, err := q.QueryEvents(ctx, query.EventQuery{
 			Range:   window,
@@ -242,11 +260,13 @@ func aovMinor(ctx context.Context, q query.Querier, flow, currency string, f reg
 				sum += g.SumMinor
 				count += g.Count
 			}
+
 			if count > 0 {
 				return int64(math.Round(float64(sum) / float64(count))), "events", warn, true
 			}
 		}
 	}
+
 	if q.Capabilities().Metrics {
 		value := sumMetric(ctx, q, "biz_value_total", filters, window)
 		count := sumMetric(ctx, q, "biz_txn_total", filters, window)
@@ -254,11 +274,13 @@ func aovMinor(ctx context.Context, q query.Querier, flow, currency string, f reg
 			return int64(math.Round(value / count)), "metric", warn, true
 		}
 	}
+
 	// EstimateMoney stamps whatever currency is asked for, so the estimator is
 	// trusted only for a currency the flow declares (or a flow declaring none).
 	if m, ok := f.EstimateMoney("", currency); ok && flowAllowsCurrency(f, currency) {
 		return m.Amount, "estimator", warn, true
 	}
+
 	return 0, "", warn, false
 }
 
@@ -268,11 +290,13 @@ func flowAllowsCurrency(f registry.Flow, currency string) bool {
 	if len(f.Currencies) == 0 {
 		return true
 	}
+
 	for _, c := range f.Currencies {
 		if c == currency {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -282,12 +306,14 @@ func sumMetric(ctx context.Context, q query.Querier, metric string, filters map[
 	if err != nil {
 		return 0
 	}
+
 	var total float64
 	for _, s := range series {
 		for _, p := range s.Points {
 			total += p.Value
 		}
 	}
+
 	return total
 }
 
@@ -299,6 +325,7 @@ func upstreamAttribution(ctx context.Context, q query.Querier, req Request) stri
 	if failed <= 0 {
 		return ""
 	}
+
 	return fmt.Sprintf("attribution hint: %d failed provider call(s) in the window — suppression may be upstream", int64(failed))
 }
 
@@ -309,10 +336,12 @@ func hourlyInstants(w query.TimeRange) []time.Time {
 	if start.Before(w.From) {
 		start = start.Add(time.Hour)
 	}
+
 	var out []time.Time
 	for t := start; t.Before(w.To); t = t.Add(time.Hour) {
 		out = append(out, t)
 	}
+
 	return out
 }
 
@@ -323,6 +352,7 @@ func hourMap(samples []baseline.Sample) map[int64]float64 {
 	for _, s := range samples {
 		m[hourKey(s.At)] += s.Count
 	}
+
 	return m
 }
 
@@ -339,11 +369,14 @@ func clampFraction(f float64) float64 {
 	if math.IsNaN(f) {
 		return 0
 	}
+
 	if f < 0 {
 		return 0
 	}
+
 	if f > 1 {
 		return 1
 	}
+
 	return f
 }

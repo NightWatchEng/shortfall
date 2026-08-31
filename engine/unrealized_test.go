@@ -25,6 +25,7 @@ func unrealizedRegistry(t *testing.T) *registry.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return &reg
 }
 
@@ -50,6 +51,7 @@ func TestUnrealizedSuppressionWithinInterval(t *testing.T) {
 		at := baseMon.Add(time.Duration(w)*7*24*time.Hour + hour)
 		pts = append(pts, txnPoint("auth", "success", at, c)) // stage-entry count
 	}
+
 	// Incident hour: the 9th Monday 10:00. Only 40 entries observed (60
 	// suppressed). The AOV ratio reads at the flow's value stage (settle),
 	// where the paired count/value give AOV = 200000/40 = 5000.
@@ -82,14 +84,17 @@ func TestUnrealizedSuppressionWithinInterval(t *testing.T) {
 		t.Fatalf("range = [%d, %d] mid %d, want [%d, %d] mid %d",
 			leg.LowMinor["USD"], leg.HighMinor["USD"], leg.MidMinor["USD"], wantLow, wantHigh, wantMid)
 	}
+
 	// Ground truth (60 suppressed × 5000 × 0.4 = 120000) is the Mid and lies
 	// strictly inside the range, which is non-degenerate (ADR-0006).
 	if wantMid != 120000 || leg.LowMinor["USD"] >= leg.HighMinor["USD"] {
 		t.Fatalf("expected a real range around a 120000 mid, got [%d,%d] mid %d", leg.LowMinor["USD"], leg.HighMinor["USD"], leg.MidMinor["USD"])
 	}
+
 	if leg.Evidence != EvidenceEstimate {
 		t.Fatalf("evidence = %q, want estimate", leg.Evidence)
 	}
+
 	// Recovery is disclosed.
 	if !hasNoteContaining(leg.Notes, "recovery") {
 		t.Fatalf("recovery assumption not disclosed: %v", leg.Notes)
@@ -105,6 +110,7 @@ func TestUnrealizedNoSuppressionIsZero(t *testing.T) {
 		at := baseMon.Add(time.Duration(w)*7*24*time.Hour + hour)
 		pts = append(pts, txnPoint("auth", "success", at, 100))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	// Observed entries MEET expectation (100) — no suppression, no unrealized loss.
 	pts = append(pts, txnPoint("auth", "success", incident, 100),
@@ -115,6 +121,7 @@ func TestUnrealizedNoSuppressionIsZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if leg.MidMinor["USD"] != 0 {
 		t.Fatalf("no suppression must yield 0 mid, got %d", leg.MidMinor["USD"])
 	}
@@ -128,6 +135,7 @@ func TestUnrealizedUpstreamAttribution(t *testing.T) {
 	for w := 0; w < 8; w++ {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	pts = append(pts, txnPoint("auth", "success", incident, 40),
 		valuePoint("auth", "success", incident, 200000),
@@ -140,6 +148,7 @@ func TestUnrealizedUpstreamAttribution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !hasNoteContaining(leg.Notes, "upstream") {
 		t.Fatalf("failed provider calls should produce an upstream attribution hint: %v", leg.Notes)
 	}
@@ -152,6 +161,7 @@ func TestUnrealizedNoRegistryUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(leg.MidMinor) != 0 || !hasNoteContaining(leg.Notes, "registry") {
 		t.Fatalf("no registry must be unavailable with a note, got %+v", leg)
 	}
@@ -165,6 +175,7 @@ func TestUnrealizedNoMetricsUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !hasNoteContaining(leg.Notes, "metric source") {
 		t.Fatalf("a metrics-less backend must be unavailable with a note, got %v", leg.Notes)
 	}
@@ -183,6 +194,7 @@ func TestUnrealizedNonHourAlignedWindow(t *testing.T) {
 	for w := 0; w < 8; w++ {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+eleven), 100))
 	}
+
 	incidentHour := baseMon.Add(8*7*24*time.Hour + eleven) // Monday 11:00
 	pts = append(pts,
 		txnPoint("auth", "success", incidentHour, 40),
@@ -200,6 +212,7 @@ func TestUnrealizedNonHourAlignedWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// observed 40 (paired at 11:00), so mid = (100-40)*5000*0.4 = 120000.
 	// A misalignment would read observed 0 → mid 200000.
 	if leg.MidMinor["USD"] != 120000 {
@@ -224,6 +237,7 @@ func TestUnrealizedMultiCurrency(t *testing.T) {
 		at := baseMon.Add(time.Duration(w)*7*24*time.Hour + hour)
 		pts = append(pts, pt("USD", at, 100), pt("EUR", at, 50))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	// USD: 40 observed, AOV 5000 -> shortfall 60. EUR: 20 observed, AOV 3000 ->
 	// shortfall 30. The AOV pairs read at the value stage (settle).
@@ -245,10 +259,12 @@ func TestUnrealizedMultiCurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Per currency, never mixed. USD mid = 60*5000*0.4 = 120000; EUR mid = 30*3000*0.4 = 36000.
 	if leg.MidMinor["USD"] != 120000 {
 		t.Fatalf("USD mid = %d, want 120000", leg.MidMinor["USD"])
 	}
+
 	if leg.MidMinor["EUR"] != 36000 {
 		t.Fatalf("EUR mid = %d, want 36000", leg.MidMinor["EUR"])
 	}
@@ -265,6 +281,7 @@ func TestUnrealizedEstimatorFallbackAOV(t *testing.T) {
 	for w := 0; w < 8; w++ {
 		pts = append(pts, txnPoint("auth", "failed", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	pts = append(pts, txnPoint("auth", "failed", incident, 40)) // 40 entered, all failed; no captured value
 	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
@@ -273,6 +290,7 @@ func TestUnrealizedEstimatorFallbackAOV(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// mid = (100-40) * 18750 estimator * 0.4 = 60*18750*0.4 = 450000.
 	if leg.MidMinor["USD"] != 450000 {
 		t.Fatalf("estimator-fallback mid = %d, want 450000", leg.MidMinor["USD"])
@@ -290,6 +308,7 @@ func TestUnrealizedAOVFromEventsIncludesEstimated(t *testing.T) {
 	for w := 0; w < 8; w++ {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	pts = append(pts, txnPoint("auth", "success", incident, 40))
 	// Success events during the window: two real (4000, 6000) and one estimated
@@ -307,6 +326,7 @@ func TestUnrealizedAOVFromEventsIncludesEstimated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// mid = (100-40) * 6667 * 0.4 = 60 * 6667 * 0.4 = 160008.
 	wantAOV := int64(math.Round((4000.0 + 6000 + 10000) / 3))
 	wantMid := int64(math.Round(60 * float64(wantAOV) * 0.4))
@@ -326,6 +346,7 @@ func TestUnrealizedRetentionGap(t *testing.T) {
 	for w := 0; w < 8; w++ { // history is present, but the querier only PROMISES 4 weeks
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	// Entries are observed at the entry stage; the AOV ratio reads at the
 	// flow's value stage (settle), so the value/count pair lives there.
@@ -340,9 +361,11 @@ func TestUnrealizedRetentionGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !hasNoteContaining(leg.Notes, "RETENTION GAP") || !hasNoteContaining(leg.Notes, "warehouse") {
 		t.Fatalf("retention gap + suggestion must be shown, notes: %v", leg.Notes)
 	}
+
 	if len(leg.MidMinor) != 0 {
 		t.Fatalf("no silent degraded baseline: expected no valued currencies, got %+v", leg.MidMinor)
 	}
@@ -359,6 +382,7 @@ func TestUnrealizedRetentionNotAGap(t *testing.T) {
 	for w := 0; w < 8; w++ {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	// Entries are observed at the entry stage; the AOV ratio reads at the
 	// flow's value stage (settle), so the value/count pair lives there.
@@ -376,9 +400,11 @@ func TestUnrealizedRetentionNotAGap(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if hasNoteContaining(leg.Notes, "RETENTION GAP") {
 				t.Fatalf("history_weeks=%d must not be a gap: %v", hw, leg.Notes)
 			}
+
 			if leg.MidMinor["USD"] != 120000 {
 				t.Fatalf("history_weeks=%d: estimate must proceed, mid = %d want 120000", hw, leg.MidMinor["USD"])
 			}
@@ -408,6 +434,7 @@ func TestUnrealizedDisclosesEventsFailure(t *testing.T) {
 	for w := 0; w < 8; w++ {
 		pts = append(pts, txnPoint("auth", "success", baseMon.Add(time.Duration(w)*7*24*time.Hour+hour), 100))
 	}
+
 	incident := baseMon.Add(8*7*24*time.Hour + hour)
 	// Entries are observed at the entry stage; the AOV ratio reads at the
 	// flow's value stage (settle), so the value/count pair lives there.
@@ -422,11 +449,13 @@ func TestUnrealizedDisclosesEventsFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// It must not silently succeed as if events were absent: the failure is
 	// disclosed, and it still values via the counter fallback (mid 120000).
 	if !hasNoteContaining(leg.Notes, "events query failed") {
 		t.Fatalf("events-backend failure must be disclosed, notes: %v", leg.Notes)
 	}
+
 	if leg.MidMinor["USD"] != 120000 {
 		t.Fatalf("counter fallback mid = %d, want 120000", leg.MidMinor["USD"])
 	}
@@ -438,6 +467,7 @@ func hasNoteContaining(notes []string, sub string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -473,6 +503,7 @@ func TestAOVMinorStageFiltered(t *testing.T) {
 	if !ok || source != "metric" {
 		t.Fatalf("aov unavailable or wrong source (ok=%v source=%q warn=%q)", ok, source, warn)
 	}
+
 	if aov != 100 {
 		t.Fatalf("aov = %d, want 100 (value-stage anchored, entries excluded)", aov)
 	}

@@ -22,8 +22,10 @@ func waitIngested(t *testing.T, ctx context.Context, q query.Querier, probe quer
 		if err == nil && len(s) > 0 {
 			return
 		}
+
 		time.Sleep(300 * time.Millisecond)
 	}
+
 	t.Fatal("prometheus did not ingest the remote-written samples within 30s")
 }
 
@@ -44,8 +46,10 @@ func seriesMap(s query.Series) map[string]float64 {
 		for _, p := range ss.Points {
 			v += p.Value
 		}
+
 		m[labelKey(ss.Labels)] = v
 	}
+
 	return m
 }
 
@@ -54,11 +58,13 @@ func labelKey(labels map[string]string) string {
 	for k := range labels {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	s := ""
 	for _, k := range keys {
 		s += k + "=" + labels[k] + ","
 	}
+
 	return s
 }
 
@@ -66,11 +72,13 @@ func mapsEqual(a, b map[string]float64) bool {
 	if len(a) != len(b) {
 		return false
 	}
+
 	for k, v := range a {
 		if bv, ok := b[k]; !ok || bv != v {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -87,6 +95,7 @@ func samePointSeries(a, b query.Series) bool {
 			am[k] = map[int64]float64{}
 		}
 	}
+
 	for k, ap := range am {
 		bp := bm[k] // nil reads as all-zero
 		for at, v := range ap {
@@ -94,12 +103,14 @@ func samePointSeries(a, b query.Series) bool {
 				return false
 			}
 		}
+
 		for at, v := range bp {
 			if ap[at] != v {
 				return false
 			}
 		}
 	}
+
 	return true
 }
 
@@ -110,7 +121,9 @@ func pointMap(s query.Series) map[string]map[int64]float64 {
 		for _, p := range ss.Points {
 			pts[p.At.Unix()] += p.Value
 		}
+
 		m[labelKey(ss.Labels)] = pts
 	}
+
 	return m
 }

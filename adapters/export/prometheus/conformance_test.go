@@ -23,10 +23,12 @@ func (b promBackend) MetricPoints() int {
 	if err != nil {
 		return -1 // force a conformance failure rather than hide the error
 	}
+
 	n := 0
 	for _, mf := range mfs {
 		n += len(mf.Metric)
 	}
+
 	return n
 }
 func (b promBackend) Events() int { return 0 }
@@ -39,6 +41,7 @@ func (promHarness) New() (emit.Exporter, conformance.Backend) {
 	if err != nil {
 		panic(err) // a fresh registry cannot fail registration
 	}
+
 	return e, promBackend{g: reg}
 }
 

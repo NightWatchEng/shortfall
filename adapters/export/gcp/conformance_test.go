@@ -58,14 +58,17 @@ func (b gcpBackend) count(events bool) int {
 		if len(line) == 0 {
 			continue
 		}
+
 		var m map[string]any
 		if err := json.Unmarshal(line, &m); err != nil {
 			return -1
 		}
+
 		if (m["event"] == eventMarker) == events {
 			n++
 		}
 	}
+
 	return n
 }
 

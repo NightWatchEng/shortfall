@@ -39,6 +39,7 @@ func CheckOutcomeEvent(v OutcomeEventVectors, extract OutcomeEventExtractor, nat
 	for _, n := range native {
 		skip[n] = true
 	}
+
 	var problems []string
 	for _, c := range v.Cases {
 		o, err := c.Input.Outcome()
@@ -46,11 +47,13 @@ func CheckOutcomeEvent(v OutcomeEventVectors, extract OutcomeEventExtractor, nat
 			problems = append(problems, fmt.Sprintf("%s: building the Outcome: %v", c.Name, err))
 			continue
 		}
+
 		got, err := extract(o)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: exporting: %v", c.Name, err))
 			continue
 		}
+
 		for _, name := range sortedKeys(c.Attrs) {
 			want := c.Attrs[name]
 			g, ok := got[name]
@@ -58,29 +61,35 @@ func CheckOutcomeEvent(v OutcomeEventVectors, extract OutcomeEventExtractor, nat
 				problems = append(problems, fmt.Sprintf("%s: %s missing — the contract requires it", c.Name, name))
 				continue
 			}
+
 			if !sameWireValue(g, want) {
 				problems = append(problems, describeMismatch(c.Name, name, g, want))
 			}
 		}
+
 		for _, name := range sortedKeys(c.AttrsIfCarried) {
 			if skip[name] {
 				continue
 			}
+
 			want := c.AttrsIfCarried[name]
 			g, ok := got[name]
 			if !ok {
 				problems = append(problems, fmt.Sprintf("%s: %s missing — this transport carries it as an attribute, so the contract requires it", c.Name, name))
 				continue
 			}
+
 			if !sameWireValue(g, want) {
 				problems = append(problems, describeMismatch(c.Name, name, g, want))
 			}
 		}
+
 		for _, name := range c.Absent {
 			if g, ok := got[name]; ok {
 				problems = append(problems, fmt.Sprintf("%s: %s present as %v — the contract requires it absent, not empty", c.Name, name, g))
 			}
 		}
+
 		// Anything in the biz.* namespace the contract does not name is an
 		// addition nobody agreed to, and the next spelling to drift. The
 		// sweep is limited to that namespace on purpose: every transport
@@ -91,12 +100,15 @@ func CheckOutcomeEvent(v OutcomeEventVectors, extract OutcomeEventExtractor, nat
 			if !strings.HasPrefix(name, "biz.") {
 				continue
 			}
+
 			if _, named := c.Attrs[name]; named {
 				continue
 			}
+
 			problems = append(problems, fmt.Sprintf("%s: %s is not in the contract — add it to biz and regenerate the vector, or stop emitting it", c.Name, name))
 		}
 	}
+
 	return problems
 }
 
@@ -113,6 +125,7 @@ func sortedKeys[V any](m map[string]V) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -132,14 +145,17 @@ func sameWireValue(got, want any) bool {
 		gb, ok := got.(bool)
 		return ok && gb == wb
 	}
+
 	gn, gok := asNumber(got)
 	wn, wok := asNumber(want)
 	if gok && wok {
 		return gn == wn
 	}
+
 	if gok != wok {
 		return false
 	}
+
 	return fmt.Sprintf("%v", got) == fmt.Sprintf("%v", want)
 }
 
@@ -159,5 +175,6 @@ func asNumber(v any) (float64, bool) {
 		f, err := n.Float64()
 		return f, err == nil
 	}
+
 	return 0, false
 }

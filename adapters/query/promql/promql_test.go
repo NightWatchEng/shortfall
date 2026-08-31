@@ -62,11 +62,14 @@ func TestTranslate(t *testing.T) {
 				if err == nil {
 					t.Fatal("want error")
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if ex.expr != c.wantExpr {
 				t.Fatalf("expr = %q\nwant   %q", ex.expr, c.wantExpr)
 			}
@@ -87,6 +90,7 @@ func (f *fakeDoer) Do(req *http.Request) (*http.Response, error) {
 	if st == 0 {
 		st = 200
 	}
+
 	return &http.Response{StatusCode: st, Body: io.NopCloser(strings.NewReader(f.body))}, nil
 }
 
@@ -103,13 +107,16 @@ func TestQueryMetricParsesInstantVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(d.gotURL, "/api/v1/query?") {
 		t.Fatalf("instant query must hit /api/v1/query, got %s", d.gotURL)
 	}
+
 	byCur := map[string]float64{}
 	for _, s := range series {
 		byCur[s.Labels["currency"]] = s.Points[0].Value
 	}
+
 	if byCur["USD"] != 15000 || byCur["EUR"] != 700 {
 		t.Fatalf("parsed = %v, want USD 15000 EUR 700", byCur)
 	}
@@ -187,13 +194,16 @@ func TestTranslateStepped(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if len(buckets) != len(c.wantStarts) {
 				t.Fatalf("bucket count = %d, want %d", len(buckets), len(c.wantStarts))
 			}
+
 			for i, b := range buckets {
 				if !b.start.Equal(c.wantStarts[i]) {
 					t.Fatalf("bucket %d start = %s, want %s", i, b.start, c.wantStarts[i])
 				}
+
 				if b.ex.expr != c.wantExprs[i] {
 					t.Fatalf("bucket %d expr = %q\nwant          %q", i, b.ex.expr, c.wantExprs[i])
 				}
@@ -220,6 +230,7 @@ func (s *bucketDoer) Do(req *http.Request) (*http.Response, error) {
 	if !ok {
 		return nil, errors.New("bucketDoer: unexpected eval time " + req.URL.Query().Get("time"))
 	}
+
 	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 }
 
@@ -250,20 +261,25 @@ func TestSteppedQueryMergesBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(d.urls) != 3 {
 		t.Fatalf("issued %d queries, want 3 (one per bucket)", len(d.urls))
 	}
+
 	if len(series) != 2 {
 		t.Fatalf("series = %d, want 2 (EUR, USD): %+v", len(series), series)
 	}
+
 	eur, usd := series[0], series[1] // label-key order
 	if eur.Labels["currency"] != "EUR" || usd.Labels["currency"] != "USD" {
 		t.Fatalf("series order/labels wrong: %+v", series)
 	}
+
 	t20, t40 := from.Add(20*time.Minute), from.Add(40*time.Minute)
 	if len(eur.Points) != 1 || eur.Points[0].Value != 50 || !eur.Points[0].At.Equal(t20) {
 		t.Fatalf("EUR points = %+v, want one point 50 @ %s", eur.Points, t20)
 	}
+
 	if len(usd.Points) != 2 ||
 		usd.Points[0].Value != 100 || !usd.Points[0].At.Equal(from) ||
 		usd.Points[1].Value != 25 || !usd.Points[1].At.Equal(t40) {
@@ -289,9 +305,11 @@ func TestSteppedGaugeKeepsZeroLevels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(series) != 1 || len(series[0].Points) != 2 {
 		t.Fatalf("series = %+v, want one series with two points (zero level kept)", series)
 	}
+
 	if series[0].Points[0].Value != 0 || series[0].Points[1].Value != 700 {
 		t.Fatalf("points = %+v, want 0 then 700", series[0].Points)
 	}
@@ -313,6 +331,7 @@ func TestBaseTrailingSlashNormalized(t *testing.T) {
 	if _, err := q.QueryMetric(context.Background(), query.Query{Metric: "biz_value_total", Agg: query.AggSum, Range: query.TimeRange{From: from, To: to}}); err != nil {
 		t.Fatal(err)
 	}
+
 	if strings.Contains(d.gotURL, "prom//api") {
 		t.Fatalf("trailing slash must be normalized, got %s", d.gotURL)
 	}
@@ -355,6 +374,7 @@ func (g *gateDoer) Do(*http.Request) (*http.Response, error) {
 	if g.inflight > g.peak {
 		g.peak = g.inflight
 	}
+
 	g.mu.Unlock()
 	time.Sleep(2 * time.Millisecond) // hold the slot so overlap is observable
 	g.mu.Lock()
@@ -376,9 +396,11 @@ func TestSteppedFanOutBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if d.peak <= 1 {
 		t.Fatalf("bucket queries never overlapped (peak %d) — the fan-out is sequential", d.peak)
 	}
+
 	if d.peak > steppedConcurrency {
 		t.Fatalf("peak in-flight %d exceeds the bound %d", d.peak, steppedConcurrency)
 	}
@@ -402,6 +424,7 @@ func (e *errAtDoer) Do(req *http.Request) (*http.Response, error) {
 	if first {
 		return &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("boom"))}, nil
 	}
+
 	<-req.Context().Done()
 	return nil, req.Context().Err()
 }
@@ -423,6 +446,7 @@ func TestSteppedFanOutReportsRealError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "status 500") {
 		t.Fatalf("want the failing bucket's status 500 error, got %v", err)
 	}
+
 	if d.n > steppedConcurrency {
 		t.Fatalf("failure must stop further work: %d requests issued, bound %d", d.n, steppedConcurrency)
 	}

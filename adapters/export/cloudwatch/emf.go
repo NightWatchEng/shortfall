@@ -83,6 +83,7 @@ func buildMetricRecord(namespace, unit string, p emit.MetricPoint) ([]byte, erro
 	if dims == nil {
 		return nil, &unknownFamilyError{name: p.Name}
 	}
+
 	rec := map[string]any{
 		"_aws": emfMeta{
 			Timestamp: p.At.UnixMilli(),
@@ -97,6 +98,7 @@ func buildMetricRecord(namespace, unit string, p emit.MetricPoint) ([]byte, erro
 	for _, d := range dims {
 		rec[d] = p.Labels[d]
 	}
+
 	return json.Marshal(rec)
 }
 
@@ -123,20 +125,25 @@ func buildEventRecord(o biz.Outcome) ([]byte, error) {
 	if o.VC.Segment != "" {
 		rec[biz.AttrSegment] = o.VC.Segment
 	}
+
 	// See the note in the GCP exporter: the deadline rides every transport
 	// that can express it, so the same Outcome does not produce different
 	// fields depending on which exporter is wired (ADR-0002).
 	if !o.VC.Deadline.IsZero() {
 		rec[biz.AttrSLADeadline] = o.VC.Deadline.UTC().Format("2006-01-02T15:04:05Z")
 	}
+
 	if o.Source != "" {
 		rec[biz.AttrSource] = o.Source
 	}
+
 	if o.Err != "" {
 		rec[biz.AttrError] = o.Err
 	}
+
 	if o.TraceID != "" {
 		rec[biz.AttrTraceID] = o.TraceID
 	}
+
 	return json.Marshal(rec)
 }

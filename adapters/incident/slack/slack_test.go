@@ -72,12 +72,15 @@ func TestPostSendsFencedGoldenRender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if ts != "1724767200.000100" {
 		t.Fatalf("ts = %q", ts)
 	}
+
 	if cap.method != "chat.postMessage" || cap.auth != "Bearer xoxb-test" || cap.body["channel"] != "C123" {
 		t.Fatalf("request = %s auth=%q body=%v", cap.method, cap.auth, cap.body)
 	}
+
 	// The message is the text ledger block, fenced — matching the golden render.
 	want := "```\n" + report.RenderText(rep) + "\n```"
 	if cap.body["text"] != want {
@@ -94,9 +97,11 @@ func TestUpdateEditsSameMessage(t *testing.T) {
 	if err := c.Update(context.Background(), "C123", "1724767200.000100", sampleReport()); err != nil {
 		t.Fatal(err)
 	}
+
 	if cap.method != "chat.update" || cap.body["ts"] != "1724767200.000100" {
 		t.Fatalf("update request = %s body=%v", cap.method, cap.body)
 	}
+
 	if !strings.Contains(cap.body["text"], "REALIZED") {
 		t.Fatalf("update text missing the ledger block: %q", cap.body["text"])
 	}
@@ -133,6 +138,7 @@ func TestRefreshPostsThenUpdatesUntilClosed(t *testing.T) {
 		if method == "chat.postMessage" {
 			return `{"ok":true,"ts":"1.1"}`
 		}
+
 		return `{"ok":true}`
 	})
 	defer srv.Close()
@@ -147,6 +153,7 @@ func TestRefreshPostsThenUpdatesUntilClosed(t *testing.T) {
 	if err := c.Refresh(context.Background(), "C123", sampleReport(), time.Millisecond, fetch); err != nil {
 		t.Fatal(err)
 	}
+
 	// 1 post + 2 updates = 3 Slack calls; the 3rd fetch (closed) does not update.
 	cap.mu.Lock()
 	calls := cap.calls

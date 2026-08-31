@@ -31,9 +31,11 @@ func pi(id string, status stripe.PaymentIntentStatus, amount, received int64, cu
 	if flow != "" {
 		p.Metadata = map[string]string{MetaFlow: flow}
 	}
+
 	if withErr {
 		p.LastPaymentError = &stripe.Error{Code: stripe.ErrorCodeCardDeclined}
 	}
+
 	return p
 }
 
@@ -52,10 +54,12 @@ func pagedFetch(all []*stripe.PaymentIntent, size int, cursors *[]string) PageFu
 				}
 			}
 		}
+
 		end := start + size
 		if end > len(all) {
 			end = len(all)
 		}
+
 		return PaymentIntentPage{Intents: all[start:end], HasMore: end < len(all)}, nil
 	}
 }
@@ -66,6 +70,7 @@ func rowFor(rows []biz.LedgerRow, flow, currency string, outcome biz.Result) (bi
 			return r, true
 		}
 	}
+
 	return biz.LedgerRow{}, false
 }
 
@@ -93,6 +98,7 @@ func TestReconcileAggregatesAndReconciles100(t *testing.T) {
 	if led.Scanned != 8 {
 		t.Fatalf("scanned = %d, want 8", led.Scanned)
 	}
+
 	if led.Skipped != 2 { // pi_7 (bare cancel) + pi_8 (requires_capture)
 		t.Fatalf("skipped = %d, want 2", led.Skipped)
 	}
@@ -117,18 +123,22 @@ func TestReconcileAggregatesAndReconciles100(t *testing.T) {
 	if len(led.Rows) != len(expected) {
 		t.Fatalf("rows = %d, want %d distinct (flow,currency,outcome) slices: %+v", len(led.Rows), len(expected), led.Rows)
 	}
+
 	for _, w := range expected {
 		r, ok := rowFor(led.Rows, w.flow, w.currency, w.outcome)
 		if !ok {
 			t.Fatalf("missing row %s/%s/%s", w.flow, w.currency, w.outcome)
 		}
+
 		if r.Money.Amount != w.sum || r.Count != w.count {
 			t.Fatalf("row %s/%s/%s = %d/%d, want %d/%d", w.flow, w.currency, w.outcome, r.Money.Amount, r.Count, w.sum, w.count)
 		}
+
 		if err := r.Validate(); err != nil {
 			t.Fatalf("row %+v invalid: %v", r, err)
 		}
 	}
+
 	// Deterministic order: checkout.pay before invoice.pay.
 	if led.Rows[0].Flow != "checkout.pay" || led.Rows[len(led.Rows)-1].Flow != "invoice.pay" {
 		t.Fatalf("rows not ordered by flow: %+v", led.Rows)
@@ -175,23 +185,28 @@ func TestReconcilePaginationBoundaries(t *testing.T) {
 		_ = i
 		all = append(all, pi("pi_"+id, stripe.PaymentIntentStatusSucceeded, 1000, 1000, "usd", "f", false))
 	}
+
 	var cursors []string
 	led, err := Reconcile(context.Background(), pagedFetch(all, 3, &cursors), time.Unix(0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if led.Scanned != 7 {
 		t.Fatalf("scanned = %d, want 7", led.Scanned)
 	}
+
 	if r, _ := rowFor(led.Rows, "f", "USD", biz.ResultSuccess); r.Count != 7 || r.Money.Amount != 7000 {
 		t.Fatalf("aggregated = %+v, want 7000/7", r)
 	}
+
 	// Cursors: "" (page 1), "pi_c" (after page 1), "pi_f" (after page 2). Page 3
 	// returns 1 item with HasMore=false, so the walk stops — no 4th fetch.
 	want := []string{"", "pi_c", "pi_f"}
 	if len(cursors) != len(want) {
 		t.Fatalf("cursors = %v, want %v", cursors, want)
 	}
+
 	for i := range want {
 		if cursors[i] != want[i] {
 			t.Fatalf("cursor[%d] = %q, want %q", i, cursors[i], want[i])
@@ -223,9 +238,11 @@ func TestReconcileExactPageBoundaryHasMore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if led.Scanned != 2 || calls != 2 {
 		t.Fatalf("scanned=%d calls=%d, want 2 and 2", led.Scanned, calls)
 	}
+
 	if r, _ := rowFor(led.Rows, "f", "USD", biz.ResultSuccess); r.Count != 2 {
 		t.Fatalf("count = %d, want 2 (no double count)", r.Count)
 	}
@@ -241,16 +258,19 @@ func TestReconcileStopsOnNonAdvancingCursor(t *testing.T) {
 		if calls > 10 {
 			t.Fatal("Reconcile looped on a non-advancing cursor")
 		}
+
 		return PaymentIntentPage{Intents: same, HasMore: true}, nil
 	}
 	led, err := Reconcile(context.Background(), fetch, time.Unix(0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// First page consumed, then cursor "pi_x" equals the next page's last id -> stop.
 	if calls != 2 {
 		t.Fatalf("calls = %d, want 2 (stop once cursor cannot advance)", calls)
 	}
+
 	if led.Scanned != 2 { // pi_x seen on both fetches; that is the documented cost of the guard
 		t.Fatalf("scanned = %d", led.Scanned)
 	}
@@ -295,6 +315,7 @@ func (b *listBackend) CallRaw(_, _, _ string, body *form.Values, _ *stripe.Param
 		pil.Data = b.page
 		pil.HasMore = b.hasMore
 	}
+
 	return nil
 }
 func (b *listBackend) Call(_, _, _ string, _ stripe.ParamsContainer, _ stripe.LastResponseSetter) error {
@@ -322,16 +343,20 @@ func TestListPageFuncTranslatesParamsAndPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(page.Intents) != 1 || page.Intents[0].ID != "pi_a" || !page.HasMore {
 		t.Fatalf("page = %+v", page)
 	}
+
 	f0 := be.forms[0]
 	if got := f0.Get("created[gte]"); len(got) != 1 || got[0] != strconv.FormatInt(since.Unix(), 10) {
 		t.Fatalf("created[gte] = %v, want %d", got, since.Unix())
 	}
+
 	if got := f0.Get("limit"); len(got) != 1 || got[0] != "50" {
 		t.Fatalf("limit = %v, want 50", got)
 	}
+
 	if got := f0.Get("starting_after"); len(got) != 0 {
 		t.Fatalf("starting_after should be unset on the first page, got %v", got)
 	}
@@ -340,6 +365,7 @@ func TestListPageFuncTranslatesParamsAndPages(t *testing.T) {
 	if _, err := fn(context.Background(), since, "pi_a"); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := be.forms[1].Get("starting_after"); len(got) != 1 || got[0] != "pi_a" {
 		t.Fatalf("starting_after = %v, want pi_a", got)
 	}
@@ -357,6 +383,7 @@ func TestReconcileUnattributedFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if r, ok := rowFor(led.Rows, "", "USD", biz.ResultSuccess); !ok || r.Money.Amount != 5000 {
 		t.Fatalf("unattributed row = %+v (ok=%v), want 5000", r, ok)
 	}

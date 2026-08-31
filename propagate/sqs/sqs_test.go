@@ -22,9 +22,11 @@ func TestSQSCarrierRoundTrip(t *testing.T) {
 	if err := propagate.Inject(NewCarrier(attrs), vc()); err != nil {
 		t.Fatal(err)
 	}
+
 	if attrs[biz.MemberKey].DataType != "String" {
 		t.Fatalf("injected attr must be a String type: %+v", attrs[biz.MemberKey])
 	}
+
 	got, ok, err := propagate.Extract(NewCarrier(attrs))
 	if err != nil || !ok || got.EntityID != "inv_2" {
 		t.Fatalf("round trip: %+v ok=%v err=%v", got, ok, err)
@@ -55,6 +57,7 @@ func TestSQSNilSafe(t *testing.T) {
 	if c.Set("k", "v") {
 		t.Fatal("Set on a nil carrier must report false")
 	}
+
 	if c.Get("k") != "" {
 		t.Fatal("nil map carrier should be inert on set")
 	}

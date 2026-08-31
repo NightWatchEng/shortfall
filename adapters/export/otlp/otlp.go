@@ -111,6 +111,7 @@ func (s *providerSink) acquire(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
 	select {
 	case s.sem <- struct{}{}:
 		return nil
@@ -152,16 +153,19 @@ func (s *providerSink) emit(ctx context.Context, batch []biz.Outcome) error {
 	if err := s.acquire(ctx); err != nil {
 		return err
 	}
+
 	defer s.release()
 	if s.stopped.Load() {
 		return ErrShutdown
 	}
+
 	for start := 0; start < len(batch); start += eventQueueSize {
 		end := min(start+eventQueueSize, len(batch))
 		if err := s.emitChunk(ctx, batch[start:end]); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -181,8 +185,10 @@ func (s *providerSink) emitChunk(ctx context.Context, batch []biz.Outcome) error
 				emitCtx = oteltrace.ContextWithSpanContext(ctx, sc)
 			}
 		}
+
 		s.logger.Emit(emitCtx, buildRecord(o))
 	}
+
 	return s.provider.ForceFlush(ctx)
 }
 
@@ -220,6 +226,7 @@ func (s *providerSink) Shutdown(ctx context.Context) error {
 	if err := s.acquire(ctx); err != nil {
 		return err
 	}
+
 	defer s.release()
 	return s.provider.Shutdown(ctx)
 }
@@ -309,6 +316,7 @@ func resolveResource(res *resource.Resource) *resource.Resource {
 		// is why merged is returned unconditionally.
 		otel.Handle(err)
 	}
+
 	return merged
 }
 
@@ -318,19 +326,23 @@ func New(ctx context.Context, opts ...func(*Options)) (*Exporter, error) {
 	for _, f := range opts {
 		f(&o)
 	}
+
 	if o.resource == nil {
 		o.resource = defaultResource()
 	}
+
 	o.resource = resolveResource(o.resource)
 	m, err := metricexp.New(ctx, o.metric...)
 	if err != nil {
 		return nil, fmt.Errorf("otlp: metric exporter: %w", err)
 	}
+
 	l, err := logexp.New(ctx, o.log...)
 	if err != nil {
 		_ = m.Shutdown(ctx)
 		return nil, fmt.Errorf("otlp: log exporter: %w", err)
 	}
+
 	return &Exporter{metrics: m, logs: newProviderSink(l, o.resource), resource: o.resource}, nil
 }
 
@@ -353,15 +365,18 @@ func (e *Exporter) ExportMetrics(ctx context.Context, batch []emit.MetricPoint) 
 	if len(batch) == 0 {
 		return nil
 	}
+
 	// After the empty-batch return, never before: an empty batch drops
 	// nothing, so there is nothing to be loud about.
 	if e.shutdown.Load() {
 		return ErrShutdown
 	}
+
 	rm, err := buildResourceMetrics(batch, e.resource)
 	if err != nil {
 		return err
 	}
+
 	return e.metrics.Export(ctx, rm)
 }
 
@@ -370,9 +385,11 @@ func (e *Exporter) ExportEvents(ctx context.Context, batch []biz.Outcome) error 
 	if len(batch) == 0 {
 		return nil
 	}
+
 	if e.shutdown.Load() {
 		return ErrShutdown
 	}
+
 	return e.logs.emit(ctx, batch)
 }
 
@@ -390,6 +407,7 @@ func (e *Exporter) Shutdown(ctx context.Context) error {
 	if e.shutdown.Swap(true) {
 		return nil
 	}
+
 	mErr := e.metrics.Shutdown(ctx)
 	lErr := e.logs.Shutdown(ctx)
 	return errors.Join(mErr, lErr)

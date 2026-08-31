@@ -18,6 +18,7 @@ func writeLedger(t *testing.T, json string) string {
 	if err := os.WriteFile(p, []byte(json), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	return p
 }
 
@@ -36,6 +37,7 @@ func runReconcileCLI(t *testing.T, dsn, ledgerPath string) (string, int) {
 	if code != 0 {
 		t.Fatalf("exit %d, stderr:\n%s", code, errb.String())
 	}
+
 	return out.String(), code
 }
 
@@ -70,6 +72,7 @@ func TestReconcileEndToEndDroppedExporter(t *testing.T) {
 	if !strings.Contains(out, "50.0% reconciled") {
 		t.Fatalf("expected 50%% coverage, got:\n%s", out)
 	}
+
 	// The delta is attributed on the slice line: telemetry USD 100.00, ledger USD 200.00.
 	if !strings.Contains(out, "telemetry USD 100.00") || !strings.Contains(out, "ledger USD 200.00") {
 		t.Fatalf("expected per-slice attribution, got:\n%s", out)

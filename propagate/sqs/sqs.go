@@ -37,6 +37,7 @@ func (c Carrier) Set(key, value string) bool {
 	if c.Attrs == nil {
 		return false
 	}
+
 	c.Attrs[key] = Attribute{DataType: "String", StringValue: value}
 	return true
 }
@@ -47,5 +48,6 @@ func (c Carrier) Keys() []string {
 	for k := range c.Attrs {
 		out = append(out, k)
 	}
+
 	return out
 }

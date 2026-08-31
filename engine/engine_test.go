@@ -37,22 +37,27 @@ func TestComputeAssemblesDeterministicLegs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Realized computed from events.
 	if report.Realized.ByCurrency["USD"] != 14900 {
 		t.Fatalf("realized = %v, want USD 14900", report.Realized.ByCurrency)
 	}
+
 	// Customers computed from events.
 	if report.Customers.Distinct != 1 {
 		t.Fatalf("customers distinct = %d, want 1", report.Customers.Distinct)
 	}
+
 	// Deferred needs metrics; this events-only backend marks it unavailable.
 	if len(report.Deferred.Caveats) == 0 {
 		t.Fatal("deferred must be marked unavailable on an events-only backend")
 	}
+
 	// Unavailable legs say why instead of rendering zeros.
 	if len(report.Unrealized.Notes) == 0 || report.Coverage.Unavailable == "" {
 		t.Fatal("unrealized and coverage must state they are not yet computed")
 	}
+
 	if report.LibraryVersion == "" || report.GeneratedAt.IsZero() {
 		t.Fatal("report must carry provenance")
 	}
@@ -65,9 +70,11 @@ func TestComputeNoBackendMarksLegsUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(report.Realized.Caveats) == 0 || len(report.Deferred.Caveats) == 0 {
 		t.Fatal("money legs must be marked unavailable")
 	}
+
 	if report.Customers.NotAvailableReason == "" {
 		t.Fatal("customers must report NotAvailable")
 	}
@@ -100,6 +107,7 @@ func TestComputeCoverageUnavailableStatesContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	from := time.Date(2026, 8, 25, 9, 0, 0, 0, time.UTC)
 	q := memq.New(memq.WithEvents(nil))
 	report, err := Compute(context.Background(), &reg, q, Request{
@@ -109,13 +117,16 @@ func TestComputeCoverageUnavailableStatesContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	u := report.Coverage.Unavailable
 	if u == "" {
 		t.Fatal("impact-time coverage must be Unavailable (no ledger), not fabricated")
 	}
+
 	if strings.Contains(u, "M8") || strings.Contains(u, "lands") {
 		t.Fatalf("coverage reason carries stale milestone language: %q", u)
 	}
+
 	if !strings.Contains(u, "ledger") {
 		t.Fatalf("coverage reason must state the real contract (needs a ledger): %q", u)
 	}

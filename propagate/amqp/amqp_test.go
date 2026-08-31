@@ -22,6 +22,7 @@ func TestAMQPCarrierRoundTrip(t *testing.T) {
 	if err := propagate.Inject(NewCarrier(table), vc()); err != nil {
 		t.Fatal(err)
 	}
+
 	got, ok, err := propagate.Extract(NewCarrier(table))
 	if err != nil || !ok || got.EntityID != "inv_3" {
 		t.Fatalf("round trip: %+v ok=%v err=%v", got, ok, err)
@@ -45,6 +46,7 @@ func TestAMQPGetAcceptsStringAndBytes(t *testing.T) {
 			if c.value != nil {
 				table["k"] = c.value
 			}
+
 			if got := NewCarrier(table).Get("k"); got != c.want {
 				t.Fatalf("get = %q, want %q", got, c.want)
 			}
@@ -57,6 +59,7 @@ func TestAMQPNilSafe(t *testing.T) {
 	if c.Set("k", "v") {
 		t.Fatal("Set on a nil carrier must report false")
 	}
+
 	if c.Get("k") != "" {
 		t.Fatal("nil table carrier should be inert on set")
 	}

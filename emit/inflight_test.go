@@ -54,6 +54,7 @@ func newTrackerHarness(t *testing.T) (*InFlightTracker, *Std, *captureExporter, 
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	tr := NewInFlightTracker(em, WithTrackerClock(clk.time))
 	return tr, em, exp, clk
@@ -64,6 +65,7 @@ func gaugeTotals(t *testing.T, exp *captureExporter, em *Std) map[string]int64 {
 	if err := em.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	metrics, _ := exp.snapshot()
 	// Last write per full label set wins: gauges are levels.
 	latest := map[string]MetricPoint{}
@@ -71,13 +73,16 @@ func gaugeTotals(t *testing.T, exp *captureExporter, em *Std) map[string]int64 {
 		if p.Name != "biz_inflight_value" {
 			continue
 		}
+
 		k := p.Labels["flow"] + "|" + p.Labels["stage"] + "|" + p.Labels["age_bucket"] + "|" + p.Labels["currency"]
 		latest[k] = p
 	}
+
 	out := map[string]int64{}
 	for k, p := range latest {
 		out[k] = p.Value
 	}
+
 	return out
 }
 
@@ -113,19 +118,23 @@ func countTotals(t *testing.T, exp *captureExporter, em *Std) map[string]int64 {
 	if err := em.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	metrics, _ := exp.snapshot()
 	latest := map[string]MetricPoint{}
 	for _, p := range metrics {
 		if p.Name != "biz_inflight_count" {
 			continue
 		}
+
 		k := p.Labels["flow"] + "|" + p.Labels["stage"] + "|" + p.Labels["age_bucket"] + "|" + p.Labels["currency"]
 		latest[k] = p
 	}
+
 	out := map[string]int64{}
 	for k, p := range latest {
 		out[k] = p.Value
 	}
+
 	return out
 }
 
@@ -142,9 +151,11 @@ func TestTrackerPublishesCountAlongsideValue(t *testing.T) {
 	if v := gaugeTotals(t, exp, em)[key]; v != 600 {
 		t.Fatalf("value = %d, want 600", v)
 	}
+
 	if c := countTotals(t, exp, em)[key]; c != 3 {
 		t.Fatalf("count = %d, want 3", c)
 	}
+
 	// Complete all three; the bucket must zero both value and count.
 	tr.Done("invoice.pay", "capture", "a")
 	tr.Done("invoice.pay", "capture", "b")
@@ -168,6 +179,7 @@ func TestTrackerAgesAcrossPublishes(t *testing.T) {
 	if got["invoice.pay|capture|"+Age1mTo5m+"|USD"] != 100 {
 		t.Fatalf("aged message not in 1m-5m: %v", got)
 	}
+
 	if got["invoice.pay|capture|"+AgeLt1m+"|USD"] != 0 {
 		t.Fatalf("vacated bucket must be zeroed: %v", got)
 	}
@@ -199,10 +211,12 @@ func TestTrackerRetrackKeepsOriginalAge(t *testing.T) {
 	if got["invoice.pay|capture|"+Age5mTo30m+"|USD"] != 100 {
 		t.Fatalf("retrack reset the age: %v", got)
 	}
+
 	var total int64
 	for _, v := range got {
 		total += v
 	}
+
 	if total != 100 {
 		t.Fatalf("retrack double-counted: %v", got)
 	}
@@ -220,6 +234,7 @@ func TestTrackerEmptiedComboZeroesOnceThenStops(t *testing.T) {
 			t.Fatalf("bucket %s not zeroed after combo emptied: %v", b, got)
 		}
 	}
+
 	// After the zero-publish the combo retires: the next publish emits
 	// nothing new for it (no unbounded forever-zero series churn).
 	exp.mu.Lock()
@@ -229,6 +244,7 @@ func TestTrackerEmptiedComboZeroesOnceThenStops(t *testing.T) {
 	if err := em.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	metrics, _ := exp.snapshot()
 	for _, p := range metrics {
 		if p.Name == "biz_inflight_value" {
@@ -249,6 +265,7 @@ func TestTrackerTenThousandAcrossBoundaries(t *testing.T) {
 		tr.Track("invoice.pay", "capture", id, usd(1), clk.now.Add(-age))
 		wantTotals[AgeBucketFor(age)]++
 	}
+
 	tr.Publish()
 	got := gaugeTotals(t, exp, em)
 	for _, b := range AgeBuckets {
@@ -264,11 +281,13 @@ func TestTrackerCapIsLoud(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		tr.Track("invoice.pay", "capture", fmt.Sprintf("m%d", i), usd(1), clk.now)
 	}
+
 	tr.Publish()
 	got := gaugeTotals(t, exp, em)
 	if got["invoice.pay|capture|"+AgeLt1m+"|USD"] != 3 {
 		t.Fatalf("cap not applied: %v", got)
 	}
+
 	if tr.Overflowed() != 2 {
 		t.Fatalf("overflow count %d, want 2 — understated in-flight value must be visible", tr.Overflowed())
 	}
@@ -288,16 +307,19 @@ func BenchmarkTrackerPublish10k(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	em, err := New(&reg, exp, WithFlushInterval(0), WithBufferSize(1<<20))
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	defer func() { _ = em.Close(context.Background()) }()
 	tr := NewInFlightTracker(em)
 	now := time.Now()
 	for i := 0; i < 10000; i++ {
 		tr.Track("invoice.pay", "capture", fmt.Sprintf("m%05d", i), usd(1), now.Add(-time.Duration(i)*time.Second))
 	}
+
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -312,15 +334,18 @@ func TestTrackerPreservesCurrencyExponent(t *testing.T) {
 	if err := em.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	metrics, _ := exp.snapshot()
 	for _, p := range metrics {
 		if p.Name == "biz_inflight_value" && p.Labels["currency"] == "JPY" && p.Labels["age_bucket"] == AgeLt1m {
 			if p.Value != 14900 {
 				t.Fatalf("JPY gauge %d", p.Value)
 			}
+
 			return
 		}
 	}
+
 	t.Fatal("JPY gauge not published")
 }
 
@@ -374,6 +399,7 @@ func TestTrackerCurrencyChangeRetiresOldCombo(t *testing.T) {
 	if got["invoice.pay|capture|"+AgeLt1m+"|USD"] != 0 {
 		t.Fatalf("vacated USD combo not zeroed: %v", got)
 	}
+
 	if got["invoice.pay|capture|"+AgeLt1m+"|JPY"] != 9000 {
 		t.Fatalf("JPY combo missing: %v", got)
 	}
@@ -385,6 +411,7 @@ func TestTrackerStartCloseLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	tr := NewInFlightTracker(em)
 	tr.Start(0)                    // refused loudly, must not panic or spin
@@ -401,8 +428,10 @@ func TestTrackerStartCloseLifecycle(t *testing.T) {
 				return
 			}
 		}
+
 		time.Sleep(2 * time.Millisecond)
 	}
+
 	t.Fatal("publish loop never delivered")
 }
 
@@ -412,6 +441,7 @@ func TestTrackerMaxItemsFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = em.Close(context.Background()) })
 	cases := []struct {
 		name string

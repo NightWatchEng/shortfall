@@ -32,9 +32,21 @@ describing history, test names, or planned-and-marked design diagrams.
 
 Evidence: quote the claim AND name the missing/contradicting artifact.
 
-The mechanical slice — fenced Go examples must compile, fenced registry
-examples must load — is enforced deterministically by test/docsnippets
-in the core CI job (promoted 2026-08-29): Go compilation for the docs
-its checkedDocs list governs, registry loading over a slightly wider
-doc list in its validator test, docs/integration.md included since
-2026-08-31. Fences elsewhere (ADR history) stay with this lens's judgment.
+Two mechanical slices are enforced deterministically in the core CI job,
+and are NOT judged here:
+
+- Fenced examples — Go must compile, registry YAML must load — by
+  test/docsnippets (promoted 2026-08-29): compilation for the docs its
+  checkedDocs list governs, registry loading over a slightly wider list
+  in its validator test.
+- Prose symbol references — a backticked `pkg.Symbol`, `pkg.Type.Member`
+  or bare `Type.Member` must resolve against the real packages — by
+  test/symbolcheck (workspace-9p1), over README.md, adapters/README.md
+  and every .md under docs/ outside docs/adr/.
+
+Their boundary is where this lens resumes. A bare single identifier
+(`NotAvailableReason`) is indistinguishable from an ordinary capitalised
+word in prose and is not resolved; neither is the TRUTH of a claim built
+from names that do resolve — "distinct entities" named a real field and
+described the wrong one. Fences and symbols in ADR history stay judged
+too.

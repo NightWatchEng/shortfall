@@ -100,6 +100,7 @@ func sampleMetrics(n int) []emit.MetricPoint {
 		// families another varying label first.
 		panic(fmt.Sprintf("conformance: sampleMetrics(%d) exceeds the %d distinct currencies that keep its series distinct", n, len(currencies)))
 	}
+
 	out := make([]emit.MetricPoint, 0, n)
 	for i := 0; i < n; i++ {
 		at := baseTime.Add(time.Duration(i) * time.Second)
@@ -171,6 +172,7 @@ func sampleMetrics(n int) []emit.MetricPoint {
 			})
 		}
 	}
+
 	return out
 }
 
@@ -186,6 +188,7 @@ func sampleEvents(n int) []biz.Outcome {
 			Stage: "capture", Result: biz.ResultFailed,
 		})
 	}
+
 	return out
 }
 
@@ -199,10 +202,12 @@ func batchesOfMetrics(exp emit.Exporter, n int) (int, error) {
 		if len(b) == 0 {
 			continue
 		}
+
 		if err := exp.ExportMetrics(context.Background(), b); err != nil {
 			return n, err
 		}
 	}
+
 	return n, nil
 }
 
@@ -213,10 +218,12 @@ func batchesOfEvents(exp emit.Exporter, n int) (int, error) {
 		if len(b) == 0 {
 			continue
 		}
+
 		if err := exp.ExportEvents(context.Background(), b); err != nil {
 			return n, err
 		}
 	}
+
 	return n, nil
 }
 
@@ -238,6 +245,7 @@ func Check(h Harness) []Result {
 		})
 		return results
 	}
+
 	results = append(results, Result{Name: "declares at least one signal"})
 
 	// Two points per ADR-0004 family, and within sampleMetrics' distinct-series
@@ -273,9 +281,11 @@ func repeatShutdown(h Harness) Result {
 		r.Err = fmt.Sprintf("shutdown errored: %v", err)
 		return r
 	}
+
 	if err := exp.Shutdown(context.Background()); err != nil {
 		r.Err = fmt.Sprintf("repeat shutdown after a successful one errored: %v — the no-op has no work left to fail at", err)
 	}
+
 	return r
 }
 
@@ -288,6 +298,7 @@ func postShutdown(r Result, exp emit.Exporter, n int, export func() error, deliv
 		r.Err = fmt.Sprintf("shutdown errored: %v", err)
 		return r
 	}
+
 	err := export()
 	got := delivered()
 	switch {
@@ -296,6 +307,7 @@ func postShutdown(r Result, exp emit.Exporter, n int, export func() error, deliv
 	case err == nil && got != n:
 		r.Err = fmt.Sprintf("post-shutdown export returned nil but delivered %d of %d — silently absorbed; it must refuse with an error or stay genuinely functional", got, n)
 	}
+
 	return r
 }
 
@@ -305,6 +317,7 @@ func postShutdownMetrics(h Harness, caps emit.Caps, n int) Result {
 		r.Skipped = true
 		return r
 	}
+
 	exp, be := h.New()
 	return postShutdown(r, exp, n,
 		func() error { _, err := batchesOfMetrics(exp, n); return err },
@@ -317,6 +330,7 @@ func postShutdownEvents(h Harness, caps emit.Caps, n int) Result {
 		r.Skipped = true
 		return r
 	}
+
 	exp, be := h.New()
 	return postShutdown(r, exp, n,
 		func() error { _, err := batchesOfEvents(exp, n); return err },
@@ -329,19 +343,23 @@ func metricNoLoss(h Harness, caps emit.Caps, n int) Result {
 		r.Skipped = true
 		return r
 	}
+
 	exp, be := h.New()
 	total, err := batchesOfMetrics(exp, n)
 	if err != nil {
 		r.Err = fmt.Sprintf("a capable exporter must not error on metric export: %v", err)
 		return r
 	}
+
 	if err := exp.Shutdown(context.Background()); err != nil {
 		r.Err = fmt.Sprintf("shutdown errored: %v", err)
 		return r
 	}
+
 	if be.MetricPoints() != total {
 		r.Err = fmt.Sprintf("delivered %d of %d metric points after shutdown — batching or flush is dropping data", be.MetricPoints(), total)
 	}
+
 	return r
 }
 
@@ -351,19 +369,23 @@ func eventNoLoss(h Harness, caps emit.Caps, n int) Result {
 		r.Skipped = true
 		return r
 	}
+
 	exp, be := h.New()
 	total, err := batchesOfEvents(exp, n)
 	if err != nil {
 		r.Err = fmt.Sprintf("a capable exporter must not error on event export: %v", err)
 		return r
 	}
+
 	if err := exp.Shutdown(context.Background()); err != nil {
 		r.Err = fmt.Sprintf("shutdown errored: %v", err)
 		return r
 	}
+
 	if be.Events() != total {
 		r.Err = fmt.Sprintf("delivered %d of %d events after shutdown — an exporter that declares Events must not drop them", be.Events(), total)
 	}
+
 	return r
 }
 
@@ -373,6 +395,7 @@ func metricHonesty(h Harness, caps emit.Caps, n int) Result {
 		r.Skipped = true
 		return r
 	}
+
 	exp, be := h.New()
 	// An incapable signal may return an error (signalling a drop) — that is
 	// honest. What it must never do is silently deliver.
@@ -381,6 +404,7 @@ func metricHonesty(h Harness, caps emit.Caps, n int) Result {
 	if be.MetricPoints() != 0 {
 		r.Err = fmt.Sprintf("exporter declares Metrics=false but delivered %d points — capability dishonesty", be.MetricPoints())
 	}
+
 	return r
 }
 
@@ -390,12 +414,14 @@ func eventHonesty(h Harness, caps emit.Caps, n int) Result {
 		r.Skipped = true
 		return r
 	}
+
 	exp, be := h.New()
 	_, _ = batchesOfEvents(exp, n)
 	_ = exp.Shutdown(context.Background())
 	if be.Events() != 0 {
 		r.Err = fmt.Sprintf("exporter declares Events=false but delivered %d events — capability dishonesty", be.Events())
 	}
+
 	return r
 }
 
@@ -406,14 +432,17 @@ func emptyNoop(h Harness) Result {
 		r.Err = fmt.Sprintf("empty metric export errored: %v", err)
 		return r
 	}
+
 	if err := exp.ExportEvents(context.Background(), nil); err != nil {
 		r.Err = fmt.Sprintf("empty event export errored: %v", err)
 		return r
 	}
+
 	_ = exp.Shutdown(context.Background())
 	if be.MetricPoints() != 0 || be.Events() != 0 {
 		r.Err = fmt.Sprintf("empty batches delivered %d metrics / %d events — must be a no-op", be.MetricPoints(), be.Events())
 	}
+
 	return r
 }
 
@@ -428,6 +457,7 @@ func RunExporter(t *testing.T, h Harness) {
 			if res.Skipped {
 				t.Skip("not applicable to this exporter's declared capabilities")
 			}
+
 			if res.Err != "" {
 				t.Fatal(res.Err)
 			}

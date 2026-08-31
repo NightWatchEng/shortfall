@@ -33,6 +33,7 @@ func TestMoneyValidate(t *testing.T) {
 			if c.ok && err != nil {
 				t.Fatalf("want valid, got %v", err)
 			}
+
 			if !c.ok && err == nil {
 				t.Fatalf("want error, got none: %+v", c.m)
 			}
@@ -87,6 +88,7 @@ func TestParseMinor(t *testing.T) {
 			if c.ok && (err != nil || got != c.want) {
 				t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
 			}
+
 			if !c.ok && err == nil {
 				t.Errorf("ParseMinor(%q, %d) = %d, want error", c.s, c.exp, got)
 			}
@@ -109,6 +111,7 @@ func TestEnums(t *testing.T) {
 			}
 		})
 	}
+
 	results := []struct {
 		r    Result
 		want bool
@@ -131,6 +134,7 @@ func nameOr(s string) string {
 	if s == "" {
 		return "empty"
 	}
+
 	return s
 }
 
@@ -250,6 +254,7 @@ func TestOutcomeValidate(t *testing.T) {
 	if err := ok.Validate(); err != nil {
 		t.Fatalf("valid outcome rejected: %v", err)
 	}
+
 	bad := []struct {
 		name string
 		f    func(*Outcome)
@@ -309,6 +314,7 @@ func TestOutcomeFreeTextFieldsAreGuarded(t *testing.T) {
 			}
 		})
 	}
+
 	ok := base
 	ok.Err = "capture timeout after 30s"
 	ok.Source = "stripe:webhook"
@@ -327,6 +333,7 @@ func TestCheckPIIExportedSurface(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "card number") {
 		t.Fatalf("wrong rejection reason: %v", err)
 	}
+
 	if err := CheckPII("probe", "all clear here"); err != nil {
 		t.Fatalf("benign text rejected: %v", err)
 	}
@@ -347,6 +354,7 @@ func TestPANBoundariesAndSubSegments(t *testing.T) {
 			}
 		})
 	}
+
 	// One unbroken over-length run must not fire on a Luhn-valid substring.
 	t.Run("unbroken 20-digit id passes", func(t *testing.T) {
 		vc := validVC()
@@ -372,6 +380,7 @@ func TestIBANCaseAndBoundaryHardening(t *testing.T) {
 			}
 		})
 	}
+
 	// Shape match with a failing mod-97 checksum is an id, not an IBAN.
 	t.Run("mod-97-invalid shape passes", func(t *testing.T) {
 		vc := validVC()
@@ -401,6 +410,7 @@ func TestParseMinorOverflowGuards(t *testing.T) {
 			if c.ok && (err != nil || got != c.want) {
 				t.Errorf("ParseMinor(%q, %d) = %d, %v; want %d", c.s, c.exp, got, err, c.want)
 			}
+
 			if !c.ok && err == nil {
 				t.Errorf("ParseMinor(%q, %d) = %d, want overflow error", c.s, c.exp, got)
 			}
@@ -412,6 +422,7 @@ func TestMoneyStringIsTotal(t *testing.T) {
 	if got := (Money{Amount: 9223372036854775807, Currency: "USD", Exponent: 2}).String(); got != "USD 92233720368547758.07" {
 		t.Errorf("MaxInt64 render = %q", got)
 	}
+
 	// Invalid receivers render marked, never panic, never garbage signs.
 	invalid := []struct {
 		name string

@@ -20,6 +20,9 @@ cmd/shortfall/shortfall
 # built header tool (nested module)
 test/licensehdr/licensehdr
 
+# built blank-line tool (nested module)
+test/blankline/blankline
+
 # Git worktrees created by agent sessions. They live inside the repo, so
 # without this a `git add -A` stages them as embedded repositories and every
 # `warden verify` reports a dirty tree.

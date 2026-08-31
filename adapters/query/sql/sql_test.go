@@ -38,6 +38,7 @@ func seed(t *testing.T, events []biz.Outcome) *Querier {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = db.Close() })
 	_, err = db.Exec(`CREATE TABLE biz_outcomes (
 		flow TEXT, stage TEXT, outcome TEXT, currency TEXT, segment TEXT,
@@ -45,6 +46,7 @@ func seed(t *testing.T, events []biz.Outcome) *Querier {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, o := range events {
 		_, err := db.Exec(`INSERT INTO biz_outcomes VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			o.VC.Flow, o.Stage, string(o.Result), o.VC.Money.Currency, o.VC.Segment,
@@ -53,10 +55,12 @@ func seed(t *testing.T, events []biz.Outcome) *Querier {
 			t.Fatal(err)
 		}
 	}
+
 	q, err := New(db)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return q
 }
 
@@ -65,6 +69,7 @@ func TestCapabilitiesAndMetricsUnsupported(t *testing.T) {
 	if c := q.Capabilities(); c.Metrics || !c.Events {
 		t.Fatalf("caps = %+v, want events-only", c)
 	}
+
 	if _, err := q.QueryMetric(context.Background(), query.Query{}); !errors.Is(err, query.ErrUnsupported) {
 		t.Fatalf("QueryMetric err = %v, want ErrUnsupported", err)
 	}
@@ -79,6 +84,7 @@ func TestQueryEventsCurrencyInvariant(t *testing.T) {
 	if _, err := q.QueryEvents(context.Background(), query.EventQuery{Range: rng(), GroupBy: []string{"customer"}}); err == nil {
 		t.Fatal("cross-currency sum must be refused")
 	}
+
 	// Grouping by currency is fine.
 	if _, err := q.QueryEvents(context.Background(), query.EventQuery{Range: rng(), GroupBy: []string{"currency"}}); err != nil {
 		t.Fatal(err)
@@ -158,10 +164,12 @@ func TestParityWithMemq(t *testing.T) {
 		if err != nil {
 			t.Fatalf("query %d sql: %v", i, err)
 		}
+
 		mgroups, err := mq.QueryEvents(ctx, qy)
 		if err != nil {
 			t.Fatalf("query %d memq: %v", i, err)
 		}
+
 		if !sameGroups(sgroups, mgroups, qy.OrderBy != query.OrderNone) {
 			t.Fatalf("query %d parity mismatch:\n sql=%+v\nmemq=%+v", i, sgroups, mgroups)
 		}
@@ -174,23 +182,28 @@ func sameGroups(a, b query.EventGroups, ordered bool) bool {
 	if len(a) != len(b) {
 		return false
 	}
+
 	if ordered {
 		for i := range a {
 			if !eqGroup(a[i], b[i]) {
 				return false
 			}
 		}
+
 		return true
 	}
+
 	index := map[string]query.EventGroup{}
 	for _, g := range b {
 		index[keyStr(g.Key)] = g
 	}
+
 	for _, g := range a {
 		if !eqGroup(g, index[keyStr(g.Key)]) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -198,11 +211,13 @@ func eqGroup(a, b query.EventGroup) bool {
 	if a.Count != b.Count || a.SumMinor != b.SumMinor || a.MaxMinor != b.MaxMinor || len(a.Key) != len(b.Key) {
 		return false
 	}
+
 	for k, v := range a.Key {
 		if b.Key[k] != v {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -213,6 +228,7 @@ func keyStr(k map[string]string) string {
 			s += name + "=" + v + ";"
 		}
 	}
+
 	return s
 }
 

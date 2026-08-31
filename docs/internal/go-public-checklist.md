@@ -1,8 +1,9 @@
 # Go-public checklist — state of record
 
-Executed 2026-08-29 (workspace-tmw.10.3). The repository-side items are
-done with evidence; two items are personal actions only the founder can
-take, and **the visibility flip itself is the founder's alone**.
+Executed 2026-08-29 (workspace-tmw.10.3); the Go-ecosystem clearance row
+dates from 2026-08-31. The repository-side items are done with evidence;
+three items are personal actions only the founder can take, and **the
+visibility flip itself is the founder's alone**.
 
 | Item | State | Evidence |
 |---|---|---|
@@ -15,6 +16,7 @@ take, and **the visibility flip itself is the founder's alone**.
 | SECURITY.md | ✅ | `SECURITY.md` — private advisory reporting; webhook signatures, PII guard, egress allowlist, and secret handling named in scope |
 | Name clearance: GitHub account/repo | ✅ | `github.com/NightWatchEng/shortfall` exists and is ours (NightWatchEng is a personal account, not an org) |
 | Name clearance: pkg.go.dev | ⏳ at flip | pkg.go.dev indexes on first public fetch; the module path is unclaimed by others by construction (it is this repo's path) |
+| Name clearance: Go ecosystem | 👤 **founder** | founder-reported 2026-08-31: no module-path or well-known-package collision in a first-pass search. Recorded as reported — no queries, tool or result set were captured, so it is not reproducible here and is not clearance. The trademark row below still stands |
 | Name clearance: trademark search | 👤 **founder** | a real clearance search is a legal judgment; not executed by automation |
 | Employer IP review email | 👤 **founder** | a personal action ("one email now beats a problem later") |
 | Versioning policy stated | ✅ | README **Status**: v0.x instability; v1.0.0 only after the frozen interfaces survive two external adapters |

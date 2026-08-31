@@ -92,15 +92,18 @@ func TestCounterfactualWithinInterval(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			for _, note := range leg.Notes {
 				if strings.Contains(note, "RETENTION GAP") || strings.Contains(note, "no baseline history") {
 					t.Fatalf("baseline basis missing — the fence would be judging a degraded estimate: %q", note)
 				}
 			}
+
 			low, mid, high := leg.LowMinor["USD"], leg.MidMinor["USD"], leg.HighMinor["USD"]
 			if mid <= 0 {
 				t.Fatalf("mid estimate is %d — the leg saw no shortfall (notes: %v)", mid, leg.Notes)
 			}
+
 			if truth < low || truth > high {
 				t.Fatalf("ground truth %d outside [%d, %d] (mid %d, notes %v)", truth, low, high, mid, leg.Notes)
 			}

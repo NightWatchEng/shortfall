@@ -21,12 +21,14 @@ func (f fakeQuerier) QueryMetric(_ context.Context, q Query) (Series, error) {
 	if !f.metrics {
 		return nil, ErrUnsupported
 	}
+
 	return Series{{Labels: q.Filters, Points: []Point{{At: q.Range.From, Value: 1}}}}, nil
 }
 func (f fakeQuerier) QueryEvents(context.Context, EventQuery) (EventGroups, error) {
 	if !f.events {
 		return nil, ErrUnsupported
 	}
+
 	return EventGroups{{Count: 1, SumMinor: 14900}}, nil
 }
 func (f fakeQuerier) Capabilities() Caps {
@@ -54,6 +56,7 @@ func TestFrozenQuerierSurface(t *testing.T) {
 			if !errors.Is(err, c.wantMetricEr) {
 				t.Fatalf("metric err = %v, want %v", err, c.wantMetricEr)
 			}
+
 			groups, err := c.q.QueryEvents(context.Background(), EventQuery{
 				Range:   window,
 				GroupBy: []string{"currency", "customer"},
@@ -63,9 +66,11 @@ func TestFrozenQuerierSurface(t *testing.T) {
 			if !errors.Is(err, c.wantEventsEr) {
 				t.Fatalf("events err = %v, want %v", err, c.wantEventsEr)
 			}
+
 			if len(groups) != c.wantGroups {
 				t.Fatalf("groups = %d, want %d", len(groups), c.wantGroups)
 			}
+
 			caps := c.q.Capabilities()
 			if caps.Metrics != c.q.metrics || caps.Events != c.q.events {
 				t.Fatalf("capability honesty broken: %+v", caps)

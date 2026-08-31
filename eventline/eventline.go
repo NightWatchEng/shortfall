@@ -54,17 +54,21 @@ func Parse(raw []byte, at time.Time) (biz.Outcome, error) {
 	if err := json.Unmarshal(raw, &l); err != nil {
 		return biz.Outcome{}, fmt.Errorf("eventline: parse: %w", err)
 	}
+
 	if l.Flow == "" || l.Outcome == "" {
 		return biz.Outcome{}, fmt.Errorf("eventline: not a biz outcome line")
 	}
+
 	if !biz.Result(l.Outcome).Valid() {
 		return biz.Outcome{}, fmt.Errorf("eventline: outcome %q is not a valid result", l.Outcome)
 	}
+
 	// The exporters always write the amount; a marked line without one is a
 	// truncated or foreign record, and counting it as $0 would skew sums.
 	if len(l.AmountMinor) == 0 {
 		return biz.Outcome{}, fmt.Errorf("eventline: outcome line carries no biz.amount.minor")
 	}
+
 	var amount int64
 	if len(l.AmountMinor) > 0 {
 		// Decode via json.Number so a fractional or overflowing amount fails
@@ -73,16 +77,20 @@ func Parse(raw []byte, at time.Time) (biz.Outcome, error) {
 		if err := json.Unmarshal(l.AmountMinor, &n); err != nil {
 			return biz.Outcome{}, fmt.Errorf("eventline: amount_minor: %w", err)
 		}
+
 		v, err := n.Int64()
 		if err != nil {
 			return biz.Outcome{}, fmt.Errorf("eventline: amount_minor %q is not an int64: %w", n, err)
 		}
+
 		amount = v
 	}
+
 	source := l.Source
 	if source == "" {
 		source = l.SourceSys
 	}
+
 	// The deadline is optional on the wire and only some flows carry one.
 	// A line that has it must round-trip it: the CloudWatch and GCP exporters
 	// both write it now, and a decoder that silently dropped it would put this
@@ -94,6 +102,7 @@ func Parse(raw []byte, at time.Time) (biz.Outcome, error) {
 		if err != nil {
 			return biz.Outcome{}, fmt.Errorf("eventline: %s %q: %w", biz.AttrSLADeadline, l.SLADeadline, err)
 		}
+
 		deadline = d
 	}
 

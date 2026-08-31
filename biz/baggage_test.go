@@ -32,16 +32,20 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
+
 	if !strings.HasPrefix(enc, "1|") {
 		t.Fatalf("encoding must lead with the version token: %q", enc)
 	}
+
 	got, err := DecodeVC(enc)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
+
 	if !got.Deadline.Equal(vc.Deadline) {
 		t.Fatalf("deadline drifted: %v vs %v", got.Deadline, vc.Deadline)
 	}
+
 	got.Deadline, vc.Deadline = time.Time{}, time.Time{}
 	if got != vc {
 		t.Fatalf("round trip drifted:\n got %+v\nwant %+v", got, vc)
@@ -58,15 +62,18 @@ func TestEncodeEscapesDelimiters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
+
 	for _, forbidden := range []string{`"`, ";", ",", `\`, " "} {
 		if strings.Contains(enc, forbidden) {
 			t.Fatalf("encoded value contains baggage-unsafe %q: %q", forbidden, enc)
 		}
 	}
+
 	got, err := DecodeVC(enc)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
+
 	if got.EntityID != vc.EntityID || got.CustomerID != vc.CustomerID {
 		t.Fatalf("escaping drifted: %+v", got)
 	}
@@ -79,6 +86,7 @@ func TestEncodeSizeCap(t *testing.T) {
 	if _, err := EncodeVC(vc); err != nil {
 		t.Fatalf("max-length ids must fit the cap: %v", err)
 	}
+
 	// Escaping inflates: 128 percent signs become 384 bytes each field.
 	vc.EntityID = strings.Repeat("%", 128)
 	vc.CustomerID = strings.Repeat("%", 128)
@@ -88,6 +96,7 @@ func TestEncodeSizeCap(t *testing.T) {
 	if err == nil || !asOversize(err, &oversize) {
 		t.Fatalf("want OversizeError, got %v", err)
 	}
+
 	if oversize.Size <= MaxEncodedBytes {
 		t.Fatalf("oversize error carries size %d <= cap %d", oversize.Size, MaxEncodedBytes)
 	}
@@ -125,23 +134,28 @@ func TestContextRoundTrip(t *testing.T) {
 	if _, ok, err := FromContext(ctx); ok || err != nil {
 		t.Fatalf("empty context: ok=%v err=%v, want absent with no error", ok, err)
 	}
+
 	vc := codecVC()
 	ctx, err := WithValueContext(ctx, vc)
 	if err != nil {
 		t.Fatalf("WithValueContext: %v", err)
 	}
+
 	got, ok, err := FromContext(ctx)
 	if !ok || err != nil {
 		t.Fatalf("ValueContext lost in context round trip: ok=%v err=%v", ok, err)
 	}
+
 	if got.EntityID != vc.EntityID || got.Money != vc.Money {
 		t.Fatalf("context round trip drifted: %+v", got)
 	}
+
 	// Re-setting replaces rather than duplicates.
 	ctx, err = WithValueContext(ctx, got)
 	if err != nil {
 		t.Fatalf("second WithValueContext: %v", err)
 	}
+
 	if _, ok, err := FromContext(ctx); !ok || err != nil {
 		t.Fatalf("second write lost the member: ok=%v err=%v", ok, err)
 	}
@@ -152,15 +166,18 @@ func TestFromContextDistinguishesCorruptFromAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	bag, err := baggage.New(member)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	ctx := baggage.ContextWithBaggage(context.Background(), bag)
 	_, ok, err := FromContext(ctx)
 	if ok {
 		t.Fatal("corrupt member decoded as ok")
 	}
+
 	if err == nil {
 		t.Fatal("corrupt member indistinguishable from absent — corruption must be loud")
 	}
@@ -171,19 +188,23 @@ func TestWithValueContextPreservesForeignMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	bag, err := baggage.New(foreign)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	ctx := baggage.ContextWithBaggage(context.Background(), bag)
 	ctx, err = WithValueContext(ctx, codecVC())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	out := baggage.FromContext(ctx)
 	if out.Member("tenant").Value() != "acme" {
 		t.Fatal("foreign baggage member clobbered")
 	}
+
 	if out.Len() != 2 {
 		t.Fatalf("baggage has %d members, want 2", out.Len())
 	}
@@ -207,6 +228,7 @@ func TestDeadlineDomain(t *testing.T) {
 			}
 		})
 	}
+
 	vc := codecVC()
 	// Sub-second precision truncates by contract: the codec carries unix
 	// seconds.
@@ -215,10 +237,12 @@ func TestDeadlineDomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sub-second deadline: %v", err)
 	}
+
 	got, err := DecodeVC(enc)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !got.Deadline.Equal(time.Date(2026, 8, 27, 14, 32, 0, 0, time.UTC)) {
 		t.Fatalf("sub-second deadline did not truncate to the second: %v", got.Deadline)
 	}
@@ -232,6 +256,7 @@ func randomVC(rng *rand.Rand) ValueContext {
 		for i := range b {
 			b[i] = byte('!' + rng.IntN('~'-'!'+1))
 		}
+
 		return string(b)
 	}
 	lower := func(n int) string {
@@ -240,6 +265,7 @@ func randomVC(rng *rand.Rand) ValueContext {
 		for i := range b {
 			b[i] = alpha[rng.IntN(len(alpha))]
 		}
+
 		return string(b)
 	}
 	kinds := []Kind{KindGMV, KindNetRevenue, KindFee, KindTakeRate}
@@ -260,6 +286,7 @@ func randomVC(rng *rand.Rand) ValueContext {
 		// Strictly inside the encodable domain (1970, 3000].
 		vc.Deadline = time.Unix(1+rng.Int64N(32503679999), 0).UTC()
 	}
+
 	return vc
 }
 
@@ -272,6 +299,7 @@ func TestRoundTripMillionIterations(t *testing.T) {
 	if testing.Short() {
 		n = 50_000
 	}
+
 	rng := rand.New(rand.NewPCG(2026, 827))
 	for i := 0; i < n; i++ {
 		vc := randomVC(rng)
@@ -281,18 +309,23 @@ func TestRoundTripMillionIterations(t *testing.T) {
 			if asOversize(err, &oversize) {
 				continue // legitimately oversize inputs are the cap working
 			}
+
 			t.Fatalf("iter %d: encode %+v: %v", i, vc, err)
 		}
+
 		if len(enc) > MaxEncodedBytes {
 			t.Fatalf("iter %d: encoded %d bytes exceeds cap", i, len(enc))
 		}
+
 		got, err := DecodeVC(enc)
 		if err != nil {
 			t.Fatalf("iter %d: decode: %v", i, err)
 		}
+
 		if !got.Deadline.Equal(vc.Deadline) {
 			t.Fatalf("iter %d: deadline drifted", i)
 		}
+
 		got.Deadline, vc.Deadline = time.Time{}, time.Time{}
 		if got != vc {
 			t.Fatalf("iter %d: drift\n got %+v\nwant %+v", i, got, vc)
@@ -313,17 +346,21 @@ func FuzzDecodeVC(f *testing.F) {
 		if err != nil {
 			return
 		}
+
 		enc, err := EncodeVC(vc)
 		if err != nil {
 			t.Fatalf("decoded ok but re-encode failed: %v (from %q)", err, s)
 		}
+
 		vc2, err := DecodeVC(enc)
 		if err != nil {
 			t.Fatalf("re-decode failed: %v", err)
 		}
+
 		if !vc2.Deadline.Equal(vc.Deadline) {
 			t.Fatal("deadline drift through re-encode")
 		}
+
 		vc2.Deadline, vc.Deadline = time.Time{}, time.Time{}
 		if vc2 != vc {
 			t.Fatalf("re-encode drift: %+v vs %+v", vc2, vc)

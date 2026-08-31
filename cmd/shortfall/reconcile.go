@@ -42,6 +42,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+
 	if *regPath == "" || *fromStr == "" || *toStr == "" || *ledgerPath == "" {
 		wln(stderr, "usage: shortfall reconcile --registry r.yaml --from <RFC3339> --to <RFC3339> --ledger rows.json [--flow f]... [--prometheus URL] [--sql DSN] [--source label]")
 		return 2
@@ -52,21 +53,25 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		wf(stderr, "registry: %v\n", err)
 		return 1
 	}
+
 	from, err := time.Parse(time.RFC3339, *fromStr)
 	if err != nil {
 		wf(stderr, "--from: %v\n", err)
 		return 2
 	}
+
 	to, err := time.Parse(time.RFC3339, *toStr)
 	if err != nil {
 		wf(stderr, "--to: %v\n", err)
 		return 2
 	}
+
 	ledger, err := loadLedger(*ledgerPath)
 	if err != nil {
 		wf(stderr, "--ledger: %v\n", err)
 		return 1
 	}
+
 	src := *source
 	if src == "" {
 		src = *ledgerPath
@@ -77,6 +82,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		wf(stderr, "%v\n", err)
 		return 2
 	}
+
 	defer cleanup()
 
 	leg, slices, err := engine.Coverage(context.Background(), &reg, q,
@@ -85,6 +91,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		wf(stderr, "coverage: %v\n", err)
 		return 1
 	}
+
 	renderCoverage(stdout, leg, slices)
 	return 0
 }
@@ -96,15 +103,18 @@ func loadLedger(path string) ([]biz.LedgerRow, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var rows []biz.LedgerRow
 	if err := json.Unmarshal(b, &rows); err != nil {
 		return nil, err
 	}
+
 	for i, r := range rows {
 		if err := r.Validate(); err != nil {
 			return nil, fmt.Errorf("row %d: %w", i, err)
 		}
 	}
+
 	return rows, nil
 }
 
@@ -115,11 +125,13 @@ func renderCoverage(w io.Writer, leg engine.CoverageLeg, slices []engine.Coverag
 		wf(w, "COVERAGE   unavailable: %s\n", leg.Unavailable)
 		return
 	}
+
 	wf(w, "COVERAGE   [%s] %.1f%% reconciled against %s\n", leg.Evidence, leg.Ratio*100, leg.Source)
 	sort.Slice(slices, func(i, j int) bool {
 		if slices[i].Flow != slices[j].Flow {
 			return slices[i].Flow < slices[j].Flow
 		}
+
 		return slices[i].Currency < slices[j].Currency
 	})
 	for _, s := range slices {

@@ -30,6 +30,7 @@ func (f *fakeMetric) Export(_ context.Context, rm *metricdata.ResourceMetrics) e
 	if f.fail {
 		return errors.New("metric backend down")
 	}
+
 	f.got = rm
 	return nil
 }
@@ -41,6 +42,7 @@ func (f *fakeMetric) Shutdown(context.Context) error {
 	if f.shutdown {
 		return errors.New("HTTP exporter is shutdown")
 	}
+
 	f.shutdown = true
 	return f.shutErr
 }
@@ -56,6 +58,7 @@ func (f *fakeLog) emit(_ context.Context, batch []biz.Outcome) error {
 	if f.fail {
 		return errors.New("log backend down")
 	}
+
 	f.got = append(f.got, batch...)
 	return nil
 }
@@ -78,9 +81,11 @@ func TestBuildResourceMetricsFamilyKinds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
+
 	if len(rm.ScopeMetrics) != 1 {
 		t.Fatalf("scope metrics: %d", len(rm.ScopeMetrics))
 	}
+
 	kinds := map[string]string{}
 	var stamped bool
 	for _, m := range rm.ScopeMetrics[0].Metrics {
@@ -90,6 +95,7 @@ func TestBuildResourceMetricsFamilyKinds(t *testing.T) {
 			if d.Temporality != metricdata.DeltaTemporality || !d.IsMonotonic {
 				t.Fatalf("%s must be a delta monotonic sum", m.Name)
 			}
+
 			if d.DataPoints[0].Time.Equal(at) {
 				stamped = true
 			}
@@ -99,6 +105,7 @@ func TestBuildResourceMetricsFamilyKinds(t *testing.T) {
 			t.Fatalf("%s: unexpected data type %T", m.Name, m.Data)
 		}
 	}
+
 	cases := []struct{ name, want string }{
 		{"biz_value_total", "sum"},
 		{"biz_txn_total", "sum"},
@@ -111,6 +118,7 @@ func TestBuildResourceMetricsFamilyKinds(t *testing.T) {
 			}
 		})
 	}
+
 	if !stamped {
 		t.Fatal("data points must keep the point's own observation time, not flush time")
 	}
@@ -125,9 +133,11 @@ func TestBuildRecordCarriesMoneyOnEventsOnly(t *testing.T) {
 	if r.EventName() != eventName {
 		t.Fatalf("event name %q", r.EventName())
 	}
+
 	if !r.Timestamp().Equal(at) {
 		t.Fatalf("timestamp %v, want %v", r.Timestamp(), at)
 	}
+
 	attrs := map[string]string{}
 	r.WalkAttributes(func(kv attribute.KeyValue) bool {
 		attrs[string(kv.Key)] = kv.Value.String()
@@ -151,13 +161,16 @@ func TestExporterShipsAndReportsCapabilities(t *testing.T) {
 	if c := e.Capabilities(); !c.Metrics || !c.Events {
 		t.Fatalf("caps: %+v", c)
 	}
+
 	ctx := context.Background()
 	if err := e.ExportMetrics(ctx, []emit.MetricPoint{{Name: "biz_txn_total", Value: 1, At: at}}); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := e.ExportEvents(ctx, []biz.Outcome{{At: at, VC: vc(), Stage: "auth", Result: biz.ResultSuccess}}); err != nil {
 		t.Fatal(err)
 	}
+
 	if fm.got == nil || len(fl.got) != 1 {
 		t.Fatalf("nothing shipped: metrics=%v events=%d", fm.got, len(fl.got))
 	}
@@ -169,9 +182,11 @@ func TestExporterEmptyBatchesNoop(t *testing.T) {
 	if err := e.ExportMetrics(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := e.ExportEvents(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
+
 	if fm.got != nil || len(fl.got) != 0 {
 		t.Fatal("empty batch must not call the backend")
 	}
@@ -199,11 +214,13 @@ func TestExporterSurfacesFailuresAndShutdown(t *testing.T) {
 			}
 		})
 	}
+
 	fm, fl := &fakeMetric{}, &fakeLog{}
 	e := newWith(fm, fl)
 	if err := e.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	if !fm.shutdown || !fl.shutdown {
 		t.Fatal("Shutdown must close both exporters")
 	}
@@ -260,12 +277,15 @@ func TestShutdownJoinsBothErrors(t *testing.T) {
 			if err == nil {
 				t.Fatal("Shutdown must surface a leg failure")
 			}
+
 			if errors.Is(err, mFail) != c.wantMetric {
 				t.Fatalf("metric error surfaced=%v, want %v (err=%v)", errors.Is(err, mFail), c.wantMetric, err)
 			}
+
 			if errors.Is(err, lFail) != c.wantEvent {
 				t.Fatalf("event error surfaced=%v, want %v (err=%v)", errors.Is(err, lFail), c.wantEvent, err)
 			}
+
 			if c.fm.shutdown != c.wantCloseM || c.fl.shutdown != c.wantCloseL {
 				t.Fatal("both legs must be closed even when one fails")
 			}

@@ -54,6 +54,7 @@ func BenchmarkComputeScale(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	req := Request{Window: benchWindow, Flows: []string{"invoice.pay"}}
 	for _, n := range computeScaleSizes {
 		q := buildIncident(n)
@@ -64,9 +65,11 @@ func BenchmarkComputeScale(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
+
 				if len(rep.Realized.ByCurrency) == 0 {
 					b.Fatal("benchmark computed an empty realized leg — dataset wrong")
 				}
+
 				if rep.Customers.Distinct == 0 {
 					b.Fatal("benchmark computed an empty customers leg — dataset wrong")
 				}

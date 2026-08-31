@@ -54,12 +54,15 @@ func TestFrozenExporterSurface(t *testing.T) {
 			if err := f.ExportMetrics(context.Background(), c.metrics); err != nil {
 				t.Fatal(err)
 			}
+
 			if err := f.ExportEvents(context.Background(), c.events); err != nil {
 				t.Fatal(err)
 			}
+
 			if f.metrics != c.wantM || f.events != c.wantE {
 				t.Fatalf("got %d/%d, want %d/%d", f.metrics, f.events, c.wantM, c.wantE)
 			}
+
 			if err := f.Shutdown(context.Background()); err != nil || !f.closed {
 				t.Fatal("shutdown contract broken")
 			}
@@ -95,6 +98,7 @@ func TestCapsMirrorsQueryCaps(t *testing.T) {
 	if a.NumField() != b.NumField() {
 		t.Fatalf("emit.Caps has %d fields, query.Caps has %d — amend both together", a.NumField(), b.NumField())
 	}
+
 	for i := 0; i < a.NumField(); i++ {
 		af, bf := a.Field(i), b.Field(i)
 		if af.Name != bf.Name || af.Type != bf.Type {

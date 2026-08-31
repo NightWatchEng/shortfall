@@ -11,13 +11,37 @@ stages, queues, propagation across services — is the
 
 ## 1. Install
 
+**While the repository is private, `go get` cannot resolve it** — the
+checksum database returns 404 for a private module, and the one published
+tag (`v0.1.0`) predates most of the API below. Clone it and point a
+`replace` at your checkout:
+
 ```sh
+git clone https://github.com/NightWatchEng/shortfall
 mkdir shortfall-demo && cd shortfall-demo && go mod init demo
+
+cat >> go.mod <<'EOF'
+
+replace github.com/NightWatchEng/shortfall => ../shortfall
+
+replace github.com/NightWatchEng/shortfall/adapters/export/prometheus => ../shortfall/adapters/export/prometheus
+EOF
+```
+
+A `replace` says *where* a module is, not that you want it. `go mod tidy`
+comes in step 4, once there is code importing them — run it now and it
+resolves nothing.
+
+The exporter is a separate module, so you pull only the backend you use —
+hence the second `replace`.
+
+Once the repository is public and carries a current tag, this step becomes
+the ordinary two lines, and the `replace` directives come out:
+
+```sh
 go get github.com/NightWatchEng/shortfall
 go get github.com/NightWatchEng/shortfall/adapters/export/prometheus
 ```
-
-The exporter is a separate module, so you pull only the backend you use.
 
 ## 2. Declare the flow
 
@@ -53,9 +77,14 @@ defaulting. Every field is in the [registry reference](registry.md).
 Check it before you run:
 
 ```sh
-go run github.com/NightWatchEng/shortfall/cmd/shortfall@latest validate registry.yaml
-# registry.yaml: ok — 1 flow(s), 2 segment(s)
+(cd ../shortfall && go run ./cmd/shortfall validate ../shortfall-demo/registry.yaml)
+# ../shortfall-demo/registry.yaml: ok — 1 flow(s), 2 segment(s)
 ```
+
+The `cd` is not incidental. `cmd/shortfall` is its own nested module, and
+the repo's `go.work` is what stitches the modules together — run it from
+the clone root or the CLI will not resolve. (`go run …@latest` cannot
+resolve a private module either; that form arrives with the flip.)
 
 ## 3. Instrument
 
@@ -145,7 +174,8 @@ reads 1.
 ## 4. Run it
 
 ```sh
-go run .                                        # in one terminal
+go mod tidy      # now that main.go names its imports
+go run .         # leave this running
 ```
 
 ```sh
@@ -197,13 +227,18 @@ sum by (flow, currency) (rate(biz_value_total{outcome="failed"}[5m])) * 60
 ## Next
 
 Getting the four-leg impact report out of these signals needs a query
-adapter pointed at wherever they land — the CLI reads Prometheus and SQL:
+adapter pointed at wherever they land — the CLI reads Prometheus and SQL.
+Run it from the clone, as in step 2:
 
 ```sh
-shortfall impact --registry registry.yaml \
+(cd ../shortfall && go run ./cmd/shortfall impact \
+  --registry ../shortfall-demo/registry.yaml \
   --from 2026-08-27T14:00:00Z --to 2026-08-27T15:00:00Z \
-  --flow invoice.pay --prometheus http://prometheus:9090
+  --flow invoice.pay --prometheus http://prometheus:9090)
 ```
+
+After the flip, `go install` puts a `shortfall` binary on your PATH and
+this is one line.
 
 Metrics alone ground the deferred and unrealized legs and a realized
 upper bound; the exact, de-duplicated realized figure and the customer

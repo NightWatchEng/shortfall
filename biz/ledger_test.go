@@ -31,6 +31,7 @@ func TestLedgerRowValidate(t *testing.T) {
 			if c.ok && err != nil {
 				t.Fatalf("Validate() = %v, want nil", err)
 			}
+
 			if !c.ok && err == nil {
 				t.Fatal("Validate() = nil, want error")
 			}

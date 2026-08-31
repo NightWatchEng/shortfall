@@ -25,6 +25,7 @@ func (k Kind) Valid() bool {
 	case KindGMV, KindNetRevenue, KindFee, KindTakeRate:
 		return true
 	}
+
 	return false
 }
 
@@ -45,6 +46,7 @@ func (r Result) Valid() bool {
 	case ResultSuccess, ResultFailed, ResultDeferred, ResultAbandoned, ResultUnknown:
 		return true
 	}
+
 	return false
 }
 
@@ -76,6 +78,7 @@ func lowerToken(s string, maxLen int) error {
 	if s == "" || len(s) > maxLen {
 		return fmt.Errorf("length %d outside [1, %d]", len(s), maxLen)
 	}
+
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
@@ -83,6 +86,7 @@ func lowerToken(s string, maxLen int) error {
 			return fmt.Errorf("character %q not in [a-z0-9._-]", r)
 		}
 	}
+
 	return nil
 }
 
@@ -91,11 +95,13 @@ func idToken(s string, maxLen int) error {
 	if len(s) > maxLen {
 		return fmt.Errorf("length %d exceeds %d", len(s), maxLen)
 	}
+
 	for _, r := range s {
 		if r <= ' ' || r > '~' {
 			return fmt.Errorf("character %q outside printable ASCII", r)
 		}
 	}
+
 	return nil
 }
 
@@ -106,32 +112,41 @@ func (vc ValueContext) Validate() error {
 	if err := lowerToken(vc.Flow, maxFlowLen); err != nil {
 		return fmt.Errorf("biz: flow %q: %w", vc.Flow, err)
 	}
+
 	if vc.EntityID == "" {
 		return fmt.Errorf("biz: entity id is required")
 	}
+
 	if err := idToken(vc.EntityID, maxIDLen); err != nil {
 		return fmt.Errorf("biz: entity id: %w", err)
 	}
+
 	if err := idToken(vc.CustomerID, maxIDLen); err != nil {
 		return fmt.Errorf("biz: customer id: %w", err)
 	}
+
 	if vc.Segment != "" {
 		if err := lowerToken(vc.Segment, maxSegmentLen); err != nil {
 			return fmt.Errorf("biz: segment %q: %w", vc.Segment, err)
 		}
 	}
+
 	if !vc.Kind.Valid() {
 		return fmt.Errorf("biz: kind %q is not declared", vc.Kind)
 	}
+
 	if err := vc.Money.Validate(); err != nil {
 		return err
 	}
+
 	if err := rejectPII("entity id", vc.EntityID); err != nil {
 		return err
 	}
+
 	if err := rejectPII("customer id", vc.CustomerID); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -159,37 +174,46 @@ func (o Outcome) Validate() error {
 	if o.At.IsZero() {
 		return fmt.Errorf("biz: outcome time is zero")
 	}
+
 	if err := lowerToken(o.Stage, maxStageLen); err != nil {
 		return fmt.Errorf("biz: stage %q: %w", o.Stage, err)
 	}
+
 	if !o.Result.Valid() {
 		return fmt.Errorf("biz: result %q is not declared", o.Result)
 	}
+
 	if o.Source != "" {
 		if err := idToken(o.Source, maxIDLen); err != nil {
 			return fmt.Errorf("biz: source: %w", err)
 		}
+
 		if err := CheckPII("source", o.Source); err != nil {
 			return err
 		}
 	}
+
 	if o.TraceID != "" {
 		if len(o.TraceID) != 32 {
 			return fmt.Errorf("biz: trace id must be 32 lowercase hex characters")
 		}
+
 		for _, r := range o.TraceID {
 			if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 				return fmt.Errorf("biz: trace id must be 32 lowercase hex characters")
 			}
 		}
 	}
+
 	if len(o.Err) > maxErrLen {
 		return fmt.Errorf("biz: err text %d bytes exceeds %d", len(o.Err), maxErrLen)
 	}
+
 	if o.Err != "" {
 		if err := CheckPII("err", o.Err); err != nil {
 			return err
 		}
 	}
+
 	return o.VC.Validate()
 }

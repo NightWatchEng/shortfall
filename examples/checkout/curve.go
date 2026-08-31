@@ -23,9 +23,11 @@ func DefaultCurve() [168]float64 {
 		if day >= 5 { // Saturday, Sunday
 			scale = 0.6
 		}
+
 		for h := 0; h < 24; h++ {
 			c[day*24+h] = weekday[h] * scale
 		}
 	}
+
 	return c
 }

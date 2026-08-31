@@ -30,6 +30,7 @@ func (c *countingMetric) Export(_ context.Context, rm *metricdata.ResourceMetric
 			}
 		}
 	}
+
 	return nil
 }
 func (c *countingMetric) Shutdown(context.Context) error { return nil }

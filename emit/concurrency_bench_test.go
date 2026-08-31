@@ -96,9 +96,11 @@ func (l *loadExporter) hold() {
 	if l.entered != nil {
 		l.enterOnce.Do(func() { close(l.entered) })
 	}
+
 	if l.release != nil {
 		<-l.release
 	}
+
 	if l.delay > 0 {
 		time.Sleep(l.delay)
 	}
@@ -112,6 +114,7 @@ func (l *loadExporter) ExportEvents(_ context.Context, batch []biz.Outcome) erro
 	if l.fail.Load() {
 		return errors.New("backend down")
 	}
+
 	l.events.Add(int64(len(batch)))
 	return nil
 }
@@ -131,12 +134,14 @@ func (l *loadExporter) ExportMetrics(_ context.Context, batch []MetricPoint) err
 		// same drop twice.
 		return errors.New("backend down")
 	}
+
 	l.mu.Lock()
 	for _, p := range batch {
 		if p.Name == "biz_dropped_events_total" {
 			l.drops[p.Labels["reason"]] += p.Value
 		}
 	}
+
 	l.mu.Unlock()
 	return nil
 }
@@ -160,6 +165,7 @@ func pendingDrops(s *Std) int64 {
 	for _, v := range s.dropCounts {
 		n += v
 	}
+
 	return n
 }
 
@@ -194,6 +200,7 @@ func benchRegistry(tb testing.TB) *registry.Registry {
 	if err != nil {
 		tb.Fatal(err)
 	}
+
 	return &r
 }
 
@@ -204,6 +211,7 @@ func newLoadEmitter(tb testing.TB, exp Exporter, opts ...EmitterOption) *Std {
 	if err != nil {
 		tb.Fatal(err)
 	}
+
 	return em
 }
 
@@ -239,9 +247,11 @@ func benchContextsFor(tb testing.TB, n int) []context.Context {
 	if size < 64 {
 		size = 64
 	}
+
 	if size > maxBenchContexts {
 		size = maxBenchContexts
 	}
+
 	return benchContexts(tb, size)
 }
 
@@ -261,8 +271,10 @@ func benchContexts(tb testing.TB, n int) []context.Context {
 		if err != nil {
 			tb.Fatal(err)
 		}
+
 		ctxs[i] = ctx
 	}
+
 	return ctxs
 }
 
@@ -287,6 +299,7 @@ func trackerItemCount(tr *InFlightTracker) int {
 		n += len(tr.shards[i].items)
 		tr.shards[i].mu.Unlock()
 	}
+
 	return n
 }
 
@@ -308,14 +321,17 @@ func BenchmarkTrackerPublishScale(b *testing.B) {
 				tr.Track("invoice.pay", "capture", fmt.Sprintf("m%07d", i), usd(1499),
 					now.Add(-time.Duration(i)*time.Second))
 			}
+
 			if n := trackerItemCount(tr); n != items {
 				b.Fatalf("tracked %d items, want %d", n, items)
 			}
+
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				tr.Publish()
 			}
+
 			b.StopTimer()
 
 			// One (flow, stage, currency) combo, five ADR-0005 buckets,
@@ -371,6 +387,7 @@ func TestSlowBackendReachesRecordAsCountedDropsNotAsBlocking(t *testing.T) {
 	if err := <-flushed; err != nil {
 		t.Fatalf("flush: %v", err)
 	}
+
 	if err := em.Close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -378,9 +395,11 @@ func TestSlowBackendReachesRecordAsCountedDropsNotAsBlocking(t *testing.T) {
 	if got, want := exp.dropsByReason("overflow"), int64(bufSize); got != want {
 		t.Fatalf("biz_dropped_events_total{reason=overflow} = %d, want %d", got, want)
 	}
+
 	if got := pendingDrops(em); got != 0 {
 		t.Fatalf("%d drop counts never reached the exporter — a drop nobody can see is a silent one", got)
 	}
+
 	// Conservation: every call is either an exported outcome or a counted
 	// drop. 3*bufSize issued, bufSize of them shed.
 	if got, want := exp.events.Load(), int64(2*bufSize); got != want {

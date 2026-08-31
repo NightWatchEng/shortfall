@@ -155,13 +155,16 @@ func NewInFlightTracker(em Emitter, opts ...TrackerOption) *InFlightTracker {
 	for i := range t.shards {
 		t.shards[i].items = map[inflightKey]inflightItem{}
 	}
+
 	for _, o := range opts {
 		o(t)
 	}
+
 	if t.maxItems < 1 {
 		t.logger.Warn("emit: tracker max items below 1; using the default", "requested", t.maxItems)
 		t.maxItems = 1 << 20
 	}
+
 	return t
 }
 
@@ -177,6 +180,7 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 		t.rejected.Add(1)
 		return
 	}
+
 	// First sight pins the exponent atomically; every later Track for
 	// the currency compares against the winner. As before, the pin
 	// happens even when the Track then overflows the bound. Load first:
@@ -186,6 +190,7 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 	if !loaded {
 		pinned, loaded = t.exponents.LoadOrStore(money.Currency, money.Exponent)
 	}
+
 	if loaded && pinned.(int8) != money.Exponent {
 		t.rejected.Add(1)
 		t.logger.Warn(
@@ -196,6 +201,7 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 		)
 		return
 	}
+
 	k := inflightKey{flow, stage, id}
 	sh := t.shardFor(id)
 	sh.mu.Lock()
@@ -204,9 +210,11 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 		if prev.enqueuedAt.Before(enqueuedAt) {
 			enqueuedAt = prev.enqueuedAt
 		}
+
 		sh.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
 		return
 	}
+
 	// Reserve, then insert; roll back on over-reserve. The bound stays
 	// EXACT under concurrency — the resident-footprint guarantee in
 	// WithTrackerMaxItems's contract, not an approximation.
@@ -215,6 +223,7 @@ func (t *InFlightTracker) Track(flow, stage, id string, money biz.Money, enqueue
 		t.overflow.Add(1)
 		return
 	}
+
 	sh.items[k] = inflightItem{money: money, enqueuedAt: enqueuedAt}
 }
 
@@ -228,6 +237,7 @@ func (t *InFlightTracker) Done(flow, stage, id string) {
 		delete(sh.items, k)
 		t.itemCount.Add(-1)
 	}
+
 	sh.mu.Unlock()
 }
 
@@ -270,6 +280,7 @@ func (t *InFlightTracker) Publish() {
 	for i := range t.shards {
 		t.shards[i].mu.Lock()
 	}
+
 	sums := map[comboKey]comboBuckets{}
 	for i := range t.shards {
 		for k, item := range t.shards[i].items {
@@ -279,19 +290,23 @@ func (t *InFlightTracker) Publish() {
 				cb = comboBuckets{}
 				sums[ck] = cb
 			}
+
 			bucket := AgeBucketFor(now.Sub(item.enqueuedAt))
 			a := cb[bucket]
 			if a == nil {
 				a = &bucketAgg{}
 				cb[bucket] = a
 			}
+
 			a.minor += item.money.Amount
 			a.count++
 		}
 	}
+
 	for i := range t.shards {
 		t.shards[i].mu.Unlock()
 	}
+
 	// Every combo with items stays live; every live combo without items
 	// gets one zeroing pass and retires. live is publishMu-guarded, and
 	// we hold publishMu here.
@@ -300,6 +315,7 @@ func (t *InFlightTracker) Publish() {
 		t.live[ck] = struct{}{}
 		toPublish = append(toPublish, ck)
 	}
+
 	var toRetire []comboKey
 	for ck := range t.live {
 		if _, ok := sums[ck]; !ok {
@@ -307,9 +323,11 @@ func (t *InFlightTracker) Publish() {
 			toPublish = append(toPublish, ck)
 		}
 	}
+
 	for _, ck := range toRetire {
 		delete(t.live, ck)
 	}
+
 	overflowed := t.overflow.Load()
 	if overflowed > 0 {
 		// Understated value is only acceptable when visible: say so on
@@ -327,6 +345,7 @@ func (t *InFlightTracker) Publish() {
 			if a := cb[bucket]; a != nil {
 				minor, count = a.minor, a.count
 			}
+
 			money := biz.Money{Amount: minor, Currency: ck.currency, Exponent: ck.exponent}
 			t.em.SetInFlight(ck.flow, ck.stage, bucket, money, count)
 		}
@@ -344,12 +363,14 @@ func (t *InFlightTracker) Start(interval time.Duration) {
 		)
 		return
 	}
+
 	t.stateMu.Lock()
 	if t.started {
 		t.stateMu.Unlock()
 		t.logger.Warn("emit: tracker Start called twice; keeping the first loop")
 		return
 	}
+
 	t.started = true
 	t.stateMu.Unlock()
 	t.wg.Add(1)
