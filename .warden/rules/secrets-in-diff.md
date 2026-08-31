@@ -8,7 +8,7 @@ excludes: [".warden/rules/**"]
 ---
 Flag any ADDED line that introduces a credential or secret.
 
-What the pinned mechanical checker (platform v1.0.0) actually fires on —
+What the pinned mechanical checker (platform v1.1.0) actually fires on —
 stated honestly so nobody reads protection into this file that does not
 exist: Anthropic keys (`sk-ant-...`), GitHub tokens (`ghp_`,
 `github_pat_`), AWS access key ids (`AKIA` + 16), JWTs, `postgres://` /
