@@ -144,7 +144,7 @@ func TestCheck(t *testing.T) {
 `,
 		},
 		{
-			name: "one-line if has no closing brace of its own",
+			name: "one-line if has no break to require",
 			body: `
 	if err != nil { return err }
 	b()

@@ -205,6 +205,7 @@ func TestScanProse(t *testing.T) {
 		{"call with a nested call", "`stripe.Reconcile(ctx, fetch(x), since)`\n", []string{"stripe.Reconcile"}, ""},
 		{"chained call is not a selector", "`slack.New(token).Post(ctx, c, r)`\n", nil, ""},
 		{"unbalanced parens are not a selector", "`a.Bee((c)`\n", nil, ""},
+		{"call not at the end is not stripped", "`emit.New(cfg) then more`\n", nil, ""},
 		{"unterminated span ignored", "a `engine.Compute\n", nil, ""},
 		{"fence skipped", "```go\n`a.Bee`\n```\n`c.Dee`\n", []string{"c.Dee"}, ""},
 		{"indented fence skipped", "  ```go\n`a.Bee`\n  ```\n", nil, ""},
