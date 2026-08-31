@@ -6,6 +6,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -290,6 +291,87 @@ func TestDocsInternalIsNotMirrored(t *testing.T) {
 // would pass every pre-merge check and fail the wiki-sync workflow after
 // merge. scripts/ci-go.sh discovers this module, so it runs in the required
 // core checks job.
+// TestHardcodedWikiLinksResolve guards the absolute wiki URLs the README
+// uses to land a reader on the docs quickly. They point at generated page
+// names, so renaming a doc silently breaks them: the in-repo link checker
+// only follows relative paths, and nothing else reads these.
+func TestHardcodedWikiLinksResolve(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pages, err := docPages(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	generated := map[string]bool{"Home": true} // Home is synthesized, not mirrored
+	for _, page := range pages {
+		generated[page] = true
+	}
+
+	var scanned, bad int
+	wikiLink := regexp.MustCompile(regexp.QuoteMeta(repoURL+"/wiki") + `(?:/([A-Za-z0-9._-]+))?`)
+	for _, rel := range wikiLinkSources(t, root) {
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, m := range wikiLink.FindAllStringSubmatch(string(body), -1) {
+			scanned++
+			page := m[1]
+			if page == "" {
+				continue // the wiki root, always valid
+			}
+
+			if !generated[page] {
+				bad++
+				t.Errorf("%s links to %s/wiki/%s, which the generator does not produce", rel, repoURL, page)
+			}
+		}
+	}
+
+	if scanned == 0 {
+		t.Fatal("no wiki links found — the check is vacuous")
+	}
+
+	if bad == 0 {
+		t.Logf("%d hardcoded wiki link(s) resolve", scanned)
+	}
+}
+
+// wikiLinkSources lists the docs that may carry absolute wiki URLs.
+func wikiLinkSources(t *testing.T, root string) []string {
+	t.Helper()
+	var out []string
+	for _, rel := range []string{"README.md", "CONTRIBUTING.md"} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
+			out = append(out, rel)
+		}
+	}
+
+	err := filepath.WalkDir(filepath.Join(root, "docs"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return err
+		}
+
+		r, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+
+		out = append(out, filepath.ToSlash(r))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return out
+}
+
 func TestThisRepoNavigationCoversEveryPage(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
