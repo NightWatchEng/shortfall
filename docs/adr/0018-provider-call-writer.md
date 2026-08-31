@@ -95,6 +95,9 @@ incoming ADR explicitly requires.
   is not otherwise rewritten — its history stands.
 - No change to the family name, its ADR-0004 label set, the four export
   adapter mappings, or `engine`'s read path.
-- The exporter conformance suite still never seeds this family
-  (`testkit/conformance`); that gap is tracked separately and is not closed
-  here.
+- The exporter conformance suite seeds this family (`testkit/conformance`,
+  case 3 of the sample interleave, alongside `biz_txn_total` and
+  `biz_dropped_events_total`). **Amended 2026-08-30 (workspace-v42)**: at
+  acceptance this bullet said the suite "still never seeds this family" and
+  that the gap was tracked separately — workspace-crg closed that gap, and
+  the bullet described the pre-crg world until this amendment.

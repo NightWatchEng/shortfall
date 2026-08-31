@@ -30,6 +30,40 @@ var (
 	req engine.Request
 )
 `,
+	"docs/inhouse.md": `package docsnippet
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/NightWatchEng/shortfall/biz"
+	"github.com/NightWatchEng/shortfall/emit"
+	"github.com/NightWatchEng/shortfall/registry"
+)
+
+// Invoice stands in for the reader's decoded request payload.
+type Invoice struct {
+	ID             string
+	HashedCustomer string
+	Segment        string
+	AmountMinor    int64
+}
+
+// Txn stands in for the reader's queue item.
+type Txn struct{ ID string }
+
+var (
+	ctx     = context.Background()
+	reg     registry.Registry
+	em      *emit.Std
+	handler http.Handler
+	vc      biz.ValueContext
+	txn     Txn
+	money   biz.Money
+)
+
+func parseInvoice(*http.Request) Invoice { return Invoice{} }
+`,
 	"docs/integration-webhook-lambdas.md": `package docsnippet
 
 import (
@@ -74,7 +108,7 @@ func TestDocGoFencesCompile(t *testing.T) {
 			}
 			var goFences []fence
 			for _, f := range fences {
-				if f.lang == "go" {
+				if f.lang == "go" && !f.ref {
 					goFences = append(goFences, f)
 				}
 			}
@@ -106,6 +140,7 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 		"docs/registry.md",
 		"docs/adapters.md",
 		"docs/portability.md",
+		"docs/inhouse.md",
 	}
 	found := 0
 	for _, doc := range docs {
@@ -180,6 +215,75 @@ func TestExtractFences(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGovernanceMarkers pins the two fence markers end to end: a
+// reference fence is parsed as ref (and so skipped by the compile
+// filter), a continues fence compiles with its unused declarations
+// absorbed, the SAME body unmarked still fails (the absorption is
+// opt-in, not a default), a marker not directly adjacent to the fence
+// does not apply, and a continues fence never masks a real defect.
+func TestGovernanceMarkers(t *testing.T) {
+	root := repoRoot(t)
+	write := func(t *testing.T, src string) []fence {
+		t.Helper()
+		p := filepath.Join(t.TempDir(), "doc.md")
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		fences, err := extractFences(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fences
+	}
+
+	t.Run("reference marker parsed", func(t *testing.T) {
+		fences := write(t, "<!-- docsnippets:reference -->\n```go\nRecord(ctx context.Context)\n```\n")
+		if len(fences) != 1 || !fences[0].ref || fences[0].cont {
+			t.Fatalf("fences = %+v, want one ref fence", fences)
+		}
+	})
+	t.Run("marker must be adjacent", func(t *testing.T) {
+		fences := write(t, "<!-- docsnippets:reference -->\n\n```go\nx()\n```\n")
+		if len(fences) != 1 || fences[0].ref {
+			t.Fatalf("fences = %+v, want one unmarked fence", fences)
+		}
+	})
+	t.Run("marker does not leak to the next fence", func(t *testing.T) {
+		fences := write(t, "<!-- docsnippets:continues -->\n```go\na()\n```\n```go\nb()\n```\n")
+		if len(fences) != 2 || !fences[0].cont || fences[1].cont {
+			t.Fatalf("fences = %+v, want cont on the first only", fences)
+		}
+	})
+
+	unused := "```go\nreg, err := registry.Load(\"registry.yaml\")\nif err != nil {\n\tlog.Fatal(err)\n}\n```\n"
+	t.Run("continues absorbs unused declarations", func(t *testing.T) {
+		fences := write(t, "<!-- docsnippets:continues -->\n"+unused)
+		if err := compileGoFences(root, t.TempDir(), fences, ""); err != nil {
+			t.Fatalf("continues fence failed: %v", err)
+		}
+	})
+	t.Run("unmarked fence still fails on unused", func(t *testing.T) {
+		fences := write(t, unused)
+		err := compileGoFences(root, t.TempDir(), fences, "")
+		if err == nil || !strings.Contains(err.Error(), "declared and not used") {
+			t.Fatalf("err = %v, want declared-and-not-used", err)
+		}
+	})
+	t.Run("continues never masks a real defect", func(t *testing.T) {
+		fences := write(t, "<!-- docsnippets:continues -->\n```go\nx := undefinedIdent()\n```\n")
+		err := compileGoFences(root, t.TempDir(), fences, "")
+		if err == nil || !strings.Contains(err.Error(), "undefined") {
+			t.Fatalf("err = %v, want undefined", err)
+		}
+	})
+	t.Run("mixed fence hoists its import block", func(t *testing.T) {
+		fences := write(t, "```go\nimport (\n\t\"fmt\"\n)\n\nfmt.Println(\"wired\")\n```\n")
+		if err := compileGoFences(root, t.TempDir(), fences, ""); err != nil {
+			t.Fatalf("mixed fence failed: %v", err)
+		}
+	})
 }
 
 // TestFileLevel pins the declaration-vs-statements classification,
