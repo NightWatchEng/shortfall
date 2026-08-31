@@ -17,6 +17,9 @@ dist/
 # built CLI binary (nested module)
 cmd/shortfall/shortfall
 
+# built header tool (nested module)
+test/licensehdr/licensehdr
+
 # Git worktrees created by agent sessions. They live inside the repo, so
 # without this a `git add -A` stages them as embedded repositories and every
 # `warden verify` reports a dirty tree.
