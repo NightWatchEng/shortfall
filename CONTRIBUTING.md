@@ -200,8 +200,8 @@ id["<b>engine</b><br/><i>core module</i><br/>four legs · coverage · severity"]
 
 Keep arrow labels to a short verb phrase. Every protocol, constraint and
 caveat goes in the diagram's **edge table**, which every diagram carries:
-one row per edge, or per numbered step, that carries a real constraint.
-Edges that share one constraint share one row. A
+one row per edge, or per numbered step, that carries a real constraint —
+and one row may cover several that share one. A
 `subgraph` or `box` is a claim about everything inside it; `alt`/`opt` is
 only for a branch that exists in the code.
 

@@ -12,9 +12,9 @@ The decisions behind them are in the [ADRs](../adr/README.md).
 | — | [The money path](money-path.md) | the three runtime sequences: record and propagate, provider events, impact query |
 
 Each diagram carries a table naming the protocol or constraint behind
-every edge that has one — one row per edge in the C4 levels, one per
-numbered step in the sequences, with edges that share a constraint
-sharing a row. Colour is semantic and encodes ownership, so a node in the
+every edge, or numbered step, that carries one — and only those. A single
+row may cover several edges, or a range of steps, that share one
+constraint. Colour is semantic and encodes ownership, so a node in the
 wrong colour is a factual defect: violet is your code, dark blue the
 core module, mid blue an opt-in nested module, ochre-dashed never ships,
 grey external. The full drawing rules are in

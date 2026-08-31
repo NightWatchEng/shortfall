@@ -184,6 +184,14 @@ func TestNavRefusesAnUnreachablePage(t *testing.T) {
 				"[0002](0002-outcome-event-transport.md) [0004](0004-metric-label-set.md)\n"+
 					"```\n[0099](0099-unlisted-decision.md)\n```\n")
 		}, "adr-0099-unlisted-decision"},
+		// A code span is not a link either, and the span branch is a
+		// separate code path from the fence branch above.
+		{"ADR linked only from an inline code span", func(t *testing.T, root string) {
+			writeDoc(t, root, "docs/adr/0099-unlisted-decision.md", "history")
+			writeDoc(t, root, "docs/adr/README.md",
+				"[0002](0002-outcome-event-transport.md) [0004](0004-metric-label-set.md)\n"+
+					"spell it `[0099](0099-unlisted-decision.md)` to show the shape\n")
+		}, "adr-0099-unlisted-decision"},
 		// The index carries the adr- prefix but is reached the ordinary
 		// way; exempting it would let one deleted nav line orphan every ADR.
 		{"ADR index itself missing from the curated sections", func(t *testing.T, root string) {
