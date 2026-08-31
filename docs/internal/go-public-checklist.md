@@ -22,6 +22,6 @@ take, and **the visibility flip itself is the founder's alone**.
 | The flip | 👤 **founder** | private → public is, and stays, the founder's call |
 
 When flipping: no other repo settings need to change — Pages stays off
-(see [CONTRIBUTING](../CONTRIBUTING.md#architecture-diagrams) for why; the
+(see [CONTRIBUTING](../../CONTRIBUTING.md#architecture-diagrams) for why; the
 wiki is the published surface instead) — and the README's pkg.go.dev
 locators become live on first index.

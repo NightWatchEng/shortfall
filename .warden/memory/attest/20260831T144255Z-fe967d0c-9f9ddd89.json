@@ -1,0 +1,483 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+  "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+  "rules_version": "6f56f6b96c9b",
+  "reviewed_at": "2026-08-31T14:42:55+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context; six rounds (full branch, then each fix delta, plus a repo-wide sweep for one refuted claim), each given the engine:claude rule bodies verbatim, the skills-policy review charter, a warden-packaged diff, and reviewer-side split memory. Round 2 and the final rounds executed the documented artifacts \u2014 extracting the quickstart's fences into a temp module, building and running them, and diffing live /metrics output against the doc; round 6 rendered the mermaid sequences under two mermaid versions to test an escaping hazard."
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude general-purpose subagent, separate context; round 1 as sole arbiter over the findings list and review package only, reviewer rationale withheld, with examiner-side split memory. Rounds 2-6 ran reviewer and examiner combined per the skill's small-delta allowance, each instructed to refute its own findings before reporting; each returned an explicit refuted list alongside its findings."
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/example-webhooks.md",
+      "line": 216,
+      "severity": "MEDIUM",
+      "finding": "[round 1] The leg table said coverage was reachable via `shortfall reconcile`, four sentences after the same section stated the CLI cannot reach CloudWatch. runReconcile builds its querier through the same buildQuerier(promURL, sqlDSN, sqlDriver) impact uses, so it has no CloudWatch path either.",
+      "evidence": "cmd/shortfall/reconcile.go declares only promURL/sqlDSN/sqlDriver and calls buildQuerier, whose default branch returns 'no querier configured: pass --prometheus and/or --sql'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "The row now names engine.Coverage, the library path, and says explicitly that shortfall reconcile is not it.",
+      "id": "1f6e61411143bce5"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/example-webhooks.md",
+      "line": 169,
+      "severity": "MEDIUM",
+      "finding": "[round 1] The section 4 bridge miscounted against the table it referred to: that table has three rows, of which one (deferred) is unreadable on a CloudWatch-only wiring. Unrealized loss is not in the table at all \u2014 it belongs to the other outage direction.",
+      "evidence": "The antecedent table lists Realized loss / Deferred value / Customer impact; section 5 marks Realized and Customer impact grounded.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Rewritten, then corrected again in round 2 when it still omitted that realized and customers are partial on one log group.",
+      "id": "b25073610a045dfc"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/example-webhooks.md",
+      "line": 212,
+      "severity": "MEDIUM",
+      "finding": "[round 1] The fence points cwinsights at one log group while the flow spans two systems: the Lambda writes ingest, payments-service writes process from a plain http.ListenAndServe. cwinsights holds a single logGroup and sends it as the sole logGroupName, so the reporting job as written reads only the entry stage \u2014 and the table claimed realized loss was fully grounded.",
+      "evidence": "adapters/query/cwinsights/cwinsights.go: `logGroup string` field, `\"logGroupName\": q.logGroup` in the StartQuery body.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "A paragraph now states the one-group limit and the two ways out; the two event legs are hedged 'for the stages you read'.",
+      "id": "7516380a828ff113"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 173,
+      "severity": "MEDIUM",
+      "finding": "[round 2] The page's whole configuration is the Prometheus exporter, which declares Events: false and whose ExportEvents is a documented no-op, yet section 5 told the reader ids and amounts ride the outcome event 'which is what makes per-entity de-duplication and the customer list possible at report time'. True of the library, false of what the reader just ran.",
+      "evidence": "adapters/export/prometheus/prometheus.go: Capabilities returns Caps{Metrics: true, Events: false}; ExportEvents 'is a no-op: this exporter declares Events=false and keeps that promise by delivering nothing'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Section 5 now says the events are discarded in this configuration, which legs metrics alone can ground, and that a second exporter is needed for the rest.",
+      "id": "978bfb7d84f0ac7d"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 136,
+      "severity": "MEDIUM",
+      "finding": "[round 2] 'Everything it rejects is counted on biz_dropped_events_total instead of being dropped silently' is false on two Record paths: the in-process de-dup returns with no counter, and a metric-buffer overflow is logged rather than counted.",
+      "evidence": "emit/emitter.go: `if s.dedup.seen(key) { s.mu.Unlock(); return }` with no dropCounts increment; `metricOverflow int64 // dropped points since last flush (logged, not a money counter)`. Reproduced live: three identical POSTs yield biz_txn_total 1 and no biz_dropped_events_total series.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Both quieter paths are now named, with the de-dup framed as the intent it is; the sentence no longer overclaims.",
+      "id": "d6f5793bb92b748a"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 181,
+      "severity": "MEDIUM",
+      "finding": "[round 2] The docs index still described the pre-rewrite quickstart ('clone to a rendered report in 10 minutes'). The rewritten page neither clones the repo nor renders a report.",
+      "evidence": "README.md index line against docs/quickstart.md section 1, which is `go mod init demo` and `go get`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Index line rewritten to describe what the page now does.",
+      "id": "b22ad0c3081fd53e"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/example-webhooks.md",
+      "line": 225,
+      "severity": "MEDIUM",
+      "finding": "[round 2] The Coverage row claimed a plain grounded checkmark. engine.Coverage sums telemetry at Flow.ValueStage(), which defaults to the last stage \u2014 `process` here, written by payments-service, not by the Lambda whose log group the example queries. That does not degrade to unavailable: it divides 0 by a non-zero ledger and reports a confident 0% on the one line whose job is to say how much you can trust the rest.",
+      "evidence": "registry.ValueStage() returns Reconcile.Stage or Stages[n-1]; the example registry sets reconcile.source only. engine/coverage.go: ratio := float64(telMinor) / float64(a.minor) with telMinor 0, haveSlice true, Unavailable left empty.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Now a caveat row naming the value-stage anchor and the failure mode, with two remedies: point the querier at the group carrying process, or set reconcile.stage to a stage it does see (verified to validate).",
+      "id": "72df545000f307d4"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/example-webhooks.md",
+      "line": 169,
+      "severity": "MEDIUM",
+      "finding": "[round 2] The round-1 correction to the section 4 bridge still missed that realized loss and customer impact are partial on a single log group, not merely that deferred is absent.",
+      "evidence": "Section 4 grounds realized in 'ingest/process failures' while section 5 establishes the querier reads the Lambda's group alone.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "The bridge now states all three consequences and defers to section 5.",
+      "id": "8bda1223eb867dcd"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/docsnippets",
+      "file": "test/docsnippets/snippets_test.go",
+      "line": 180,
+      "severity": "MEDIUM",
+      "finding": "[round 2] TestStripPackageClause was inserted between TestExtractFences' doc comment and its function, leaving the comment describing the wrong test.",
+      "evidence": "The comment 'TestExtractFences pins the parser's input/output behavior' immediately preceded func TestStripPackageClause.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Comment reattached to TestExtractFences.",
+      "id": "39f85da0d69cca15"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 42,
+      "severity": "LOW",
+      "finding": "[round 2] 'That is the smallest document the validator accepts' was untrue of the fence shown: currencies is optional and one segment validates.",
+      "evidence": "Loading the fence without currencies: ok. With segments: [smb]: ok, 1 segment(s). registry.go: 'Currencies optionally declares the currencies this flow expects'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "The required set (baseline, recovery, reconcile) is stated as required; currencies and the second segment are labelled optional.",
+      "id": "63ac2b95f1de0735"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 135,
+      "severity": "LOW",
+      "finding": "[round 2] The Report paragraph presented the OTLP wiring and the CLI as a matched pair \u2014 'the collector writes ... outcome events to a store the sql adapter reads' \u2014 but nothing in the tree maps OTLP log records onto the sql adapter's fixed biz_outcomes schema.",
+      "evidence": "adapters/query/sql expects flat snake_case columns; the wire attributes are dotted biz.* names. No collector-to-table path is documented anywhere.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "The paragraph now names that mapping as the reader's own rather than implying the collector does it.",
+      "id": "f6aea32cac65549c"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration.md",
+      "line": 281,
+      "severity": "MEDIUM",
+      "finding": "[round 3] A warning added to the propagation step asserted that a globally-installed Baggage propagator bypasses the httpmw egress fence. It does not: the Transport deletes biz.vc toward a non-allowlisted host even when a global propagator put it there. The claim contradicted the paragraph three lines above it, the httpmw package doc, and the code, leaving two adjacent opposite statements about one mechanism.",
+      "evidence": "propagate/httpmw/httpmw.go RoundTrip's `else if hadBizVC { delete(members, biz.MemberKey) }`, pinned by TestTransportEgressAllowlist/'disallowed host gets pre-existing biz.vc STRIPPED'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Rewritten to the two real escapes: a request that never reaches the fence, and a baggage injector composed as the fence's base, which re-injects after the strip.",
+      "id": "ba3ea03c5d7fc01e"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 480,
+      "severity": "MEDIUM",
+      "finding": "[round 4] The same refuted claim survived in the normative spec \u2014 the copy a reimplementer in another language reads. It contradicted its own MUST bullet twelve lines above.",
+      "evidence": "portability.md: 'A deployment that installs a generic Baggage propagator globally bypasses this fence' against its bullet 'remove biz.vc ... including a member some globally-installed propagator added'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Rewritten to the same two escapes in normative form. A repo-wide sweep over every .md, Go comment and rule body confirms no copy of the refuted claim remains.",
+      "id": "a5f9c43be90e53dd"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 13,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration.md",
+      "line": 290,
+      "severity": "LOW",
+      "finding": "[round 4] The inline snippet passed the registry by value, httpmw.NewTransport(reg, base), where the constructor takes *registry.Registry \u2014 contradicting this guide's own instruction to pass &reg nineteen lines above. Inline code in a blockquote is not compiled by test/docsnippets, so nothing would have caught it.",
+      "evidence": "httpmw.go: func NewTransport(reg *registry.Registry, base http.RoundTripper, ...). integration.md establishes reg as a value and instructs 'pass &reg'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Corrected here and at the last remaining outlier, a mermaid label in money-path.md; all six doc call sites now agree.",
+      "id": "1f520c26d6773e0b"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 14,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration.md",
+      "line": 281,
+      "severity": "LOW",
+      "finding": "[round 4] The warning promised 'two things' but its first paragraph joined two clauses so the global propagator read as one of them, which the third paragraph then denied.",
+      "evidence": "The lede against the closing paragraph 'Requests that do go through it are fenced properly'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "The two escapes are named outright as separate paragraphs, with the safe/unsafe nesting shown as two lines rather than described.",
+      "id": "5995990ac82a83e3"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 15,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "unmapped:doc-line-wrap",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0003-value-context-propagation.md",
+      "line": 36,
+      "severity": "LOW",
+      "finding": "[round 4] The ADR paragraph was edited without rewrapping, leaving the file's only line over 80 columns.",
+      "evidence": "88 characters against a file where every other prose line wraps under 80. No markdown line-length linter exists in CI.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Rewrapped.",
+      "id": "53d4815d16754e16"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 16,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/integration.md",
+      "line": 285,
+      "severity": "MEDIUM",
+      "finding": "[round 5] 'A globally-installed generic Baggage propagator matters here and only here' is false for the second escape: otelhttp.NewTransport defaults its propagators to otel.GetTextMapPropagator(), so in the composed-inside case the global propagator is precisely what re-injects after the strip. It also contradicted the parallel sentence written into portability.md the same day.",
+      "evidence": "otelhttp config.go sets Propagators: otel.GetTextMapPropagator() as the default; transport.go injects before delegating. portability.md said 'only insofar as it reaches those paths' \u2014 plural.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Said once, at the end, covering both cases: the propagator is the usual injector in both and the hazard in neither; the unfenced path is the hazard.",
+      "id": "61a5d236d722faca"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 17,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 486,
+      "severity": "MEDIUM",
+      "finding": "[round 5] The normative MUST lost its antecedent in the previous rewrite: 'an implementation that could be deployed that way MUST document it' had no referent left, and since both escapes exist in every deployment the condition was vacuous \u2014 a port could read itself out of the requirement.",
+      "evidence": "portability.md states uppercase MUST 'carries its usual force'. The pre-rewrite sentence named the condition; the rewrite removed it without making the MUST unconditional.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "The requirement is now unconditional over two named bulleted cases, with an explicit sentence that both are available in every deployment.",
+      "id": "18ad1f8c40befdc0"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 18,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 480,
+      "severity": "LOW",
+      "finding": "[round 5] The governing predicate 'what escapes it is anything that does not go through one' did not fit its second item: an injector composed inside the fenced transport is on a request that does go through the fence. A port author reading strictly would conclude composition order stops mattering once every request is routed through the fenced client.",
+      "evidence": "portability.md's colon list subordinated both cases to one predicate.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Two coordinate bullets, matching the structure integration.md already used.",
+      "id": "5422b15f274936f2"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 19,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/money-path.md",
+      "line": 65,
+      "severity": "LOW",
+      "finding": "[round 5] Pre-existing, surfaced by the sweep: the sequence diagram passed the registry by value where NewTransport takes a pointer, leaving it the last outlier once the other docs were corrected.",
+      "evidence": "money-path.md 'httpmw.NewTransport(reg, base)' against httpmw.go's pointer signature.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "Corrected to &reg. Verified not to break mermaid rendering: the reviewer rendered all three sequences under mermaid 10.x and 11.17.2, and message text is set via textContent rather than sanitized HTML, so &reg displays literally.",
+      "id": "3a901845bad7b41f"
+    },
+    {
+      "ts": "2026-08-31T14:42:55+00:00",
+      "seq": 20,
+      "source": "attest",
+      "sha": "fe967d0cd3e6b29e8e4da55ffa2ba5a23bf20599",
+      "base_sha": "dcf202b71cfa3ca7fe83edd206df730c4f3f2a3b",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "propagate/httpmw",
+      "file": "propagate/httpmw/httpmw.go",
+      "line": 197,
+      "severity": "LOW",
+      "finding": "[round 6] The docs now call composition order 'part of the contract', but httpmw's godoc \u2014 the surface a Go caller of NewTransport actually reads \u2014 never mentioned it, while discussing the neighbouring harmless case at length. A reader of godoc alone kept the propagator-centric mental model the rest of the branch removed.",
+      "evidence": "NewTransport's doc said only 'wraps base ... with the biz.vc egress fence'; RoundTrip's list covered inject/remove/foreign-members and stopped. No ordering caveat anywhere in the package.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-ukd",
+      "reason": "NewTransport states that order is load-bearing and which direction is safe; RoundTrip notes base runs after the removal and can undo it. No behaviour change.",
+      "id": "cb76b9e058fed6fe"
+    }
+  ]
+}

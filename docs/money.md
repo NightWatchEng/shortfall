@@ -42,8 +42,11 @@ so you can act on each correctly:
   degraded (abandoned checkouts, upstream suppression). Those transactions do
   not exist in any log, so this is measured against a **baseline** forecast, and
   it is always a **range** (see §3), never a point.
-- **Customer impact** — how many distinct customers and accounts were hit, by
-  segment, with the top accounts named. The list you call.
+- **Customer impact** — how many distinct accounts were hit, by segment, with
+  the top accounts named. The list you call. It is deliberately **gross**:
+  an account that failed and then recovered still had a bad experience, so
+  this leg is not netted for recovery and its values must not be summed as
+  company loss. That is the realized leg's job.
 
 **Never add unrealized into realized.** They answer different questions
 (attribution vs counterfactual) and carry different evidence. The report tags

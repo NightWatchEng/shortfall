@@ -196,6 +196,12 @@ func WithTransportLogger(l *slog.Logger) TransportOption {
 
 // NewTransport wraps base (nil means http.DefaultTransport) with the
 // biz.vc egress fence for the registry's propagation allowlist.
+//
+// Composition order is load-bearing: the fence rebuilds the header and
+// then delegates to base, so a transport that injects Baggage must wrap
+// this one rather than be passed as its base — otherwise it re-injects
+// after the removal. Anything not routed through this Transport is not
+// fenced at all (ADR-0003).
 func NewTransport(reg *registry.Registry, base http.RoundTripper, opts ...TransportOption) *Transport {
 	if base == nil {
 		base = http.DefaultTransport
@@ -215,6 +221,9 @@ func NewTransport(reg *registry.Registry, base http.RoundTripper, opts ...Transp
 //   - host not allowed: remove biz.vc — including one a global propagator
 //     added or one hidden behind a malformed neighbour;
 //   - foreign members pass through in every case.
+//
+// The removal is the last thing this Transport does to the header; base
+// runs afterwards and can undo it. See NewTransport on composition order.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	host := strings.ToLower(req.URL.Hostname())
 	allowed := t.reg.Propagation.HostAllowed(host)

@@ -30,10 +30,12 @@ Eight separate Baggage members would mean eight chances to copy seven.
   into *every* outbound request — third-party payment providers and vendor
   APIs included. Therefore: the library's own client RoundTripper injects
   `biz.vc` only toward hosts matching the registry's declared internal
-  propagation allowlist (deny by default across origins), and the
-  quickstart warns that a globally-installed generic Baggage propagator
-  bypasses this and must be scoped by the deployment. Shipping amounts to
-  third parties is a decision someone must make on purpose, not a default.
+  propagation allowlist (deny by default across origins). The fence is the
+  Transport, so the integration guide warns that a request routed around
+  it — or a baggage injector wrapped inside it rather than outside — is
+  not fenced, whatever a globally-installed generic propagator does.
+  Shipping amounts to third parties is a decision someone must make on
+  purpose, not a default.
 - Queue carriers expose `Get/Set/Keys` Carrier interfaces and copy exactly
   one header. No queue client libraries are imported by `propagate/*`.
 - The codec is fuzz-tested (round-trip, 1M iterations) and benchmarked; it

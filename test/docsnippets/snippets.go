@@ -124,10 +124,12 @@ var importsFor = map[string]string{
 	"gcp":        "github.com/NightWatchEng/shortfall/adapters/export/gcp",
 	"otlp":       "github.com/NightWatchEng/shortfall/adapters/export/otlp",
 	"promexport": "github.com/NightWatchEng/shortfall/adapters/export/prometheus",
+	"cwinsights": "github.com/NightWatchEng/shortfall/adapters/query/cwinsights",
 	"gcplogging": "github.com/NightWatchEng/shortfall/adapters/query/gcplogging",
 	"promql":     "github.com/NightWatchEng/shortfall/adapters/query/promql",
 	"sqlq":       "github.com/NightWatchEng/shortfall/adapters/query/sql",
 	"promhttp":   "github.com/prometheus/client_golang/prometheus/promhttp",
+	"query":      "github.com/NightWatchEng/shortfall/query",
 	"sql":        "database/sql",
 	"http":       "net/http",
 	"context":    "context",
@@ -135,6 +137,25 @@ var importsFor = map[string]string{
 	"io":         "io",
 	"log":        "log",
 	"time":       "time",
+}
+
+// stripPackageClause removes a fence's own `package X` line. A quickstart
+// shows a complete, copy-pasteable program, and the synthesized file
+// supplies its own package clause — two would not compile, which would
+// push exactly the fence a reader is most likely to run out of governance.
+func stripPackageClause(body string) string {
+	lines := strings.Split(body, "\n")
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "//") {
+			continue
+		}
+		if strings.HasPrefix(t, "package ") {
+			return strings.Join(lines[i+1:], "\n")
+		}
+		break
+	}
+	return body
 }
 
 // splitLeadingImports separates a fence's own leading import block from
@@ -198,7 +219,7 @@ func synthesize(f fence, n int, discard []string) string {
 	var b strings.Builder
 	b.WriteString("package docsnippet\n\n")
 
-	ownSpecs, body := splitLeadingImports(f.body)
+	ownSpecs, body := splitLeadingImports(stripPackageClause(f.body))
 	f.body = body
 
 	used := map[string]bool{}
@@ -284,6 +305,7 @@ require (
 	github.com/NightWatchEng/shortfall/adapters/export/gcp v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/otlp v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/export/prometheus v0.0.0
+	github.com/NightWatchEng/shortfall/adapters/query/cwinsights v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/gcplogging v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/promql v0.0.0
 	github.com/NightWatchEng/shortfall/adapters/query/sql v0.0.0
@@ -298,6 +320,8 @@ replace github.com/NightWatchEng/shortfall/adapters/export/gcp => ROOT/adapters/
 replace github.com/NightWatchEng/shortfall/adapters/export/otlp => ROOT/adapters/export/otlp
 
 replace github.com/NightWatchEng/shortfall/adapters/export/prometheus => ROOT/adapters/export/prometheus
+
+replace github.com/NightWatchEng/shortfall/adapters/query/cwinsights => ROOT/adapters/query/cwinsights
 
 replace github.com/NightWatchEng/shortfall/adapters/query/gcplogging => ROOT/adapters/query/gcplogging
 

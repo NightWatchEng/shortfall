@@ -41,7 +41,7 @@ the kind of evidence behind it:
 | **Realized loss** | Terminally failed transactions, summed, de-duplicated by entity, net of anything that later succeeded | deterministic |
 | **Deferred value** | In-flight and backlogged value by age bucket, with the registry's SLA deciding what has become lost | deterministic |
 | **Unrealized loss** | Demand that never arrived, sized against a seasonal baseline — always a range | estimate |
-| **Customer impact** | Distinct entities, segments, top accounts | deterministic |
+| **Customer impact** | Distinct affected accounts, a per-segment breakdown, and the top accounts by failed value | deterministic |
 | **Coverage ratio** | Of the money the provider's ledger recorded, how much your telemetry also saw | trust |
 
 Coverage is what makes the other four defensible. It is computed per
@@ -69,15 +69,23 @@ each stage transition:
 
 ```go
 func main() {
+    ctx := context.Background()
+
     reg, err := registry.Load("registry.yaml") // the flow registry Finance co-signs
     if err != nil {
         log.Fatal(err)
     }
-    em, err := emit.New(&reg, cloudwatch.New()) // any adapters/export/* exporter
+
+    exp, err := otlp.New(ctx) // to your collector; reads OTEL_EXPORTER_OTLP_*
     if err != nil {
         log.Fatal(err)
     }
-    defer em.Close(context.Background())
+
+    em, err := emit.New(&reg, exp)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer em.Close(ctx)
 
     http.HandleFunc("POST /invoices/{invoice}/pay", func(w http.ResponseWriter, r *http.Request) {
         ctx, err := biz.WithValueContext(r.Context(), biz.ValueContext{
@@ -91,9 +99,11 @@ func main() {
             http.Error(w, err.Error(), http.StatusBadRequest)
             return
         }
+
         em.Record(ctx, "auth", biz.ResultSuccess) // once per stage transition
         w.WriteHeader(http.StatusAccepted)
     })
+
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
@@ -103,6 +113,10 @@ for the always-on aggregate view, and one outcome event carrying the
 exact amount and the ids, emitted regardless of any sampling decision.
 The value context rides W3C Baggage across service hops, so a flow
 spanning three services is still one flow.
+
+OTLP is the vendor-neutral path: one integration, and your collector fans
+the signals out to whatever you already run. Swap it for
+`adapters/export/{prometheus,cloudwatch,gcp}` to write a backend directly.
 
 ## Report
 
@@ -118,6 +132,16 @@ de-duplication and customer impact. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. `shortfall reconcile --ledger` adds the coverage ratio.
 
+`--prometheus` is what the wiring above feeds: the collector writes the
+`biz_*` families to Prometheus. `--sql` is the events half, and it reads
+the fixed `biz_outcomes` table in [backends](docs/adapters.md) — landing
+OTLP log records in that shape is a mapping you own, not something a
+collector does for you. Export straight to CloudWatch or Cloud Logging
+instead and you skip the CLI entirely, reading back through that
+backend's query adapter from a small reporting job — same
+`engine.Compute`, same report. The
+[worked example](docs/example-webhooks.md) shows it end to end.
+
 ## Design rules
 
 These are decisions, not defaults. If you disagree with one, you will
@@ -132,9 +156,9 @@ disagree with the library.
 - **Amounts and ids ride events, never metric labels.** Metric families
   carry a fixed label vocabulary; a customer id in a label set is an
   unbounded-cardinality incident waiting to happen (ADR-0004).
-- **A leg that cannot be grounded says so.** An events-only backend
-  reports the deferred leg as `NotAvailable` with a reason, because a
-  zero is a claim (ADR-0017).
+- **A leg that cannot be grounded says so.** On an events-only backend
+  the deferred leg comes back marked unavailable, with a caveat naming
+  why, because a zero is a claim (ADR-0017).
 - **No severity ladder in the registry means no severity suggestion.**
 - **PII is fenced in code.** Raw emails, PANs and IBANs are rejected at
   the `biz.*` boundary, not discouraged in a style guide.
@@ -157,7 +181,7 @@ The [wiki](https://github.com/NightWatchEng/shortfall/wiki) mirrors
 `docs/`, which is the source of truth.
 
 **Start here**
-- [Quickstart](docs/quickstart.md) — clone to a rendered report in 10 minutes, no external services.
+- [Quickstart](docs/quickstart.md) — instrument a service and watch `biz_*` come out, in 10 minutes, no external services.
 - [Integration guide](docs/integration.md) — the step-by-step for wiring your own service.
 - [Worked example](docs/example-webhooks.md) — webhook Lambdas → payments-service, end to end.
 
@@ -165,9 +189,11 @@ The [wiki](https://github.com/NightWatchEng/shortfall/wiki) mirrors
 - [Backends & adapters](docs/adapters.md) — which backend grounds which leg.
 - [Registry](docs/registry.md) — every field of the flow registry.
 - [Money & the legs](docs/money.md) — what a "dollar" means here, for Finance.
-- [Semantic conventions](docs/semconv.md) — the `biz.*` attribute and metric shapes (draft).
 - [Performance](docs/performance.md) — scaling numbers and where they stop applying.
-- [Portability](docs/portability.md) — what another implementation must satisfy.
+
+**Specification**
+- [Portability contract](docs/portability.md) — what another implementation, or an external adapter, must satisfy.
+- [Semantic conventions](docs/semconv.md) — the `biz.*` attribute and metric shapes (draft).
 
 **Design**
 - [Architecture](docs/architecture/README.md) — C4 levels 1–3 and the money-path sequences.

@@ -106,6 +106,7 @@ exp, err := prom.New()               // serve exp.Gatherer() on /metrics
 if err != nil {
     log.Fatal(err)
 }
+
 em, err := emit.New(&reg, exp)       // emit.New(*registry.Registry, exporter, ...EmitterOption)
 if err != nil {
     log.Fatal(err)
@@ -155,6 +156,7 @@ ingress := func(r *http.Request) (biz.ValueContext, bool) {
     if r.Method != http.MethodPost || r.URL.Path != "/pay" {
         return biz.ValueContext{}, false // not a flow entry point
     }
+
     inv := parseInvoice(r) // your decode
     return biz.ValueContext{
         Flow:       "invoice.pay",
@@ -275,6 +277,29 @@ client. Internal hosts you allowlisted keep the context, so the
 downstream service's `Record` calls land on the same entity and dollars
 — one flow, measured across every hop. Your payment provider is not
 allowlisted, so its requests leave clean.
+
+> **The fence is this Transport, so only two things escape it.**
+>
+> *A request that never goes through it.* Route every outbound call
+> through a client built this way, including calls made inside SDKs — most
+> accept a custom `http.Client`.
+>
+> *An injector composed inside it.* `RoundTrip` rebuilds the header and
+> then hands the request to its `base`, so a transport that injects
+> baggage must wrap this one from the **outside**:
+>
+> ```
+> otelhttp.NewTransport(httpmw.NewTransport(&reg, base))  // safe
+> httpmw.NewTransport(&reg, otelhttp.NewTransport(base))  // re-injects
+> ```
+>
+> A globally-installed generic Baggage propagator is the usual injector in
+> both cases — `otelhttp` reaches for `otel.GetTextMapPropagator()` by
+> default — but it is not itself the hazard. Everything that does reach
+> the fence is fenced: toward a non-allowlisted host a `biz.vc` is deleted
+> even when a global propagator put it there (ADR-0003). Shipping
+> transaction amounts to a third party is a decision someone makes on
+> purpose.
 
 **Queues.** Inject on the producer, extract on the consumer. The
 carriers import no queue client library, so your broker client stays

@@ -244,6 +244,29 @@ func withoutNavEntry(t *testing.T, page string) {
 	sections = trimmed
 }
 
+func TestDocsInternalIsNotMirrored(t *testing.T) {
+	root := writeRepo(t)
+	// An internal record must not reach the wiki at all — not as an orphan
+	// the nav check would catch, and not as a published page either.
+	writeDoc(t, root, "docs/internal/go-public-checklist.md", "founder bookkeeping")
+	out := t.TempDir()
+	if err := generate(root, out); err != nil {
+		t.Fatalf("generate rejected a tree with docs/internal: %v", err)
+	}
+	for _, name := range []string{"internal-go-public-checklist.md", "go-public-checklist.md"} {
+		if _, err := os.Stat(filepath.Join(out, name)); err == nil {
+			t.Errorf("docs/internal was mirrored as %s", name)
+		}
+	}
+	nav, err := os.ReadFile(filepath.Join(out, "_Sidebar.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(nav), "go-public-checklist") {
+		t.Errorf("internal record reached the sidebar:\n%s", nav)
+	}
+}
+
 // TestThisRepoNavigationCoversEveryPage runs the generator over this
 // repository rather than a fixture. Without it the cases above only ever
 // judge a synthetic tree, and a doc added under docs/ with no nav entry
