@@ -1,0 +1,280 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+  "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-08-31T23:35:08+00:00",
+  "range_patch_ids": [
+    "9344f0ab1eac7969464c7448e27114bae8bfda97",
+    "a137dbe14dae352a6b0b53264465996bb54481c0"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent, independent context, 2 rounds"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent; findings verified in-line against the tree, several reproduced by mutation in a clean clone"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "scope-misstatement"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 50,
+      "severity": "MEDIUM",
+      "finding": "The README explained the demo's `COVERAGE unavailable` line as a property of the harness. It is not: engine.Compute sets it unconditionally on every path, for every querier, so a real backend prints the same line. The ADR-0017 citation was also wrong \u2014 that ADR says CoverageLeg already carried its marker and is unchanged.",
+      "evidence": "engine/engine.go:198-204 assigns CoverageLeg{Unavailable: ...} with no condition on the querier or any ledger; engine/coverage.go:41 Coverage() takes an explicit ledger argument and its only production call site is cmd/shortfall/reconcile.go:88.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Rewritten in README and the demo's package doc: coverage is a reconcile-time number needing a provider ledger an impact request does not carry. The ADR-0017 citation was dropped for coverage.",
+      "id": "30ba3bba4d39f667"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "misleading-comment"
+      ],
+      "dir_prefix": "examples/demo",
+      "file": "examples/demo/main_test.go",
+      "line": 42,
+      "severity": "MEDIUM",
+      "finding": "The same false attribution inside the test's own explanatory string \u2014 a comment describing adjacent code contradicted by that code.",
+      "evidence": "main_test.go:42-46 vs engine/engine.go:198-204.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Rewritten to name the real cause.",
+      "id": "3c7543bedb3eb8ec"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "test-cannot-fail",
+        "vacuous-pass"
+      ],
+      "dir_prefix": "examples/demo",
+      "file": "examples/demo/main_test.go",
+      "line": 61,
+      "severity": "MEDIUM",
+      "finding": "TestRunRefusesAnEmptyReport claimed to pin the guard but discarded run's exit code and asserted only that a string was ABSENT from stdout. Any failure of run leaves stdout empty and the assertion passes having inspected nothing; it never entered the guard branch.",
+      "evidence": "Reviewer mutation: setting version 99 in demoRegistry makes registry.Parse fail, so run returns 1 with empty stdout, and the test still reported PASS.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "render() split out of run() so the guard can be entered directly. The test is now table-driven over an empty and a populated report, asserting the exit code, that stdout stays empty on refusal, and that stderr explains.",
+      "id": "71fd6ec753e0e73a"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "examples/demo",
+      "file": "examples/demo/main_test.go",
+      "line": 40,
+      "severity": "MEDIUM",
+      "finding": "The case asserted the bare substring \"unavailable:\", which three legs render (CUSTOMERS, COVERAGE, and a degraded UNREALIZED note), so it passed when the wrong leg degraded. Nothing detected a lookback regression that would silently invalidate every digit in the README block.",
+      "evidence": "Reviewer mutation: lookbackWeeks=1 collapses the estimate to a point presented as a range and changes every figure, while the suite still reported ok.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The assertion is anchored to \"COVERAGE   unavailable:\", and TestUnrealizedIsARangeNotAPoint now fails when low equals high \u2014 watched failing on that exact mutation. lookbackWeeks is also read from the parsed registry instead of restated.",
+      "id": "0c47116f4534c6ff"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 26,
+      "severity": "MEDIUM",
+      "finding": "The abridgement was disclosed inaccurately: three header lines were cut, not two, and the undisclosed third was the never-add rule \u2014 the line most load-bearing for the paragraph below the fence. The customer truncation was unmentioned.",
+      "evidence": "diff of the README fence against live output: deltas were 0a1,3 (three header lines) and 10c13,19 (seven customer rows).",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Prose now names all three cut lines individually and the truncation.",
+      "id": "4c79211973664131"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 54,
+      "severity": "MEDIUM",
+      "finding": "\"so you can check the report against ground truth\" overclaimed: the demo prints neither the ground truth nor any reconciliation, and its only reconciliation number reads unavailable.",
+      "evidence": "examples/demo/main.go writes only report.RenderText(rep); the omniscient checkout.Result is used solely to build the querier. Ground-truth comparison lives in testkit's goldens.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded in README and the launch message to say what the demo actually shows, and to name where ground-truth checking really happens.",
+      "id": "85d927726e9285be"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/internal",
+      "file": "docs/internal/launch-message.md",
+      "line": 45,
+      "severity": "MEDIUM",
+      "finding": "The file's own binding rule says always state pre-1.0 AND that interfaces move; the Short draft \u2014 the copy most likely to be pasted into a DM \u2014 carried only the first half.",
+      "evidence": "launch-message.md:21-22 (the rule) vs :45 (Short) vs :90-92 (Long, correct).",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Short draft now carries both halves.",
+      "id": "4df57e01e3c836a4"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 58,
+      "severity": "LOW",
+      "finding": "\"yours may differ in the last digits\" understated the failure mode: a 1-ULP math.Exp difference flips a Poisson draw and adds or drops a whole transaction, changing counts, the customer list and every total.",
+      "evidence": "examples/checkout/checkout.go poisson() derives an integer arrival count from math.Exp; testkit/cmd/genexpected warns goldens must be CI-generated for this reason.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded: not different last digits, but different counts.",
+      "id": "bcf14c860c7f1f0d"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "unmapped:committed-build-artifact",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": "",
+      "file": "demo",
+      "line": 1,
+      "severity": "HIGH",
+      "finding": "A 4,227,714-byte compiled Mach-O arm64 executable was committed at the repository root by this branch \u2014 a build artifact of `go build ./examples/demo`, tracked, unreferenced, uncovered by .gitignore, and unreviewable. On merge it would have entered git history permanently, needing a rewrite rather than a git rm to remove.",
+      "evidence": "git ls-files -s demo -> 100755 ... ; git cat-file -s HEAD:demo -> 4227714; .gitignore covered /shortfall, cmd/shortfall/shortfall and every other built binary, but nothing matching demo.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Removed from the index and the tree before merge, so it never entered history. /demo added to .gitignore with the reason, and the ignore verified by rebuilding and confirming git no longer sees it.",
+      "id": "4ce347c9f33898aa"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "examples/demo",
+      "file": "examples/demo/main_test.go",
+      "line": 77,
+      "severity": "LOW",
+      "finding": "TestUnrealizedIsARangeNotAPoint opened with a RETENTION GAP pre-guard that cannot fire: memq declares 520 weeks of history unconditionally, so engine.Unrealized's retention note never triggers here. It read as protection while providing none.",
+      "evidence": "query/memq/memq.go:60-67 sets MetricHistoryWeeks: 520 in New; engine/unrealized.go gates the note on hw > 0 && hw < LookbackWeeks. On the real degradation the note did not appear and the test failed at the point check instead.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Kept but relabelled honestly as a belt to the point check's braces, with a comment stating it cannot fire under the in-memory querier today and why it is still worth keeping.",
+      "id": "918ff081ebf9dee8"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 27,
+      "severity": "LOW",
+      "finding": "The abridgement enumeration, itself a round-1 fix, still under-described the cut by one line: it accounted for the window/version line and the never-add rule but not the report's title line.",
+      "evidence": "Live output lines 0-2 are the title, the window line and the never-add rule; the prose listed only the latter two's contents.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Prose now names the title line explicitly.",
+      "id": "403d5980fbf27c42"
+    },
+    {
+      "ts": "2026-08-31T23:35:08+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "4c2b24673d3d4f96f972b19b2e0c93d15eb4a870",
+      "base_sha": "c59df5362d6ed334e938a5ae3a584b3ccaf51384",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/internal",
+      "file": "docs/internal/launch-message.md",
+      "line": 33,
+      "severity": "LOW",
+      "finding": "A claim-table row added by the round-1 fix asserted engine.Coverage is called \"only from cmd/shortfall/reconcile.go\"; engine/coverage_test.go calls it nine times, and the table's stated purpose is that a reader verifies it by grepping.",
+      "evidence": "grep 'Coverage(' engine/coverage_test.go -> 9 matches; the only non-test call site is cmd/shortfall/reconcile.go:88.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Row now reads \"only production call site\".",
+      "id": "b2254d29ee2a6980"
+    }
+  ]
+}
