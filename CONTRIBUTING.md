@@ -7,6 +7,16 @@ checks (`core checks`, `gitleaks`, `warden gate`), and carries a committed
 pre-PR review attestation (`.warden/memory/attest/`). Merge only on green —
 no exceptions, including for maintainers (enforce_admins is on).
 
+## Who can contribute
+
+Contributing requires write access today. The repository is private, and
+the required `warden gate` check authenticates with repository credentials
+that a PR from a fork never receives — a fork PR cannot pass the required
+checks, so fork PRs are not accepted. That is a pre-flip posture, not a
+philosophy: it gets revisited before the repository goes public, in the
+same pass that updates the issue templates already pre-positioned for the
+flip.
+
 ## Commands
 
 - `./scripts/ci-go.sh fmt|vet|build|test|vuln|lint` — the core checks, run
