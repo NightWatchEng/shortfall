@@ -477,9 +477,14 @@ An implementation's own outbound client therefore MUST:
 - fail closed: if a safe header cannot be expressed, send no `baggage`
   header rather than forward a possibly-leaky original.
 
-A deployment that installs a generic Baggage propagator globally bypasses
-this fence. That is a deployment concern, and it must be documented as one
-by any implementation that could be deployed that way.
+The fence is the client transport, so what escapes it is anything that
+does not go through one: a request issued by a client the implementation
+does not own, or a baggage injector composed *inside* the fenced transport
+rather than around it, which would re-inject after the removal above. A
+globally installed generic propagator matters only insofar as it reaches
+those paths — through the fence, its member is removed like any other.
+This is a deployment concern, and an implementation that could be deployed
+that way MUST document it as one.
 
 Allowlist matching is specified in 4.4 and covered by the
 `host_allowlist` vectors.

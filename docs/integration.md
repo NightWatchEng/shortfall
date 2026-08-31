@@ -278,22 +278,27 @@ downstream service's `Record` calls land on the same entity and dollars
 — one flow, measured across every hop. Your payment provider is not
 allowlisted, so its requests leave clean.
 
-> **The fence is this Transport, so two things can route around it.** A
-> globally-installed generic Baggage propagator injects every member,
-> `biz.vc` included, into whatever it touches — and a request that never
-> passes through this Transport is never fenced. Route every outbound
-> call through a client built this way, including the ones inside SDKs
-> that accept a custom `http.Client`.
+> **The fence is this Transport, so only two things escape it.**
 >
-> Ordering matters too. The fence rebuilds the header and then hands the
-> request to its `base`, so anything that injects baggage must wrap this
-> Transport from the **outside** — `otelhttp.NewTransport(httpmw.NewTransport(reg, base))`,
-> never the reverse, which would re-inject after the strip.
+> *A request that never goes through it.* Route every outbound call
+> through a client built this way, including calls made inside SDKs — most
+> accept a custom `http.Client`. A globally-installed generic Baggage
+> propagator matters here and only here: it injects `biz.vc` into whatever
+> it touches, and an unfenced client is what it touches.
 >
-> Requests that do go through it are fenced properly: toward a
-> non-allowlisted host a `biz.vc` is deleted even when a global propagator
-> put it there (ADR-0003). Shipping transaction amounts to a third party
-> is a decision someone makes on purpose.
+> *An injector composed inside it.* `RoundTrip` rebuilds the header and
+> then hands the request to its `base`, so a transport that injects
+> baggage must wrap this one from the **outside**:
+>
+> ```
+> otelhttp.NewTransport(httpmw.NewTransport(&reg, base))  // safe
+> httpmw.NewTransport(&reg, otelhttp.NewTransport(base))  // re-injects
+> ```
+>
+> Everything else is fenced: toward a non-allowlisted host a `biz.vc` is
+> deleted even when a global propagator put it there (ADR-0003). Shipping
+> transaction amounts to a third party is a decision someone makes on
+> purpose.
 
 **Queues.** Inject on the producer, extract on the consumer. The
 carriers import no queue client library, so your broker client stays
