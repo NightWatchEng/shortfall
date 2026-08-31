@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package engine computes the impact report for a window and scope:
 // realized, deferred, unrealized, customers, and coverage. It imports
 // only query and registry (plus biz types) — the engine-import-boundary

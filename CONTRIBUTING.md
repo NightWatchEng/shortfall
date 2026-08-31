@@ -17,6 +17,29 @@ philosophy: it gets revisited before the repository goes public, in the
 same pass that updates the issue templates already pre-positioned for the
 flip.
 
+## Licensing of contributions
+
+Inbound = outbound: by submitting a PR you agree your contribution is
+licensed under [Apache-2.0](LICENSE), the same terms the project ships
+under. There is no CLA and no copyright assignment — you keep your
+copyright. Certify origin with a DCO sign-off
+([developercertificate.org](https://developercertificate.org/)) on each
+commit: `git commit -s` adds the `Signed-off-by:` trailer. Sign-off is a
+stated convention, not yet machine-checked — nothing in CI or the hooks
+verifies the trailer today; reviewers may ask for it.
+
+Every `.go` file carries the two-line header:
+
+```go
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+```
+
+New files get it too — `go run ./test/licensehdr -fix` inserts it, and the
+test in that module fails the ordinary test step for any tracked file
+missing it. `LICENSE` and `NOTICE` themselves never change in a
+contribution PR; they are founder-only paths.
+
 ## Commands
 
 - `./scripts/ci-go.sh fmt|vet|build|test|vuln|lint` — the core checks, run

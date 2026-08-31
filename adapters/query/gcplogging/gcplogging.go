@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package gcplogging is an events-only query.Querier backed by Cloud
 // Logging: it reads back the structured outcome entries the
 // adapters/export/gcp exporter writes, keeps only the entries marked

@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Command genexpected regenerates the committed golden expected-value
 // fixtures from the canonical scenarios. Run from the repo root:
 //

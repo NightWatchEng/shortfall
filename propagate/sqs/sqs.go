@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package sqs carries ValueContext across SQS message attributes without
 // importing the AWS SDK. SQS string attributes are {DataType:"String",
 // StringValue:...}; this package mirrors that with a local Attribute type,

@@ -1,0 +1,18 @@
+{
+  "bead": "workspace-s6o",
+  "head_sha": "a6a6571d4acc48ca6730485a9f0c3cf8d1a08b0a",
+  "base_sha": "a6a6571d4acc48ca6730485a9f0c3cf8d1a08b0a",
+  "rules_version": "665bf6d03117",
+  "decided_at": "2026-08-31T01:42:17+00:00",
+  "decided": "Adopt the two-line SPDX header form ('// Copyright 2026 Yauvan Suba' + '// SPDX-License-Identifier: Apache-2.0') at the top of every tracked .go file, placed above any //go:build constraint and separated from the package clause (or its doc comment) by a blank line; adopt inbound=outbound (contributions licensed under Apache-2.0) plus DCO sign-off as the stated inbound rule in CONTRIBUTING; state the plain-words attribution expectation in README's License section. LICENSE and NOTICE are not touched. The header pass is applied by a committed, re-runnable Go tool under test/licensehdr (go run ./test/licensehdr -fix), and a test in the same module fails the build when any tracked .go file lacks the header.",
+  "why": "The bead names the two-line header form explicitly and it is the modern norm (SPDX is machine-readable, short enough not to obscure package docs, and gofmt-neutral), where the full Apache appendix boilerplate is 13 lines of noise per file. inbound=outbound + DCO is the bead's recommended default, confirmed by the founder on 2026-08-31, and imposes no CLA friction on contributors. Committing the tool under test/ satisfies the acceptance criterion that the script be committed and re-runnable while keeping scripts/ (gate surface) untouched; making the guard a plain Go test means the existing verify/CI 'test' step enforces the convention with no new CI wiring.",
+  "cost_if_wrong": "Header churn across 157 files pollutes git blame one time; if the header form later changes, a second mechanical sweep is required. If the DCO convention proves too heavy for contributors it is a one-paragraph CONTRIBUTING edit to relax. No runtime behavior is touched, so the wrong choice costs re-editing comments, not correctness.",
+  "alternatives": [
+    "Full Apache-2.0 appendix boilerplate per file: maximal ceremony, 13 lines per file, no additional legal force over the SPDX form given LICENSE+NOTICE at the root; rejected as noise.",
+    "SPDX line only, no copyright line: machine-readable but drops the named-author line the founder explicitly wants traveling with the code; rejected.",
+    "CLA instead of DCO: stronger provenance but real friction for casual contributors and needs infrastructure; the bead recommends DCO and the founder confirmed the defaults; rejected.",
+    "Header-add script under scripts/: matches where other repo tooling lives but scripts/ is gate surface and this item is not a policy PR; placing the tool under test/licensehdr keeps the boundary clean; rejected.",
+    "No committed tool, one-off scratch script: fails the bead's acceptance criterion that the pass be re-runnable and committed; rejected."
+  ],
+  "scope": "All tracked .go files across the workspace modules; CONTRIBUTING.md; README.md License section; new test/licensehdr module. Explicitly excluded: LICENSE, NOTICE, all gate surface (.warden/, repo.yaml, graph.yaml, .github/, .githooks/, scripts/)."
+}

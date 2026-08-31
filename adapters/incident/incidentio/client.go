@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package incidentio writes a shortfall impact summary into an incident.io
 // incident's custom field. incident.io is a consumer of the number, not a
 // producer: this is a thin writer over the V2 Edit action — a plain

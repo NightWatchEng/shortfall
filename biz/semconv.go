@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 package biz
 
 // The serialized names of an Outcome's fields — the outcome event's wire

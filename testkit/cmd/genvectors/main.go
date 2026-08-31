@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Command genvectors regenerates the committed conformance vectors —
 // the language-neutral, executable half of docs/portability.md. Run from
 // the repo root:

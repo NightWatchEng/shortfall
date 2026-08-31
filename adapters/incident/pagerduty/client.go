@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package pagerduty writes a shortfall impact summary into a PagerDuty
 // incident's custom field. PagerDuty is a consumer of the number, not a
 // producer: a thin writer over the REST custom-fields endpoint — plain

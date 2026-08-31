@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package promgolden seeds a real Prometheus with the harness's metric points
 // (via the remote-write protocol) and asserts the promql adapter reads back the
 // same Series the in-memory reference (memq) does — the live numeric-parity

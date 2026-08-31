@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package memq is an in-memory query.Querier: it answers the frozen query
 // AST over a fixed set of metric points and outcome events held in memory,
 // so the engine (and adapter conformance) can be exercised with zero

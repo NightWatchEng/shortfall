@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package emit turns stage transitions into the two normalized signals:
 // bounded metrics (sums and counts with the fixed ADR-0004 label set) and
 // unsampled per-transaction outcome events. It also counts observed

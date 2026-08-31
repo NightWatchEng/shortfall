@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package docsnippets is the deterministic slice of the docs-accuracy
 // review lens: every fenced Go block in the guide docs must compile
 // against the real modules, and every fenced registry example must pass

@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package kafka carries ValueContext across Kafka message headers without
 // importing any Kafka client library. Kafka headers are ordered key/[]byte
 // pairs; this package mirrors that shape with a local Header type, so

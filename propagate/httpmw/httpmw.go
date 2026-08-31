@@ -1,3 +1,6 @@
+// Copyright 2026 Yauvan Suba
+// SPDX-License-Identifier: Apache-2.0
+
 // Package httpmw propagates ValueContext over HTTP: server middleware
 // extracts it from W3C Baggage, a client Transport injects it — and only
 // it — toward registry-allowlisted hosts (ADR-0003, deny by default),
