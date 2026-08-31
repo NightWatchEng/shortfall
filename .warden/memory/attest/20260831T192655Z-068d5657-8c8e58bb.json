@@ -1,0 +1,231 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+  "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+  "rules_version": "98abf0671ba2",
+  "reviewed_at": "2026-08-31T19:26:55+00:00",
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context, given the engine:claude rule bodies verbatim and a warden-packaged diff. Its primary task was content preservation: it reconstructed the pre-split document and diffed it against the index plus eight chapters, confirming every normative sentence, MUST clause, table row, vector name and rejection class survives. It also ran the generator, resolved every wiki link, and probed the indexed generalisation for prefix collisions and fail-closed behaviour."
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude general-purpose subagent instructed to refute before reporting; it returned an explicit refuted list covering the chapter-count floor, the missing-index fail-closed path, prefix disjointness, pageName collisions and the doc tie's substring matching. The orchestrator independently verified content preservation by line-set difference before the review returned, reaching the same conclusion by a different method."
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/docsnippets",
+      "file": "test/docsnippets/snippets_test.go",
+      "line": 154,
+      "severity": "MEDIUM",
+      "finding": "The registry-fence validator's doc list still named docs/portability.md, which after the split contains no fences at all. Its subtest passed having inspected nothing, and the global found-zero guard was satisfied by the other six docs, so nothing was loud.",
+      "evidence": "The only registry fence is now docs/portability/registry.md; `grep '^```' docs/portability.md` returns nothing. Verbose run showed PASS for the portability subtest with no fence inspected.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The chapter is listed. Breaking the fence now fails the named subtest.",
+      "id": "c0b712c47a746cc5"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "docs/portability",
+      "file": "docs/portability/registry.md",
+      "line": 29,
+      "severity": "MEDIUM",
+      "finding": "The chapter claimed its example 'is validated on every CI run by the repository's doc-fence checker' while no checker read the file.",
+      "evidence": "The doc-fence checker's list named docs/portability.md, not the chapter.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "True again once the chapter joined the list; verified by breaking the fence.",
+      "id": "3cff7619bfbf0e3f"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/portability.md",
+      "line": 60,
+      "severity": "MEDIUM",
+      "finding": "The index said the doc-tie asserts every rejection class 'appears in this file' and that class names are 'listed in the tables below'. The index names none \u2014 they live in parts 2 and 4.",
+      "evidence": "grep for any rejection class in docs/portability.md returns zero. The test had already been generalised to read the index plus every chapter.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Says the contract, index or chapter, and points at parts 2 and 4.",
+      "id": "407890c38dd17dd9"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/vectors.go",
+      "line": 51,
+      "severity": "MEDIUM",
+      "finding": "Comment named docs/portability.md as the place a rejection class must be documented.",
+      "evidence": "That file names none after the split; the test it cites searches the whole set.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Names the contract's index or a chapter under docs/portability/.",
+      "id": "dedb70839833d78f"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main.go",
+      "line": 222,
+      "severity": "MEDIUM",
+      "finding": "indexFor's new comment claimed an index page 'carries no prefix of its own'. True of docs/portability.md, false of docs/adr/README.md, which is the page adr-README. The mechanism that actually keeps an index curated is the src != ix.src guard, whose explanatory note the same change deleted.",
+      "evidence": "strings.HasPrefix(\"adr-README\", \"adr-\") is true; main_test.go carries a case for the ADR index missing from the nav precisely because it matches.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The comment describes the guard, and the note at the guard site is restored.",
+      "id": "cb56f3b8575ee892"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/wikisync",
+      "file": "test/wikisync/main.go",
+      "line": 239,
+      "severity": "MEDIUM",
+      "finding": "navFor's doc comment still described the ADR-only special case the generalisation replaced.",
+      "evidence": "The code iterates an indexes table with two entries; the comment said 'or it is an ADR the ADR index links'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "States the general rule the adjacent type comment already gave.",
+      "id": "5c0bed3a631c1bda"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "eventline",
+      "file": "eventline/eventline.go",
+      "line": 5,
+      "severity": "MEDIUM",
+      "finding": "Package doc cited docs/semconv.md, a path the move deleted. Ships in godoc.",
+      "evidence": "The file is docs/internal/semconv.md.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Repointed.",
+      "id": "a43a7ab916f6f952"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/internal",
+      "file": "docs/internal/go-public-checklist.md",
+      "line": 23,
+      "severity": "MEDIUM",
+      "finding": "A present-tense checklist row cited docs/semconv.md, now its own sibling.",
+      "evidence": "Both files are in docs/internal/.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Cites it as sibling rather than by the old path.",
+      "id": "ea28d97086fe71a6"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit/cmd",
+      "file": "testkit/cmd/genvectors/main.go",
+      "line": 128,
+      "severity": "MEDIUM",
+      "finding": "The generator stamped 'the worked example in docs/portability.md' into vc-codec.json, a committed port-facing artifact, and carried the same stale path in two comments.",
+      "evidence": "The worked example is now docs/portability/wire-codec.md; the note was serialized into the checked-in vector file.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Corrected and the vectors regenerated; the artifact diff is the one note line.",
+      "id": "6f81057563bf07b5"
+    },
+    {
+      "ts": "2026-08-31T19:26:55+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "068d5657ca2dfbc3be0440298a0583bd7e9e9e59",
+      "base_sha": "d4aed39b2e71525942269c6a87390e1457756dc9",
+      "rule_id": "unmapped:cross-chapter-refs",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/portability",
+      "file": "docs/portability/checklist.md",
+      "line": 31,
+      "severity": "LOW",
+      "finding": "Twenty bare numeric cross-references now point across page boundaries with no link. Judged acceptable by the reviewer \u2014 numbering intact, index maps number to page \u2014 but a real increase in reading cost for the five in the checklist, which is the page a porter works from.",
+      "evidence": "A reader of portability-checklist seeing 'the egress fence of 3.5' gets no page name and no link.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The checklist's five are links, with anchors derived from all 43 numbered subsections rather than guessed. Every link and anchor across the 43 generated pages resolves.",
+      "id": "beee2717fc8d78cf"
+    }
+  ]
+}
