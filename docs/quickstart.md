@@ -39,13 +39,14 @@ flows:
     reconcile: { source: "sql:ledger.payments" }
 ```
 
-That is the smallest document the validator accepts. `baseline`,
-`recovery` and `reconcile` are required because the legs that need them
-must not silently guess: the baseline is how "demand that never arrived"
+`baseline`, `recovery` and `reconcile` are required — the validator
+rejects a flow without them — because the legs that need them must not
+silently guess: the baseline is how "demand that never arrived"
 gets sized, recovery is what fraction of it comes back, and `reconcile`
 names the ledger the trust number is measured against. You are not using
 those legs yet — the values above are placeholders you will tune when you
-do.
+do. `currencies` and the second segment are optional; they are here
+because a real registry has them.
 
 Unknown fields are rejected, so a typo fails rather than silently
 defaulting. Every field is in the [registry reference](registry.md).
@@ -133,8 +134,13 @@ retried failures into one lost payment at report time, so use the
 identifier you already treat as the idempotency key.
 
 `Record` never blocks and returns nothing — it cannot fail your request
-path. Everything it rejects is counted on `biz_dropped_events_total`
-instead of being dropped silently.
+path. What it *rejects* — an invalid amount, PII in an attribute, a full
+buffer — increments `biz_dropped_events_total{reason}` rather than
+vanishing. Two paths are quieter: a call the in-process de-dup recognises
+as a repeat returns without a counter (that is the point — retries are
+not new losses), and a metric-buffer overflow is logged rather than
+counted. Send the same `?invoice=` three times and `biz_txn_total` still
+reads 1.
 
 ## 4. Run it
 
@@ -169,10 +175,17 @@ biz_value_total{currency="USD",flow="invoice.pay",kind="fee",outcome="success",s
 
 That is the whole idea in four lines: a count **and** a value, split by
 outcome, on a fixed label set. `14900` is minor units — $149.00 of fee
-that failed. No customer id and no amount ever becomes a label; those
-ride the outcome event the emitter produced alongside each metric point,
-which is what makes per-entity de-duplication and the customer list
-possible at report time.
+that failed. No customer id and no amount is ever a label, by design: an
+unbounded label set is a cardinality incident waiting to happen.
+
+They ride the **outcome event** `Record` builds alongside each metric
+point instead — and this exporter throws those away. Prometheus has no
+place for them, so `adapters/export/prometheus` declares `Events: false`
+and keeps that promise. What you are seeing is the metrics half of the
+signal. That is enough for the deferred and unrealized legs and a
+realized upper bound; the exact de-duplicated realized figure and the
+customer list need the events, which means a second exporter — see
+[backends & adapters](adapters.md).
 
 You can already answer the 3am question with PromQL:
 

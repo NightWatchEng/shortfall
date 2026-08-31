@@ -164,10 +164,11 @@ door, so the report is deterministic:
 | Deferred value | the backlog the tracker publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`) |
 | Customer impact | distinct hashed customers, segments and top accounts, from the ingest stamps |
 
-That is what the *signals* support. Which of them you can read back
-depends on the query adapters you wire: with the CloudWatch wiring above,
-deferred value is the one leg in this table you cannot — and unrealized
-loss, the leg the next paragraph turns on, is the other. See §5.
+That is what the *signals* support. What you can read back depends on the
+adapters you wire, and with the CloudWatch wiring below it is less: the
+deferred leg is unreadable outright, and realized loss and customer
+impact only cover the stages whose log group your querier reads. §5 has
+the details.
 
 **Webhook Lambdas down.** The entry itself is dark, so no per-event
 telemetry exists — which is what the **unrealized loss** leg is for. The
@@ -222,11 +223,19 @@ you get:
 | Customer impact | ✅ grounded, for the stages you read | events carry the hashed customer and segment |
 | Deferred value | ⚠️ unavailable | needs the `biz_inflight_*` gauges; those land in CloudWatch's **metric** store, which no shipped querier reads |
 | Unrealized loss | ⚠️ unavailable | needs `biz_txn_total` history for the baseline, same reason |
-| Coverage | ✅ via `engine.Coverage` | takes the same events-only querier plus a ledger; **not** `shortfall reconcile`, which builds its querier from `--prometheus`/`--sql` exactly as `impact` does |
+| Coverage | ⚠️ read the caveat | `engine.Coverage` takes the same events-only querier plus a ledger — **not** `shortfall reconcile`, which builds its querier from `--prometheus`/`--sql` exactly as `impact` does. But it sums telemetry at the flow's **value stage**, `process` here, so a querier that cannot see `process` events returns a real **0%**, not an unavailable marker |
 
-Those two legs come back marked unavailable with a reason — not as zero.
-For this example that is a real gap, because "the Lambdas are down" is
-precisely the unrealized leg's case.
+The two metric legs come back marked unavailable with a reason — not as
+zero. For this example that is a real gap, because "the Lambdas are down"
+is precisely the unrealized leg's case.
+
+Coverage is the one to be careful with, because it fails *loudly wrong*
+rather than absent. `Flow.ValueStage()` defaults to the last stage when
+`reconcile.stage` is unset, so this registry anchors it at `process`. Sum
+telemetry for a stage your querier cannot see and you get 0 over a
+non-zero ledger — a confident 0% on the one line whose job is to say how
+much you can trust the rest. Point the querier at the group carrying
+`process`, or set `reconcile.stage` to a stage it does see.
 
 **To ground all four**, pair a metrics querier with the events one. Ship
 metrics through `adapters/export/otlp` to a collector that writes to a

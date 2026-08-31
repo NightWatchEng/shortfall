@@ -278,6 +278,15 @@ downstream service's `Record` calls land on the same entity and dollars
 — one flow, measured across every hop. Your payment provider is not
 allowlisted, so its requests leave clean.
 
+> **A globally-installed Baggage propagator bypasses this fence.** If your
+> OpenTelemetry setup registers a generic Baggage propagator on the global
+> `TextMapPropagator`, it injects every member — `biz.vc` included — into
+> every outbound request, third-party APIs among them. The fence lives in
+> this Transport, not in the global propagator, so scope that propagator
+> in your deployment or route outbound calls through this client only
+> (ADR-0003). Shipping transaction amounts to a third party is a decision
+> someone makes on purpose.
+
 **Queues.** Inject on the producer, extract on the consumer. The
 carriers import no queue client library, so your broker client stays
 yours:

@@ -132,11 +132,14 @@ de-duplication and customer impact. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. `shortfall reconcile --ledger` adds the coverage ratio.
 
-That command matches the wiring above: the collector writes metrics to
-Prometheus and outcome events to a store the `sql` adapter reads. The CLI
-speaks only those two. Export straight to CloudWatch or Cloud Logging
-instead and you read back through that backend's query adapter from a
-small reporting job — same `engine.Compute`, same report, no CLI. The
+`--prometheus` is what the wiring above feeds: the collector writes the
+`biz_*` families to Prometheus. `--sql` is the events half, and it reads
+the fixed `biz_outcomes` table in [backends](docs/adapters.md) — landing
+OTLP log records in that shape is a mapping you own, not something a
+collector does for you. Export straight to CloudWatch or Cloud Logging
+instead and you skip the CLI entirely, reading back through that
+backend's query adapter from a small reporting job — same
+`engine.Compute`, same report. The
 [worked example](docs/example-webhooks.md) shows it end to end.
 
 ## Design rules
@@ -178,7 +181,7 @@ The [wiki](https://github.com/NightWatchEng/shortfall/wiki) mirrors
 `docs/`, which is the source of truth.
 
 **Start here**
-- [Quickstart](docs/quickstart.md) — clone to a rendered report in 10 minutes, no external services.
+- [Quickstart](docs/quickstart.md) — instrument a service and watch `biz_*` come out, in 10 minutes, no external services.
 - [Integration guide](docs/integration.md) — the step-by-step for wiring your own service.
 - [Worked example](docs/example-webhooks.md) — webhook Lambdas → payments-service, end to end.
 

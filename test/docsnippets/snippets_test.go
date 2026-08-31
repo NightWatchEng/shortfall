@@ -177,9 +177,6 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 	}
 }
 
-// TestExtractFences pins the parser's input/output behavior, unclosed
-// fences included — a fence the parser drops is a fence outside
-// governance.
 func TestStripPackageClause(t *testing.T) {
 	cases := []struct {
 		name, in, want string
@@ -198,6 +195,9 @@ func TestStripPackageClause(t *testing.T) {
 	}
 }
 
+// TestExtractFences pins the parser's input/output behavior, unclosed
+// fences included — a fence the parser drops is a fence outside
+// governance.
 func TestExtractFences(t *testing.T) {
 	cases := []struct {
 		name      string
