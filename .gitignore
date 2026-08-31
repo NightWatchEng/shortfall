@@ -1,5 +1,8 @@
 # Binaries and build output
 /shortfall
+# `go build ./examples/demo` from the repo root drops its binary here, and a
+# 4 MB Mach-O reached a commit that way once (caught in review, before merge).
+/demo
 dist/
 *.test
 *.out
