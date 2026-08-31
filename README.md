@@ -55,7 +55,8 @@ Deterministic and estimated legs are never summed into one figure.
 between expected and actual — and it carries the nuance the report is
 built around: a shortfall can be recovered. Deferred value is a shortfall
 that has not become a loss, and unrealized demand may yet return. A word
-meaning only *loss* would have been wrong for three of the five legs.
+meaning only *loss* would have been wrong for three of the four legs —
+deferred, unrealized and customer impact are none of them a loss figure.
 
 ## Install
 

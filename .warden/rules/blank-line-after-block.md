@@ -47,8 +47,9 @@ consecutive `if vc.X, err = <decode>(fields[N]); err != nil` guards in
 "read fields 1 through 6" step into six paragraphs. All six have one
 shape: decode a field, and on failure return a zero `ValueContext` and an
 error identifying which field it was. That is what the "bodies differ in
-shape" exclusion above asks about, so the run is in scope — the decoder
-and the error's wording varying between guards is not a difference in
-shape. It is left as it stands:
+shape" exclusion above asks about, so the run is in scope. The decoder
+varies, and so does what each error carries — five wrap the cause with
+`%w`, the amount guard formats the raw field with `%q` and drops it —
+but neither is a difference in the shape of the body. It is left as it stands:
 restructuring the money codec is not a whitespace PR's business, and it
 is the worked example of what this rule is for.

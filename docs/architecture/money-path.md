@@ -232,7 +232,7 @@ sequenceDiagram
 
     box rgba(140,140,140,0.10) shortfall core module — zero heavy deps
         participant R as registry.Registry<br/>core module — an in-memory value, loaded once
-        participant E as engine.Compute<br/>core module — five legs, strictly one at a time
+        participant E as engine.Compute<br/>core module — four legs, strictly one at a time
     end
 
     participant Q as combined query.Querier<br/>cmd/shortfall — promql for metrics, sql for events
