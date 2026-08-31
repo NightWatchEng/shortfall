@@ -10,6 +10,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -172,19 +173,33 @@ var sections = []section{
 	}},
 }
 
-// adrPrefix marks pages reachable from the ADR index rather than listed
-// individually — eighteen sidebar lines would bury the guides.
+// adrPrefix marks pages listed by the ADR index rather than by a nav
+// section — eighteen sidebar lines would bury the guides. Their
+// reachability is checked against that index, not assumed: see adrIndex.
 const adrPrefix = "adr-"
 
-// navFor renders the curated navigation, and fails on a page it does not
-// cover. A new doc under docs/ is mirrored automatically but would be
-// reachable only by URL, so the generator refuses rather than publishing a
-// page nothing links to (CONTRIBUTING, "Documentation accuracy").
-func navFor(pages map[string]string) (string, error) {
-	uncovered := make(map[string]bool, len(pages))
-	for _, page := range pages {
-		if !strings.HasPrefix(page, adrPrefix) {
-			uncovered[page] = true
+// adrIndexSrc is the one page that lists the ADRs; it is itself curated.
+const adrIndexSrc = "docs/adr/README.md"
+
+// navFor renders the curated navigation, and fails on a page nothing would
+// link to. A new doc under docs/ is mirrored automatically, so without this
+// the wiki grows pages reachable only by URL (CONTRIBUTING, "Documentation
+// accuracy"). A page is reachable two ways: a nav section names it, or it
+// is an ADR the ADR index links.
+func navFor(root string, pages map[string]string) (string, error) {
+	linkedADRs, err := adrIndex(root)
+	if err != nil {
+		return "", err
+	}
+	uncovered := make(map[string]string, len(pages)) // page -> why it is unreachable
+	for src, page := range pages {
+		switch {
+		case !strings.HasPrefix(page, adrPrefix):
+			uncovered[page] = "add an entry to sections in test/wikisync/main.go"
+		case src == adrIndexSrc:
+			// the index itself is curated, below
+		case !linkedADRs[path.Base(src)]:
+			uncovered[page] = "link it from " + adrIndexSrc
 		}
 	}
 	var b strings.Builder
@@ -206,17 +221,38 @@ func navFor(pages map[string]string) (string, error) {
 		}
 	}
 	if len(uncovered) > 0 {
-		missing := make([]string, 0, len(uncovered))
-		for page := range uncovered {
-			missing = append(missing, page)
+		reasons := make([]string, 0, len(uncovered))
+		for page, how := range uncovered {
+			reasons = append(reasons, page+" ("+how+")")
 		}
-		sort.Strings(missing)
-		return "", fmt.Errorf("wiki page(s) missing from the curated navigation in %s: %s — "+
-			"add an entry to sections, or name the page with the %sprefix",
-			"test/wikisync/main.go", strings.Join(missing, ", "), adrPrefix)
+		sort.Strings(reasons)
+		return "", fmt.Errorf("wiki page(s) nothing would link to: %s", strings.Join(reasons, "; "))
 	}
 	return b.String(), nil
 }
+
+// adrIndex returns the set of ADR filenames the ADR index links, so an ADR
+// left out of it is caught here rather than published as an orphan. A
+// missing index yields an empty set and so fails every ADR page in navFor,
+// which is the fail-closed direction: an index that vanished orphans the
+// whole ADR set at once, and that must be loud.
+func adrIndex(root string) (map[string]bool, error) {
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(adrIndexSrc)))
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	linked := map[string]bool{}
+	for _, m := range mdLink.FindAllStringSubmatch(string(body), -1) {
+		linked[path.Base(strings.SplitN(m[1], "#", 2)[0])] = true
+	}
+	return linked, nil
+}
+
+// mdLink captures the target of a markdown link.
+var mdLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
 // containsPage reports whether any source maps to the given wiki page.
 func containsPage(pages map[string]string, page string) bool {
@@ -267,7 +303,7 @@ func generate(root, out string) error {
 			return err
 		}
 	}
-	nav, err := navFor(pages)
+	nav, err := navFor(root, pages)
 	if err != nil {
 		return err
 	}

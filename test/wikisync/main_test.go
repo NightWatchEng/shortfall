@@ -56,8 +56,11 @@ func writeRepo(t *testing.T) string {
 		"docs/adapters.md":   "code at [exporters](../adapters/export) and [vector](../testkit/vectors/outcome-event.json); web [semconv](https://opentelemetry.io/)",
 		"docs/adr/0002-outcome-event-transport.md": "see [labels](0004-metric-label-set.md) and [money](../money.md)",
 		"docs/adr/0004-metric-label-set.md":        "history",
-		"adapters/export/README.md":                "not docs",
-		"testkit/vectors/outcome-event.json":       "{}",
+		// The ADR index is what makes an ADR page reachable; navFor checks
+		// each ADR against it rather than exempting the whole prefix.
+		"docs/adr/README.md":                 "[0002](0002-outcome-event-transport.md) [0004](0004-metric-label-set.md)",
+		"adapters/export/README.md":          "not docs",
+		"testkit/vectors/outcome-event.json": "{}",
 	}
 	for p, body := range files {
 		full := filepath.Join(root, p)
@@ -158,20 +161,60 @@ func TestGenerateEmitsEveryPagePlusHomeAndSidebar(t *testing.T) {
 	}
 }
 
-func TestNavRefusesAnUncuratedPage(t *testing.T) {
-	root := writeRepo(t)
-	// A new doc that no section lists would be mirrored but unreachable —
-	// the generator must name it rather than publish an orphan page.
-	orphan := filepath.Join(root, "docs", "brand-new-guide.md")
-	if err := os.WriteFile(orphan, []byte("unlisted"), 0o644); err != nil {
+func TestNavRefusesAnUnreachablePage(t *testing.T) {
+	cases := []struct {
+		name, path, body, wantNamed string
+	}{
+		// A guide no section lists is mirrored but reachable only by URL.
+		{"guide missing from the curated sections",
+			"docs/brand-new-guide.md", "unlisted", "brand-new-guide"},
+		// An ADR is exempt from the sections because the ADR index lists
+		// it — so one the index does NOT list is just as unreachable.
+		{"ADR missing from the ADR index",
+			"docs/adr/0099-unlisted-decision.md", "history", "adr-0099-unlisted-decision"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := writeRepo(t)
+			full := filepath.Join(root, filepath.FromSlash(c.path))
+			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(full, []byte(c.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			err := generate(root, t.TempDir())
+			if err == nil {
+				t.Fatalf("generate accepted %s, which nothing links to", c.path)
+			}
+			if !strings.Contains(err.Error(), c.wantNamed) {
+				t.Errorf("error does not name the unreachable page %q: %v", c.wantNamed, err)
+			}
+		})
+	}
+}
+
+// TestThisRepoNavigationCoversEveryPage runs the generator over the REAL
+// repository, not a fixture. Without it the reachability check above only
+// ever judges a synthetic tree, and a doc added under docs/ without a nav
+// entry would pass every pre-merge check and fail the wiki-sync workflow
+// after merge — the claim CONTRIBUTING makes about this test would be
+// false. This module is discovered by scripts/ci-go.sh, so it runs in the
+// required core checks job on every PR.
+func TestThisRepoNavigationCoversEveryPage(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
 		t.Fatal(err)
 	}
-	err := generate(root, t.TempDir())
-	if err == nil {
-		t.Fatal("generate accepted a page missing from the curated navigation")
+	pages, err := docPages(root)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "brand-new-guide") {
-		t.Errorf("error does not name the uncurated page: %v", err)
+	if len(pages) == 0 {
+		t.Fatal("docPages found no docs in this repo — the check would be vacuous")
+	}
+	if _, err := navFor(root, pages); err != nil {
+		t.Errorf("this repository has %v", err)
 	}
 }
 

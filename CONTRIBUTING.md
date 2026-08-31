@@ -196,10 +196,21 @@ id["<b>engine</b><br/><i>core module</i><br/>four legs · coverage · severity"]
 ```
 
 Keep arrow labels to a short verb phrase. Every protocol, constraint and
-caveat goes in the diagram's **edge table** (a sequence's step table),
-which every diagram carries. A `subgraph` or `box` is a claim about
-everything inside it; `alt`/`opt` is only for a branch that exists in the
-code. Sequences use `autonumber` and take no markup in labels.
+caveat goes in the diagram's **edge table** — one row per edge, or per
+numbered step that carries a constraint — which every diagram carries. A
+`subgraph` or `box` is a claim about everything inside it; `alt`/`opt` is
+only for a branch that exists in the code.
+
+Two sequence rules are render correctness, not taste:
+
+- **No semicolons in message or note text.** Sequence text is unquoted and
+  `;` terminates the statement, so the rest of the line parses as a new one
+  and the fence fails to render. Use an em dash.
+- **Box and rect tints are low-alpha `rgba`, never opaque `rgb`.** These
+  diagrams render in both of GitHub's themes, and a solid pale fill puts
+  pale text on a pale ground in one of them.
+
+Sequences also use `autonumber` and take no markup in labels.
 
 No GitHub Pages on this repo — depending on plan it is unavailable or
 publicly served for a private repo; either way it stays off. The wiki is
