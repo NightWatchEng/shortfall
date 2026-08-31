@@ -1,0 +1,50 @@
+# Syncs docs/ and README.md to the GitHub wiki on every docs-touching push
+# to main (workspace-ehd). The wiki is a derived mirror regenerated in full
+# by test/wikisync; wiki-side hand edits are deliberately overwritten, and
+# the wiki Home page says so. A sync failure fails this workflow visibly.
+name: wiki sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "test/wikisync/**"
+      - ".github/workflows/wiki-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: regenerate wiki from docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v5.0.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: regenerate page set
+        run: |
+          set -euo pipefail
+          go run ./test/wikisync -repo . -out "$RUNNER_TEMP/wiki-out"
+      - name: push to wiki
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" "$RUNNER_TEMP/wiki"
+          find "$RUNNER_TEMP/wiki" -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
+          cp "$RUNNER_TEMP/wiki-out"/* "$RUNNER_TEMP/wiki/"
+          cd "$RUNNER_TEMP/wiki"
+          git config user.name "wiki-sync"
+          git config user.email "wiki-sync@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "wiki already matches docs/ - nothing to sync"
+            exit 0
+          fi
+          git commit -m "sync docs/ from ${GITHUB_SHA}"
+          git push

@@ -39,4 +39,7 @@ use ./test/docsnippets
 
 use ./test/licensehdr
 
-use ./adapters/query/gcplogging
+use (
+	./adapters/query/gcplogging
+	./test/wikisync
+)
