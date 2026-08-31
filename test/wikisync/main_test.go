@@ -150,8 +150,28 @@ func TestGenerateEmitsEveryPagePlusHomeAndSidebar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(home), "[quickstart](quickstart)") {
+	if !strings.Contains(string(home), "[Quickstart](quickstart)") {
 		t.Errorf("Home navigation misses quickstart:\n%s", home)
+	}
+	if !strings.Contains(string(home), "### Start here") {
+		t.Errorf("Home navigation lost its curated sections:\n%s", home)
+	}
+}
+
+func TestNavRefusesAnUncuratedPage(t *testing.T) {
+	root := writeRepo(t)
+	// A new doc that no section lists would be mirrored but unreachable —
+	// the generator must name it rather than publish an orphan page.
+	orphan := filepath.Join(root, "docs", "brand-new-guide.md")
+	if err := os.WriteFile(orphan, []byte("unlisted"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := generate(root, t.TempDir())
+	if err == nil {
+		t.Fatal("generate accepted a page missing from the curated navigation")
+	}
+	if !strings.Contains(err.Error(), "brand-new-guide") {
+		t.Errorf("error does not name the uncurated page: %v", err)
 	}
 }
 

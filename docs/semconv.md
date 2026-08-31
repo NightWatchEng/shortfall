@@ -8,11 +8,10 @@ survives a rename or fork of shortfall itself.
 
 ## Rationale
 
-Observability conventions describe *system* health (latency, errors,
-saturation). None describe *business* outcomes attached to that telemetry — the
-flow, the money, the customer — which is what turns "the API had a bad hour"
-into "the incident cost $X and hit these accounts." These conventions add that
-layer without inventing a transport: they ride existing spans, logs, and
+Observability conventions describe *system* health — latency, errors,
+saturation. None describe the *business* outcome attached to that
+telemetry: the flow, the money, the customer. These conventions add that
+layer without inventing a transport; they ride existing spans, logs and
 metrics.
 
 ## Attributes (on spans / log records / baggage)
@@ -33,21 +32,13 @@ propagated across service boundaries (deny-by-default egress; see ADR-0003).
 | `biz.amount.estimated` | boolean | true when the amount came from the registry estimator, not observed. |
 | `biz.sla.deadline` | string | RFC-3339 UTC deadline, when the ValueContext carries one. Absent otherwise. |
 
-**Amended 2026-08-30 (workspace-cnz).** This table previously gave
-`biz.entity_id`, `biz.customer_id`, `biz.money.amount_minor`,
-`biz.money.currency`, `biz.money.exponent`, `biz.kind` and `biz.estimated`
-— a third spelling of the same facts, agreeing with neither ADR-0002's
-canonical JSON nor any shipped exporter. The names above are the ones on
-the wire, defined once as the `biz.Attr*` constants and pinned by
-`testkit/vectors/outcome-event.json`. See ADR-0002 for the settlement.
-
-**Amended 2026-08-30 (workspace-8yq).** The four money attributes moved
-into a consistent dotted namespace: `biz.amount_minor` → `biz.amount.minor`,
-`biz.currency` → `biz.amount.currency`, `biz.exponent` →
-`biz.amount.exponent`, `biz.amount.est` → `biz.amount.estimated`. The
-settlement above deliberately froze the shipped spelling verbatim; this
-pre-1.0 rename (a founder decision, wire-format break) made the rule
-inferable before v1.0 froze it for good.
+**These names are the ones on the wire.** They are defined once as the
+`biz.Attr*` constants and pinned by `testkit/vectors/outcome-event.json`.
+Two pre-1.0 corrections got them here: an earlier table gave a third
+spelling that agreed with neither ADR-0002's canonical JSON nor any
+shipped exporter, and the four money attributes were then moved into a
+consistent dotted namespace (`biz.amount_minor` → `biz.amount.minor`, and
+so on) before v1.0 froze the rule. See ADR-0002 for the settlement.
 
 Bounded attributes (`biz.flow`, `biz.segment`, and the metric labels below) are
 the metric-cardinality fence: unbounded values (ids, amounts) ride events/spans,

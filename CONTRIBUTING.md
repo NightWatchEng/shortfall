@@ -143,13 +143,67 @@ has two disagreeing wordings.
 contract updates the affected README section, usage doc, AND diagram in
 the same PR. The docs-accuracy review rule flags departures.
 
+`docs/` is the source of truth and the wiki is a generated mirror —
+`test/wikisync` regenerates the whole page set on every push to main, so
+wiki-side edits are overwritten. A new page under `docs/` appears in the
+wiki automatically, but list it in `test/wikisync`'s curated navigation so
+it lands in the right section; the generator's test fails on a page that
+is neither curated nor an ADR. Fenced Go and registry examples in the
+guide docs are compiled and validated by `test/docsnippets` in the core CI
+job — adding a fence with a new doc-implied identifier extends that
+module's stub, and the compile failure names it.
+
 ## Architecture diagrams
 
-`docs/architecture/` holds the C4 model and money-path sequences as
-Mermaid, rendering natively on github.com. Diagram updates ride the
-changing PR per ADR-0008 clause 4. No GitHub Pages on
-this repo — depending on plan it is unavailable or publicly served for a
-private repo; either way it stays off.
+`docs/architecture/` holds the C4 model (levels 1–3) and the money-path
+sequences as Mermaid, rendering natively on github.com and in the wiki.
+Diagram updates ride the changing PR per ADR-0008 clause 4. There are no
+other diagrams: a picture earns its place by showing structure or a
+runtime path that prose cannot, and anything else is a table.
+
+**Colour encodes ownership** — who wrote it, who ships it, who can change
+it. It is never decoration, so a node in the wrong class is a false
+statement about the code and a reviewer should say so. Copy the classes a
+diagram uses and delete the rest:
+
+```
+classDef person  fill:#08427b,stroke:#052e56,color:#fff;   /* a human actor */
+classDef yours   fill:#6b4c9a,stroke:#4a3369,color:#fff;   /* the reader's own code */
+classDef core    fill:#1168bd,stroke:#0b4884,color:#fff;   /* the core Go module */
+classDef optin   fill:#2e6fb0,stroke:#0b4884,color:#fff;   /* a nested module you opt into */
+classDef ext     fill:#8a8a8a,stroke:#5f5f5f,color:#fff;   /* reached only through an interface */
+classDef harness fill:#8a6d1f,stroke:#5c4814,color:#fff,stroke-dasharray:6 4;  /* never ships */
+```
+
+The boundary drawn is the **module** boundary, not the company boundary:
+your own Prometheus and your own ledger are `ext`, because shortfall
+reaches them only through `emit.Exporter` and `query.Querier`. `core` and
+`optin` stay two colours because that split is the repo's central promise.
+At Level 1 there are no module boundaries to draw, so shortfall is one
+`core` box. `harness` carries a dashed stroke as well as a colour, since a
+reader mistaking test-only ground truth for production code is the
+expensive error.
+
+Shape is a separate axis: stadium `id(["…"])` is a person, rectangle
+`id["…"]` a code unit, cylinder `id[("…")]` a datastore, diamond
+`id{"…"}` a gate.
+
+Label grammar — bold name as spelled in the repo, italic technology line,
+then responsibilities as ` · `-separated fragments:
+
+```
+id["<b>engine</b><br/><i>core module</i><br/>four legs · coverage · severity"]
+```
+
+Keep arrow labels to a short verb phrase. Every protocol, constraint and
+caveat goes in the diagram's **edge table** (a sequence's step table),
+which every diagram carries. A `subgraph` or `box` is a claim about
+everything inside it; `alt`/`opt` is only for a branch that exists in the
+code. Sequences use `autonumber` and take no markup in labels.
+
+No GitHub Pages on this repo — depending on plan it is unavailable or
+publicly served for a private repo; either way it stays off. The wiki is
+the published surface instead.
 
 ## Design decisions
 

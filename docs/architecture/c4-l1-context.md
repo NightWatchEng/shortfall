@@ -1,12 +1,9 @@
 # C4 Level 1 — system context
 
-What an incident cost, who it hit, and how sure you are — where that
-answer sits among the people and systems that produce and consume it.
-shortfall is a single box here on purpose — the whole system in scope, CLI
-included; the module boundaries inside it, and the `core`/`optin` colour
-split that carries them, come at [Level 2](c4-l2-containers.md). Colours are
-semantic ([the stencil](STYLE.md)); arrow labels are kept short and the
-constraints live in the table below.
+Where the answer sits among the people and systems that produce and
+consume it. shortfall is a single box here on purpose — the whole system
+in scope, CLI included. The module boundaries inside it come at
+[Level 2](c4-l2-containers.md).
 
 ```mermaid
 flowchart TB
@@ -54,26 +51,18 @@ flowchart TB
 | On-call → shortfall | `shortfall impact` on the CLI (`cmd/shortfall`), against the window the incident spans |
 | Finance → shortfall | Reviews and co-signs the YAML flow registry once; thereafter audits the coverage ratio rather than the code |
 
-## Key facts this diagram encodes
+## What this diagram encodes
 
-- **Two questions, and shortfall labels which is which.** *Q1 attribution*
+- **Two questions, and shortfall labels which is which.** *Attribution*
   (deterministic — which transactions, whose money) rides the outcome
-  events. *Q2 counterfactual* (statistical — what never happened) rides
-  baselines over the metrics. Answering both is the job; **saying which one
-  a number is** is the discipline, and it is why realized money is never
-  summed with an estimate.
-- **shortfall never sees a backend.** The only two doors are
-  `emit.Exporter` going out and `query.Querier` coming back, and adapters
-  own everything past them. That is why swapping Prometheus for CloudWatch
-  is an import change and not an engine change.
+  events. *Counterfactual* (statistical — what never happened) rides
+  baselines over the metrics. Answering both is the job; saying which one
+  a number is, is the discipline.
 - **The ledger is a check, not an input.** Reconciliation compares
   telemetry against the ledger and reports the ratio. shortfall does not
-  reconcile *into* the ledger, and it never adjusts telemetry to match it —
-  a disagreement is a finding, not something to smooth over.
-- **The instrumented services are yours, and stay yours.** shortfall is a
-  library you call; it runs no process of its own and owns no data store.
-  Everything else in the estate is your infrastructure, reached only through
-  an interface.
-- **Incident tools are one-way.** They read the report. No number in this
-  system originates in Slack or PagerDuty, so nothing there can drift into
-  the money path.
+  reconcile *into* the ledger and never adjusts telemetry to match it — a
+  disagreement is a finding, not something to smooth over.
+- **shortfall never sees a backend.** The only two doors are
+  `emit.Exporter` going out and `query.Querier` coming back; adapters own
+  everything past them. Swapping Prometheus for CloudWatch is an import
+  change, not an engine change.

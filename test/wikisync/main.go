@@ -129,43 +129,113 @@ func rewriteDoc(root, src string, pages map[string]string, body string) string {
 	return strings.Join(lines, "\n")
 }
 
-// section groups pages for Home/_Sidebar navigation in a fixed order.
+// navEntry is one curated line of the Home/_Sidebar navigation: the wiki
+// page name and the title it is listed under.
+type navEntry struct{ page, title string }
+
+// section groups curated pages for navigation in a fixed reading order —
+// start here, then reference, then the design record. Order is the whole
+// point: a reader arriving at the wiki should be able to follow it top to
+// bottom, so this list is maintained by hand rather than sorted.
 type section struct {
-	title  string
-	prefix string
+	title   string
+	entries []navEntry
 }
 
 var sections = []section{
-	{"Guides & reference", ""},
-	{"Architecture", "architecture-"},
-	{"ADRs", "adr-"},
+	{"Start here", []navEntry{
+		{"README", "Introduction"},
+		{"quickstart", "Quickstart"},
+		{"integration", "Integration guide"},
+		{"example-webhooks", "Worked example: webhook Lambdas"},
+	}},
+	{"Reference", []navEntry{
+		{"adapters", "Backends & adapters"},
+		{"registry", "Registry"},
+		{"money", "Money & the legs"},
+		{"semconv", "Semantic conventions"},
+		{"performance", "Performance"},
+		{"portability", "Portability contract"},
+	}},
+	{"Architecture", []navEntry{
+		{"architecture-README", "Overview"},
+		{"architecture-c4-l1-context", "C4 L1 — system context"},
+		{"architecture-c4-l2-containers", "C4 L2 — containers"},
+		{"architecture-c4-l3-components", "C4 L3 — components"},
+		{"architecture-money-path", "The money path"},
+	}},
+	{"Design decisions", []navEntry{
+		{"adr-README", "All decision records"},
+	}},
+	{"Project", []navEntry{
+		{"go-public-checklist", "Go-public checklist"},
+	}},
 }
 
-func navFor(pages map[string]string) string {
-	names := make([]string, 0, len(pages))
+// adrPrefix marks pages reachable from the ADR index rather than listed
+// individually — eighteen sidebar lines would bury the guides.
+const adrPrefix = "adr-"
+
+// navFor renders the curated navigation, and fails on a page it does not
+// cover. A new doc under docs/ is mirrored automatically but would be
+// reachable only by URL, so the generator refuses rather than publishing a
+// page nothing links to (CONTRIBUTING, "Documentation accuracy").
+func navFor(pages map[string]string) (string, error) {
+	uncovered := make(map[string]bool, len(pages))
 	for _, page := range pages {
-		names = append(names, page)
-	}
-	sort.Strings(names)
-	var b strings.Builder
-	for _, s := range sections {
-		b.WriteString("\n### " + s.title + "\n\n")
-		for _, name := range names {
-			inSection := s.prefix != "" && strings.HasPrefix(name, s.prefix)
-			if s.prefix == "" {
-				inSection = !strings.HasPrefix(name, "architecture-") && !strings.HasPrefix(name, "adr-")
-			}
-			if inSection {
-				b.WriteString("- [" + name + "](" + name + ")\n")
-			}
+		if !strings.HasPrefix(page, adrPrefix) {
+			uncovered[page] = true
 		}
 	}
-	return b.String()
+	var b strings.Builder
+	for _, s := range sections {
+		var lines []string
+		for _, e := range s.entries {
+			if !containsPage(pages, e.page) {
+				continue // curated but not present in this tree
+			}
+			delete(uncovered, e.page)
+			lines = append(lines, "- ["+e.title+"]("+e.page+")\n")
+		}
+		if len(lines) == 0 {
+			continue
+		}
+		b.WriteString("\n### " + s.title + "\n\n")
+		for _, l := range lines {
+			b.WriteString(l)
+		}
+	}
+	if len(uncovered) > 0 {
+		missing := make([]string, 0, len(uncovered))
+		for page := range uncovered {
+			missing = append(missing, page)
+		}
+		sort.Strings(missing)
+		return "", fmt.Errorf("wiki page(s) missing from the curated navigation in %s: %s — "+
+			"add an entry to sections, or name the page with the %sprefix",
+			"test/wikisync/main.go", strings.Join(missing, ", "), adrPrefix)
+	}
+	return b.String(), nil
+}
+
+// containsPage reports whether any source maps to the given wiki page.
+func containsPage(pages map[string]string, page string) bool {
+	for _, p := range pages {
+		if p == page {
+			return true
+		}
+	}
+	return false
 }
 
 const homePreamble = `# shortfall
 
 **What an incident cost, who it hit, and how sure you are.**
+
+shortfall is a Go library and CLI that measures the dollar impact of an
+incident from telemetry your services already emit, and reports it in a
+form Finance can audit. New here? Read the
+[introduction](README), then the [quickstart](quickstart).
 
 This wiki is a generated mirror of the repository's ` + "[`docs/`](" + repoURL + "/tree/main/docs)" + ` directory,
 which is the source of truth: documentation changes in the same PR as the
@@ -197,7 +267,10 @@ func generate(root, out string) error {
 			return err
 		}
 	}
-	nav := navFor(pages)
+	nav, err := navFor(pages)
+	if err != nil {
+		return err
+	}
 	if err := os.WriteFile(filepath.Join(out, "Home.md"), []byte(homePreamble+nav), 0o644); err != nil {
 		return err
 	}

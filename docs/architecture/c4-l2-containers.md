@@ -5,10 +5,9 @@ modules and the packages within them. Four bands; only the opt-in band knows
 your vendors. The core emits two normalized signals and never touches a
 backend; adapters translate on the way out and back in.
 
-Colour is the **module boundary** ([the stencil](STYLE.md)): violet is your
-code, dark blue is the one module you import, mid blue is a nested module you
-opt into separately, ochre-dashed never ships. Arrow labels are short — the
-interfaces and the constraints are in the table below.
+Colour is the **module boundary**: violet is your code, dark blue the one
+module you import, mid blue a nested module you opt into separately,
+ochre-dashed never ships.
 
 ```mermaid
 flowchart TB
@@ -82,36 +81,24 @@ flowchart TB
 | `engine` → incident adapter | Separately: an incident adapter takes an `engine.Report` value directly (`slack.Client.Post` / `.Refresh`) and posts and refreshes it. Your program wires that call — it is not a CLI hand-off |
 | `examples/checkout` → `testkit` → `engine` | The harness knows the true answer by construction; `testkit` turns it into golden fixtures that judge the engine. Test-only — no production import path reaches either |
 
-## Key facts this diagram encodes
+## What this diagram encodes
 
 - **A Prometheus user never compiles stripe-go.** Every box in the opt-in
   band is its own nested Go module with its own `go.mod`. That is the
-  architecture's central promise, and it is why the band is a different
-  colour from the core: importing shortfall costs you `otel` and
-  `yaml.v3`, and nothing else until you ask for more.
-- **The CLI is not the core.** `cmd/shortfall` is its own module, and it
-  pulls a SQLite driver. Drawing it inside the core box would quietly
-  contradict the "zero heavy deps" claim the core box makes — so it sits in
-  the opt-in band with the adapters.
-- **Two interfaces are the whole vendor surface.** `emit.Exporter` going
-  out, `query.Querier` coming back. Neither `emit` nor `engine` has ever
-  seen a backend, and swapping one is an import change.
+  architecture's central promise: importing shortfall costs you `otel` and
+  `yaml.v3` and nothing else until you ask for more.
+- **The CLI is not the core.** `cmd/shortfall` is its own module and pulls
+  a SQLite driver. Drawing it inside the core box would quietly contradict
+  the "zero heavy deps" claim that box makes.
 - **The engine's imports are an allowlist, enforced.** `engine` may reach
-  `query`, `registry`, `biz`, and its own subpackages — nothing else. The
-  `engine-import-boundary` rule fails the gate on a new import, so the
+  `query`, `registry`, `biz` and its own subpackages — nothing else. The
+  `engine-import-boundary` gate rule fails on a new import, so the
   boundary is a check rather than a convention.
 - **Provider events land in the same funnel as your own.** Stripe webhooks
-  do not get a private path into the engine; they become `biz.Outcome`s and
-  go through `emit` like everything else, so de-dup, the PII guard and the
+  get no private path into the engine; they become `biz.Outcome`s and go
+  through `emit` like everything else, so de-dup, the PII guard and the
   label fences apply to them identically.
-- **The CLI is not the only consumer, and not a router.** `cmd/shortfall`
-  renders the report to stdout. An incident adapter takes an
-  `engine.Report` value from your own program — nothing in the CLI module
-  reaches an incident adapter, and its `go.mod` requires none.
-- **Amounts and ids ride events only.** Metrics carry the fixed ADR-0004
-  label families, so no customer or entity id can turn into an unbounded
-  metric label.
 - **The ground-truth band never ships.** `examples/checkout` and `testkit`
   exist so the engine can be judged against an answer known by
   construction. The dashed stroke is the reminder: nothing in your build
-  should ever reach these.
+  should reach them.

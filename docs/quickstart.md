@@ -1,12 +1,12 @@
-# Quickstart — from `go get` to a first impact report in 10 minutes
+# Quickstart
 
-This walks from nothing to a rendered `shortfall impact` report against a small
-local dataset. No external services required — it uses a SQLite outcomes table
-so you can see the whole path end to end.
+From a clone to a rendered impact report in about ten minutes, with no
+external services. When you are ready to wire your own service, continue
+to the [integration guide](integration.md).
 
-## 1. Build the CLI (1 min)
+## 1. Build the CLI
 
-The CLI lives in a nested module so the core library stays dependency-light:
+The CLI is a nested module, so the core library stays dependency-light.
 
 ```sh
 git clone https://github.com/NightWatchEng/shortfall && cd shortfall
@@ -14,42 +14,32 @@ go build -o shortfall ./cmd/shortfall
 ./shortfall version
 ```
 
-## 2. Point it at a registry (1 min)
+## 2. Validate a registry
 
-The **registry** is the Finance-co-signed YAML that says what counts as money,
-what a flow's stages are, and when deferred value becomes lost. A reference one
-ships in the repo:
+The **registry** is the YAML that says what counts as money, what a
+flow's stages are, and when deferred value becomes lost. Finance
+co-signs it once; every later report is measured against it. A reference
+registry ships in the repo:
 
 ```sh
 ./shortfall validate registry/testdata/registry.yaml
 # registry/testdata/registry.yaml: ok — 1 flow(s), 2 segment(s)
 ```
 
-See [registry.md](registry.md) for every field.
+Every field is documented in the [registry reference](registry.md).
 
-## 3. Seed a tiny outcomes table (3 min)
+## 3. Seed an outcomes table
 
-**Why SQLite here?** In production, shortfall reads the telemetry
-backend you already run — your services emit `biz_*` signals through an
-export adapter (CloudWatch EMF or Prometheus) and the engine reads them
-back through a query adapter. You never install a new datastore. This
-walkthrough uses a local SQLite file **only** so the demo needs zero
-external services: it stands in for your real event store. The query
-adapters are `promql` (metrics), and `cwinsights`, `gcplogging` and
-`sql` for events — so a CloudWatch shop exports via
-`adapters/export/cloudwatch` and reads back through `cwinsights`, and a
-Google Cloud shop exports events via `adapters/export/gcp` and reads them
-back through `gcplogging` (see [adapters.md](adapters.md) for exactly
-which backend grounds which leg).
-
-Put a few rows in a SQLite table matching the sql adapter's schema:
+In production the engine reads the telemetry backend you already run.
+This walkthrough uses a local SQLite file so the demo needs nothing
+installed; it stands in for your event store.
 
 ```sh
 sqlite3 demo.db <<'SQL'
 CREATE TABLE biz_outcomes (
   flow TEXT, stage TEXT, outcome TEXT, currency TEXT, segment TEXT,
   kind TEXT, customer_id TEXT, entity_id TEXT, amount_minor INTEGER, at INTEGER);
--- two failed captures (realized loss) and one success, during the window
+-- two failed captures (realized loss) and one success, inside the window
 INSERT INTO biz_outcomes VALUES
  ('invoice.pay','capture','failed','USD','smb','fee','h:c1','inv_1',14900, strftime('%s','2026-08-27T14:01:00Z')*1000000000),
  ('invoice.pay','capture','failed','USD','enterprise','fee','h:c2','inv_2',900000, strftime('%s','2026-08-27T14:02:00Z')*1000000000),
@@ -57,9 +47,9 @@ INSERT INTO biz_outcomes VALUES
 SQL
 ```
 
-`at` is Unix **nanoseconds**. Amounts are **minor units** (cents for USD).
+`at` is Unix **nanoseconds**; amounts are **minor units** (cents for USD).
 
-## 4. Run the impact report (1 min)
+## 4. Run the impact report
 
 ```sh
 ./shortfall impact \
@@ -70,15 +60,20 @@ SQL
   --format text
 ```
 
-You get the four legs, a coverage line, and a suggested severity — each tagged
-with the kind of evidence behind it. `--format json` and `--format markdown`
-render the same report for pipelines and incident channels.
+You get the four legs, a coverage line and a suggested severity, each
+tagged with the kind of evidence behind it. `--format json` and
+`--format markdown` render the same report for pipelines and incident
+channels.
 
-## 5. (Optional) reconcile for a trust number (2 min)
+SQLite is an events-only backend, so the deferred and unrealized legs
+report as unavailable with a reason rather than as zero. Pairing a
+metrics backend grounds them — see [backends](adapters.md).
 
-Coverage reconciles the **captured (success)** value telemetry saw against the
-provider's ledger. Given ledger rows (the Stripe reconciler's or a SQL job's
-output) as JSON — here one success row matching the demo's settled $50:
+## 5. Reconcile for a trust number
+
+Coverage compares the **captured (success)** value telemetry saw against
+the provider's ledger. Given one ledger row matching the demo's settled
+$50:
 
 ```sh
 echo '[{"Flow":"invoice.pay","Outcome":"success","Money":{"Amount":5000,"Currency":"USD","Exponent":2},"Count":1}]' > ledger.json
@@ -90,23 +85,11 @@ echo '[{"Flow":"invoice.pay","Outcome":"success","Money":{"Amount":5000,"Currenc
 # COVERAGE   [trust] 100.0% reconciled against sql:ledger.payments
 ```
 
-(Coverage is a `reconcile`-time number — `impact` has no ledger, so its report
-shows coverage as unavailable.)
+Coverage is a `reconcile`-time number. An `impact` run carries no
+ledger, so it reports coverage as unavailable rather than as 100%.
 
-## Wiring it into your own app
+## Next
 
-The CLI is one consumer of the library. In your services you:
-
-1. Attach business context to requests with `biz.WithValueContext` and let it
-   propagate (`propagate/httpmw`, `kafka`, `sqs`, `amqp`).
-2. Record every stage transition with `emit.Std.Record(ctx, stage, result, ...)`,
-   backed by an exporter (`adapters/export/*`) that ships the `biz_*` metrics
-   and events to your backend.
-3. Query for a report with `engine.Compute` against a `query.Querier`
-   (`adapters/query/promql` for metrics, `adapters/query/sql` for events), or
-   just run the CLI.
-
-Next: [integration-webhook-lambdas.md](integration-webhook-lambdas.md) (a
-worked two-system integration), [adapters.md](adapters.md) (which backend
-gives which leg), [money.md](money.md) (what a "dollar" means here),
-[registry.md](registry.md).
+- [Integration guide](integration.md) — wire the library into your own service.
+- [Backends & adapters](adapters.md) — which backend grounds which leg.
+- [Money & the legs](money.md) — what each leg means, for Finance.
