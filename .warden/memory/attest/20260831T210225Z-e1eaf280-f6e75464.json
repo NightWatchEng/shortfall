@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "e1eaf28002e406cb287478c9e87ee205c59d1f3b",
+  "base_sha": "60fe9422e4e1469915bf50c4d818eac9b0e6e41d",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-08-31T21:02:25+00:00",
+  "range_patch_ids": [
+    "72d84721a2950ae38905e2178ff459dc13e1aa33",
+    "b8f43da19f953a98976acc997cb74a99e38d384d"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context, with the shortfall tree and a local agentops clone. Verified the pin's provenance against upstream (40-char SHA, v1.1.0^{commit}, on main, pyproject 1.1.0, range_patch_ids present), read enforce_platform_pin to confirm a pin mismatch really fails closed at exit 2, diffed v1.0.0..a900e56 for certification rungs, consumer-facing rules and gate severities, and reproduced the patch-id fallback's behaviour end to end on a fixture repo against both pinned versions."
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "the orchestrator independently re-derived the HIGH finding from source rather than accepting it: read attested_shas and check_range at a900e56, confirmed by_patch is populated from every shard in the tree with no ancestry filter, and grepped attest.py for merge-base/is_ancestor/--contains, finding none. Also caught and corrected its own error when a mis-scoped sed range made the secret patterns appear to have changed; a precise extraction showed them byte-identical."
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-08-31T21:02:25+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "e1eaf28002e406cb287478c9e87ee205c59d1f3b",
+      "base_sha": "60fe9422e4e1469915bf50c4d818eac9b0e6e41d",
+      "rule_id": "security-misconfiguration",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": "",
+      "file": "repo.yaml",
+      "line": 9,
+      "severity": "HIGH",
+      "finding": "Bumping to v1.1.0 adopts a patch-id fallback that can be satisfied by an attestation from a different, already-merged PR, so a branch that was never reviewed passes the required gate at exit 0. attested_shas indexes every shard committed at head with no ancestry filter, and the pass condition is only set(ids) <= current. The sha join required a commit in THIS range to carry an attestation; the patch-id join drops that. A revert-then-reland reproduces a reviewed commit's patch-id inside a new range and inherits its shard \u2014 accidentally on an ordinary revert-and-reland PR, not only deliberately. Distinct from the documented git merge --squash limitation, which still required a review of the branch.",
+      "evidence": "Reproduced on a fixture: old pin NO ATTESTATION exit 1; new pin PASS exit 0 with two uncovered commits. Source at a900e56: attest.py attested_shas populates by_patch from every shard filtered only on source=='attest'; check_range matches set(ids) <= current; no merge-base/is_ancestor/--contains anywhere in the file.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-a42",
+      "reason": "Founder decision 2026-08-31, taken with the reproduction and the tradeoff in front of them: bump anyway and accept the window, because the rebase bug costs a full re-review on every PR that falls behind main (PRs #95-97 already paid it) while the exploit needs a revert-and-reland shape and the pass line names the uncovered commits. Filed upstream as workspace-dq6 with the mechanism, the reproduction and a suggested fix \u2014 refuse the fallback when the matched shard's attested sha is reachable from base, which leaves the rebase case this release exists to fix untouched. NOT fixed here: the logic is in agentops, and shortfall's shim is 24 lines.",
+      "id": "dd07d502a28cee23"
+    },
+    {
+      "ts": "2026-08-31T21:02:25+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "e1eaf28002e406cb287478c9e87ee205c59d1f3b",
+      "base_sha": "60fe9422e4e1469915bf50c4d818eac9b0e6e41d",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/secrets-in-diff.md",
+      "line": 11,
+      "severity": "MEDIUM",
+      "finding": "The rule stamps the platform version of the checker it documents \u2014 'What the pinned mechanical checker (platform v1.0.0) actually fires on' \u2014 and the bump makes that disagree with repo.yaml's platform.pin. The version is written into the file precisely so a reader can tell which checker the list describes, and it is a protected path, so it cannot be corrected silently later.",
+      "evidence": "repo.yaml now pins v1.1.0 and the shim reports warden 1.1.0, against the file's v1.0.0 stamp.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a42",
+      "reason": "Stamped v1.1.0. The list itself stays accurate: _SECRET_PATTERNS hashes identically at the v1.0.0 tag and a900e56, and no line was removed from mechanical.py across the bump \u2014 the only addition is a tests-accompany-logic checker, inert here since this file is shortfall's one engine:python rule.",
+      "id": "d63796e3141ebc0f"
+    }
+  ]
+}
