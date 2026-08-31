@@ -278,14 +278,22 @@ downstream service's `Record` calls land on the same entity and dollars
 — one flow, measured across every hop. Your payment provider is not
 allowlisted, so its requests leave clean.
 
-> **A globally-installed Baggage propagator bypasses this fence.** If your
-> OpenTelemetry setup registers a generic Baggage propagator on the global
-> `TextMapPropagator`, it injects every member — `biz.vc` included — into
-> every outbound request, third-party APIs among them. The fence lives in
-> this Transport, not in the global propagator, so scope that propagator
-> in your deployment or route outbound calls through this client only
-> (ADR-0003). Shipping transaction amounts to a third party is a decision
-> someone makes on purpose.
+> **The fence is this Transport, so two things can route around it.** A
+> globally-installed generic Baggage propagator injects every member,
+> `biz.vc` included, into whatever it touches — and a request that never
+> passes through this Transport is never fenced. Route every outbound
+> call through a client built this way, including the ones inside SDKs
+> that accept a custom `http.Client`.
+>
+> Ordering matters too. The fence rebuilds the header and then hands the
+> request to its `base`, so anything that injects baggage must wrap this
+> Transport from the **outside** — `otelhttp.NewTransport(httpmw.NewTransport(reg, base))`,
+> never the reverse, which would re-inject after the strip.
+>
+> Requests that do go through it are fenced properly: toward a
+> non-allowlisted host a `biz.vc` is deleted even when a global propagator
+> put it there (ADR-0003). Shipping transaction amounts to a third party
+> is a decision someone makes on purpose.
 
 **Queues.** Inject on the producer, extract on the consumer. The
 carriers import no queue client library, so your broker client stays
