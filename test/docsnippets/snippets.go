@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -23,7 +24,27 @@ type fence struct {
 	line int    // 1-based line of the opening fence
 	lang string // info string: "go", "yaml", ...
 	body string
+	ref  bool // reference material (see refMarker), exempt from compiling
+	cont bool // continuation (see contMarker): wrapped, unused decls absorbed
 }
+
+// The two governance markers. Each must be the whole line directly
+// above a fence's opening — deliberately narrow, so a fence cannot
+// drift out of governance by accident.
+//
+// refMarker exempts a fence from the compile check entirely: it is
+// reference material — an API-signature listing, not compilable code.
+//
+// contMarker declares a continuation fence: a wiring-guide step whose
+// declarations the prose or a later fence picks up. It always compiles
+// wrapped in a func, and only for such fences the compiler's "declared
+// and not used" diagnostics are absorbed (see compileGoFences); every
+// other diagnostic, and unused declarations in UNMARKED fences, still
+// fail loudly.
+const (
+	refMarker  = "<!-- docsnippets:reference -->"
+	contMarker = "<!-- docsnippets:continues -->"
+)
 
 // extractFences scans a markdown file for fenced blocks. Indented fences
 // (inside list items) are captured with their indentation stripped.
@@ -35,10 +56,11 @@ func extractFences(path string) ([]fence, error) {
 	defer func() { _ = f.Close() }()
 
 	var (
-		fences  []fence
-		cur     *fence
-		indent  string
-		lineNum int
+		fences     []fence
+		cur        *fence
+		indent     string
+		lineNum    int
+		prevMarker string
 	)
 	open := regexp.MustCompile("^([ \t]*)```([a-zA-Z]*)[^`]*$")
 	sc := bufio.NewScanner(f)
@@ -48,14 +70,17 @@ func extractFences(path string) ([]fence, error) {
 		line := sc.Text()
 		if cur == nil {
 			if m := open.FindStringSubmatch(line); m != nil {
-				cur = &fence{doc: path, line: lineNum, lang: m[2]}
+				cur = &fence{doc: path, line: lineNum, lang: m[2],
+					ref: prevMarker == refMarker, cont: prevMarker == contMarker}
 				indent = m[1]
 			}
+			prevMarker = strings.TrimSpace(line)
 			continue
 		}
 		if strings.TrimSpace(line) == "```" {
 			fences = append(fences, *cur)
 			cur = nil
+			prevMarker = "" // a closing fence line is never a marker
 			continue
 		}
 		cur.body += strings.TrimPrefix(line, indent) + "\n"
@@ -109,19 +134,97 @@ var importsFor = map[string]string{
 	"time":       "time",
 }
 
+// splitLeadingImports separates a fence's own leading import block from
+// the rest of its body. Docs that teach wiring open a fence with the
+// interesting imports and continue with statements ("mixed" fences);
+// compiled verbatim those statements would sit at file level. The specs
+// come back verbatim (aliases kept), rest is the body without the block.
+// A fence with no leading import block returns (nil, body).
+func splitLeadingImports(body string) (specs []string, rest string) {
+	lines := strings.Split(body, "\n")
+	i := 0
+	for i < len(lines) {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || strings.HasPrefix(t, "//") {
+			i++
+			continue
+		}
+		break
+	}
+	if i >= len(lines) {
+		return nil, body
+	}
+	switch t := strings.TrimSpace(lines[i]); {
+	case t == "import (":
+		for j := i + 1; j < len(lines); j++ {
+			s := strings.TrimSpace(lines[j])
+			if s == ")" {
+				return specs, strings.Join(lines[j+1:], "\n")
+			}
+			if s != "" {
+				specs = append(specs, s)
+			}
+		}
+		return nil, body // unclosed block: leave it to the compiler to name
+	case strings.HasPrefix(t, "import "):
+		return []string{strings.TrimPrefix(t, "import ")}, strings.Join(lines[i+1:], "\n")
+	}
+	return nil, body
+}
+
+// importSpecPath extracts the quoted path from an import spec line
+// (`"net/http"`, `prom "example.com/x"`).
+func importSpecPath(spec string) string {
+	if i := strings.IndexByte(spec, '"'); i >= 0 {
+		if j := strings.IndexByte(spec[i+1:], '"'); j >= 0 {
+			return spec[i+1 : i+1+j]
+		}
+	}
+	return ""
+}
+
 // synthesize renders one fence as a compilable Go file in package
-// docsnippet: a generated import block for the identifiers the fence
-// uses, then either the fence verbatim (file-level) or the fence wrapped
-// in a uniquely named function (statements).
-func synthesize(f fence, n int) string {
+// docsnippet: the fence's own leading import block (if any) merged with
+// a generated one for the identifiers the fence uses, then either the
+// remainder verbatim (file-level) or wrapped in a uniquely named
+// function (statements). discard names identifiers the wrapped form
+// must blank-assign: a tutorial fence legitimately declares things the
+// prose, not the fence, goes on to use, and only the compiler can say
+// which (see compileGoFences).
+func synthesize(f fence, n int, discard []string) string {
 	var b strings.Builder
 	b.WriteString("package docsnippet\n\n")
 
+	ownSpecs, body := splitLeadingImports(f.body)
+	f.body = body
+
 	used := map[string]bool{}
+	for _, s := range ownSpecs {
+		if p := importSpecPath(s); p != "" {
+			used[p] = true // the fence's own spec wins; don't auto-add it again
+		}
+	}
+	if len(ownSpecs) > 0 {
+		b.WriteString("import (\n")
+		for _, s := range ownSpecs {
+			b.WriteString("\t" + s + "\n")
+		}
+		b.WriteString(")\n\n")
+	}
+
+	// Scan with line comments stripped: a comment naming a package
+	// (`// emit.New(*registry.Registry, ...)`) must not import it.
+	lineComment := regexp.MustCompile(`(?m)//.*$`)
+	scanned := lineComment.ReplaceAllString(f.body, "")
 	ident := regexp.MustCompile(`(?m)(?:^|[^\w.])([a-z]\w*)\.`)
-	for _, m := range ident.FindAllStringSubmatch(f.body, -1) {
+	for _, m := range ident.FindAllStringSubmatch(scanned, -1) {
 		if path, ok := importsFor[m[1]]; ok && !used[path] {
 			used[path] = true
+		}
+	}
+	for _, s := range ownSpecs {
+		if p := importSpecPath(s); p != "" {
+			delete(used, p) // already emitted above; keep it out of the generated block
 		}
 	}
 	if len(used) > 0 {
@@ -151,12 +254,15 @@ func synthesize(f fence, n int) string {
 		b.WriteString(")\n\n")
 	}
 
-	if fileLevel(f.body) {
+	if fileLevel(f.body) && !f.cont {
 		b.WriteString(f.body)
 	} else {
 		fmt.Fprintf(&b, "func _snippet%d() {\n", n)
 		for _, l := range strings.Split(strings.TrimRight(f.body, "\n"), "\n") {
 			b.WriteString("\t" + l + "\n")
+		}
+		for _, id := range discard {
+			fmt.Fprintf(&b, "\t_ = %s // declared for the reader; the prose picks it up\n", id)
 		}
 		b.WriteString("}\n")
 	}
@@ -197,9 +303,23 @@ replace github.com/NightWatchEng/shortfall/adapters/query/promql => ROOT/adapter
 replace github.com/NightWatchEng/shortfall/adapters/query/sql => ROOT/adapters/query/sql
 `
 
+// unusedIdent matches the compiler's declared-and-not-used diagnostic
+// for a synthesized fence file, capturing the fence index and the name.
+var unusedIdent = regexp.MustCompile(`(?m)^\./fence(\d+)_line\d+\.go:\d+:\d+: declared and not used: (\w+)$`)
+
 // compileGoFences synthesizes every Go fence of one doc into a temp
 // module (with the doc's stub file, if any) and builds it. The returned
 // error carries the compiler output, which names fences by file.
+//
+// One diagnostic class is absorbed rather than reported, and only for
+// fences carrying contMarker: declared and not used. A wiring guide's
+// fence declares `reg, err := registry.Load(...)` and the NEXT fence
+// (or the prose) uses reg; inside the synthesized func that is a
+// compile error, but in the reader's program it is not. The compiler
+// itself names the identifiers, they are blank-assigned, and the build
+// reruns — so an unused variable never masks any other diagnostic, an
+// UNMARKED fence's unused declarations still fail (the broken.md
+// fixture pins that), and everything else fails loudly everywhere.
 func compileGoFences(root, tmp string, fences []fence, stubs string) error {
 	if err := os.WriteFile(filepath.Join(tmp, "go.mod"),
 		[]byte(strings.ReplaceAll(tempModTemplate, "ROOT", root)), 0o644); err != nil {
@@ -210,21 +330,52 @@ func compileGoFences(root, tmp string, fences []fence, stubs string) error {
 			return err
 		}
 	}
-	for i, f := range fences {
-		name := fmt.Sprintf("fence%02d_line%d.go", i, f.line)
-		if err := os.WriteFile(filepath.Join(tmp, name), []byte(synthesize(f, i)), 0o644); err != nil {
-			return err
+	discards := make([][]string, len(fences))
+	var lastErr error
+	// One retry per fence with unused idents would do; 4 rounds bounds
+	// even a pathological cascade without looping forever.
+	for attempt := 0; attempt < 4; attempt++ {
+		for i, f := range fences {
+			name := fmt.Sprintf("fence%02d_line%d.go", i, f.line)
+			if err := os.WriteFile(filepath.Join(tmp, name), []byte(synthesize(f, i, discards[i])), 0o644); err != nil {
+				return err
+			}
+		}
+		lastErr = nil
+		for _, args := range [][]string{{"mod", "tidy"}, {"build", "./..."}} {
+			cmd := exec.Command("go", args...)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				lastErr = fmt.Errorf("go %s: %v\n%s", strings.Join(args, " "), err, out)
+				break
+			}
+		}
+		if lastErr == nil {
+			return nil
+		}
+		grew := false
+		for _, m := range unusedIdent.FindAllStringSubmatch(lastErr.Error(), -1) {
+			i, err := strconv.Atoi(m[1])
+			if err == nil && i < len(discards) && fences[i].cont && !slicesContains(discards[i], m[2]) {
+				discards[i] = append(discards[i], m[2])
+				grew = true
+			}
+		}
+		if !grew {
+			return lastErr
 		}
 	}
-	for _, args := range [][]string{{"mod", "tidy"}, {"build", "./..."}} {
-		cmd := exec.Command("go", args...)
-		cmd.Dir = tmp
-		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("go %s: %v\n%s", strings.Join(args, " "), err, out)
+	return lastErr
+}
+
+func slicesContains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
 // registryFence reports whether a yaml fence is a complete registry

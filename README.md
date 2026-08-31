@@ -326,6 +326,7 @@ required check once the hot-path baselines stabilise.
 - [Registry reference](docs/registry.md) — every field of the flow registry.
 - [What is a "dollar" here](docs/money.md) — kind semantics, lost vs delayed, why ranges (for Finance).
 - [Semantic conventions (draft)](docs/semconv.md) — the `biz.*` attribute and metric shapes.
+- [The portability contract](docs/portability.md) — what an implementation in another language, or an external adapter, must satisfy to interoperate.
 - [Design decisions](docs/adr/README.md) — one ADR per irreversible choice.
 
 ## Status

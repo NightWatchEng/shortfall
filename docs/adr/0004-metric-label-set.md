@@ -14,15 +14,24 @@ rule that fails; this one must be enforced by the emitting code itself.
 ## Decision
 
 The metric families and their **exact, per-family label sets** are fixed —
-no family ever gains a label, and no family exists beyond these five:
+no family ever gains a label, and no family exists beyond these six:
 
 | family | labels |
 |---|---|
 | `biz_value_total` | `flow`, `stage`, `outcome`, `currency`, `kind`, `segment` |
 | `biz_txn_total` | `flow`, `stage`, `outcome`, `currency`, `segment` |
 | `biz_inflight_value` | `flow`, `stage`, `age_bucket`, `currency` |
+| `biz_inflight_count` | `flow`, `stage`, `age_bucket`, `currency` |
 | `biz_provider_calls_total` | `provider`, `op`, `outcome` |
 | `biz_dropped_events_total` | `reason` (fixed enum, see ADR-0002) |
+
+**Amended 2026-08-30 (workspace-ccf)**: the rule above said "five" and the
+table had no `biz_inflight_count` row from this ADR's acceptance until
+[ADR-0012](0012-inflight-count-gauge.md) added that family as a companion
+gauge to `biz_inflight_value`, with the identical label set. The count and
+the table now state the live contract; the rule itself — exact label sets,
+fixed family list, enforcement in the emitting code — is unchanged, and
+ADR-0012 is the decision record for the sixth family.
 
 - `flow`, `stage`, `segment` values must come from the registry, with a
   defined fallback for each so money is never silently lost:

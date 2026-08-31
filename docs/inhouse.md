@@ -58,6 +58,7 @@ a `sql:`/`stripe:` reconcile source.
 
 Load it once at startup:
 
+<!-- docsnippets:continues -->
 ```go
 reg, err := registry.Load("registry.yaml")   // returns a registry.Registry value
 if err != nil {                               // (registry.Parse(rawBytes) for in-memory bytes)
@@ -100,6 +101,7 @@ Useful `EmitterOption`s: `emit.WithFlushInterval(d)` (background flush cadence;
 
 `em` satisfies the `emit.Emitter` interface:
 
+<!-- docsnippets:reference -->
 ```go
 Record(ctx context.Context, stage string, result biz.Result, opts ...Option)
 SetInFlight(flow, stage, ageBucket string, money biz.Money, count int64)
@@ -154,6 +156,7 @@ stamped context flows to every `Record` call downstream of the handler.
 If a stage runs outside an HTTP handler (a queue consumer, a cron), stamp the
 context yourself:
 
+<!-- docsnippets:continues -->
 ```go
 ctx, err := biz.WithValueContext(ctx, vc)   // err is *biz.OversizeError if vc encodes > 512 bytes
 ```
@@ -230,6 +233,7 @@ injects `biz.vc` only toward hosts on the registry's `propagation.allow_hosts`
 allowlist and strips it (fails closed) everywhere else, so amounts never leak
 to third parties:
 
+<!-- docsnippets:continues -->
 ```go
 client := &http.Client{
     Transport: httpmw.NewTransport(&reg, http.DefaultTransport),
@@ -239,6 +243,7 @@ client := &http.Client{
 **Queues** — inject on the producer, extract on the consumer, using the
 carrier for your transport (no transport SDK is imported by the library):
 
+<!-- docsnippets:continues -->
 ```go
 // producer (Kafka): the carrier wraps a *[]kafka.Header (the library's own
 // header type); map it to/from your Kafka client's headers at the edge.
