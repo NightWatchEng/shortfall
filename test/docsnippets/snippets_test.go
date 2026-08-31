@@ -140,6 +140,7 @@ func TestDocRegistryFencesValidate(t *testing.T) {
 		"docs/registry.md",
 		"docs/adapters.md",
 		"docs/portability.md",
+		"docs/inhouse.md",
 	}
 	found := 0
 	for _, doc := range docs {
