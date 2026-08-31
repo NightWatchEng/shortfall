@@ -1,0 +1,18 @@
+{
+  "bead": "workspace-ehd",
+  "head_sha": "e262702897754ab0485dd3fc81cc8659770909ef",
+  "base_sha": "e262702897754ab0485dd3fc81cc8659770909ef",
+  "rules_version": "665bf6d03117",
+  "decided_at": "2026-08-31T02:54:39+00:00",
+  "decided": "Docs mirror to the GitHub wiki via a Go generator module test/wikisync (page name = repo-relative path minus docs/ prefix and .md suffix, '/'->'-'); a CI workflow on push-to-main filtered to docs/**, README.md and the generator regenerates the full page set and commits it to shortfall.wiki.git with the default GITHUB_TOKEN (contents: write); the manual first mirror is produced by the same generator so the first CI sync is a byte-level no-op; .warden/rules/docs-accuracy.md drops the stale 'docs/inhouse.md until it is governed' clause (governed since PR #111).",
+  "why": "A Go module under test/ follows the licensehdr precedent: ci-go.sh discovers it, so the mapping/rewrite logic is compiled, vetted, linted and unit-tested on every core run without touching ci-go.sh; a shell rewrite of markdown links would be untestable in comparison. Regenerate-and-commit (full replace, normal commit, not force-push) keeps wiki history auditable while still deliberately overwriting wiki-side hand edits, which the Home page declares. GITHUB_TOKEN can push a same-repo wiki when the job has contents: write, avoiding a new secret; the workflow fails loudly if that assumption breaks.",
+  "cost_if_wrong": "If the token cannot push the wiki, the first post-merge sync fails visibly and the wiki lags until a PAT secret is added - no data loss, docs/ remains the source of truth. If the page-name mapping collides or a link rewrites wrongly, a wiki page misleads until the next sync; the unit tests pin the mapping and rewrite rules to make that a test failure instead.",
+  "alternatives": [
+    "Shell script in scripts/ (matches ehd bead wording; rejected: markdown link resolution in shell is fragile and untested, and scripts/ is pinned to base ref in CI so its tests would not even run in the introducing PR)",
+    "Force-push a single squashed wiki commit each sync (matches ehd bead wording; rejected: destroys wiki history for no benefit; full-tree commit achieves the same overwrite semantics)",
+    "Fine-grained PAT secret from day one (rejected: creates founder work and a standing credential before knowing GITHUB_TOKEN is insufficient)",
+    "Mirror only on release tags (rejected: ehd acceptance criteria require sync within one CI run of a docs push to main)",
+    "Leave the docs-accuracy inhouse.md clause and amend the rule wholesale later (rejected: the rule states a governance boundary PR #111 moved; a stale gate rule is exactly the drift the rule polices)"
+  ],
+  "scope": "test/wikisync module, .github/workflows/wiki-sync.yml, go.work, .warden/rules/docs-accuracy.md one clause, and the content of shortfall.wiki.git; docs/ itself unchanged"
+}
