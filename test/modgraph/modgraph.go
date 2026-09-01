@@ -5,13 +5,13 @@
 // which version of each other they depend on.
 //
 // The bug this exists to catch does not go red on its own. Every nested
-// go.mod replaces its first-party dependencies with a relative path, and a
-// replace makes the require version irrelevant to every build that runs
-// here — so a require can name a version that was never tagged, and nothing
-// in gofmt, vet, build, test, vuln or lint has any reason to object. It
-// stays invisible until an adopter, who sees no replace at all, resolves it
-// for real. `cmd/shortfall` shipped requiring two sibling modules at v0.0.0
-// this way.
+// go.mod consumed as a library replaces its first-party dependencies with a
+// relative path, and a replace makes the require version irrelevant to every
+// build that runs here — so a require can name a version that was never
+// tagged, and nothing in gofmt, vet, build, test, vuln or lint has any
+// reason to object. It stays invisible until an adopter, who sees no replace
+// at all, resolves it for real. `cmd/shortfall` shipped requiring two
+// sibling modules at v0.0.0 this way.
 //
 // Be precise about what this adds, because the go tooling already catches
 // more than it looks like. Inside the workspace, go rejects a malformed
@@ -75,7 +75,7 @@ const ModulePrefix = "github.com/NightWatchEng/shortfall"
 // rejects any module whose go.mod carries a replace directive — "it must
 // not contain directives that would cause it to be interpreted differently
 // than if it were the main module" (`go help install`), enforced
-// unconditionally — so these modules resolve their first-party
+// unconditionally, first-party or not — so these modules resolve their
 // dependencies through published tags, not relative paths, and the release
 // build reaches them the same way an adopter does.
 //
@@ -99,6 +99,13 @@ type Mod struct {
 	// can tell a local target from a module-path substitution; "replaced" and
 	// "resolvable from this checkout" are different claims.
 	Replaces map[string]string
+	// OtherReplaces holds the left-hand paths of replace directives that are
+	// NOT first-party. Every other check here is about first-party edges and
+	// has no opinion on them, but `go install pkg@version` refuses a module
+	// carrying ANY replace directive, so an InstallTargets module has to be
+	// judged on all of them. Recorded rather than counted so the failure can
+	// name the offending path.
+	OtherReplaces []string
 	// Unparsed holds lines that mention ModulePrefix but that this parser
 	// could not read as a module, require or replace. A first-party line the
 	// checker does not understand is the one thing it must never pass over
@@ -253,6 +260,8 @@ func parseLine(m *Mod, block string, fields []string) bool {
 	case block == "replace" && (arrow == 1 || arrow == 2) && len(fields) > arrow+1:
 		if IsFirstParty(fields[0]) {
 			m.Replaces[fields[0]] = fields[arrow+1]
+		} else {
+			m.OtherReplaces = append(m.OtherReplaces, fields[0])
 		}
 
 		return true
@@ -261,6 +270,8 @@ func parseLine(m *Mod, block string, fields []string) bool {
 	case fields[0] == "replace" && (arrow == 2 || arrow == 3) && len(fields) > arrow+1:
 		if IsFirstParty(fields[1]) {
 			m.Replaces[fields[1]] = fields[arrow+1]
+		} else {
+			m.OtherReplaces = append(m.OtherReplaces, fields[1])
 		}
 
 		return true

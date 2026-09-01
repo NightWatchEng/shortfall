@@ -162,13 +162,23 @@ So a release is three ordered waves, and the order is load-bearing: each
 wave's tags must exist on the remote before the next wave's `go.mod` can
 resolve them.
 
-**Bump `cmd/shortfall/go.mod` first, in a merged commit, before any tag.**
-It requires the core and the two query adapters by published version and
-replaces nothing, so those three requires must already name the version you
-are about to tag. All three waves then tag that one commit — the root tag
-and the CLI tag point at the same tree, which is what lets the release name
-one version honestly. The release job refuses to build if the root tag is
-missing, sits on another commit, or disagrees with those requires.
+**Two commits, not one, and the order below is the whole reason.** Every
+first-party require in the tree names one version (`test/modgraph` fails the
+core test step otherwise), so a release starts by bumping all of them — the
+fourteen adapters, the three `test/` modules that import first-party code,
+and `cmd/shortfall` — in a merged commit. For every module but
+`cmd/shortfall` that is the end of it: a local `replace` means the version is
+never resolved and no `go.sum` entry exists to update.
+
+`cmd/shortfall` is the exception, and it cannot be finished in that commit.
+It has no replace, so its `go.sum` needs the module hashes for the new
+version — and those cannot be computed before that version is tagged and
+fetchable. `go mod tidy` at this point fails with `unknown revision`, and
+there is no flag that invents the hash. So the bump commit lands with
+`go.mod` naming the new version and `go.sum` still on the old one, which
+`go.work` hides from every local and CI build. **It is waves 1-2 that make
+the tidy possible, and the tidied `go.sum` is its own commit, tagged as wave
+3.**
 
 ```sh
 # 1. the core module
@@ -186,12 +196,21 @@ for m in adapters/export/cloudwatch adapters/export/gcp \
 done
 git push origin --tags
 
-# 3. the CLI, which requires the promql and sql tags from wave 2.
-#    This push is also what triggers the `release` workflow: goreleaser
-#    builds cmd/shortfall with GOWORK=off against the tags from waves 1-2,
-#    and publishes the archives onto the root tag's release.
+# 3. the CLI. Its versions are only NOW resolvable, so tidy first — this
+#    writes the go.sum entries for the tags pushed in waves 1-2 — commit
+#    that, and tag the commit that carries it.
+(cd cmd/shortfall && GOWORK=off go mod tidy)
+git commit -am "chore: cmd/shortfall go.sum for v0.2.0" && git push
 git tag cmd/shortfall/v0.2.0 && git push origin cmd/shortfall/v0.2.0
 ```
+
+Wave 3 is what triggers the `release` workflow: goreleaser builds
+`cmd/shortfall` with `GOWORK=off` against the tags from waves 1-2 and
+publishes the archives onto the root tag's release. Before it builds, the job
+re-derives the version from the tag and refuses to continue unless
+`cmd/shortfall/go.mod` carries no `replace`, every first-party require names
+that version, and each one's tag exists and is reachable from the commit
+being built. Skip a wave and it says which.
 
 **Then ask pkg.go.dev to index each path.** It does not reliably notice a
 new version on its own — after the v0.2.0 waves the site still served
@@ -207,9 +226,15 @@ for m in "" /cmd/shortfall /adapters/export/cloudwatch /adapters/export/gcp \
          /adapters/incident/slack /adapters/payment/stripe \
          /adapters/query/cwinsights /adapters/query/gcplogging \
          /adapters/query/promql /adapters/query/sql; do
-  curl -sS -X POST "https://pkg.go.dev/fetch/github.com/NightWatchEng/shortfall${m}@v0.2.0" >/dev/null
+  curl -fsS -X POST "https://pkg.go.dev/fetch/github.com/NightWatchEng/shortfall${m}@v0.2.0" \
+    >/dev/null && echo "indexed ${m:-/}" || echo "FAILED ${m:-/}"
 done
 ```
+
+`-f` and the echo are the point: without them a 4xx is not a curl error and
+the output is discarded, so a step whose entire job is to fix a silent
+staleness failure would itself fail silently — and the operator, just told
+the site can lag, would blame the lag.
 
 **Then bump the quickstart's download URL.** `docs/quickstart.md` step 2
 names a release asset by version (`shortfall_<version>_darwin_arm64.tar.gz`),
@@ -315,12 +340,13 @@ at all.
 
 Publishing the tag waves ended that. `cmd/shortfall` now requires the core
 and the two query adapters at their published versions and replaces
-nothing, so `go install
-github.com/NightWatchEng/shortfall/cmd/shortfall@latest` works and the
+nothing, so from v0.3.0 on `go install
+github.com/NightWatchEng/shortfall/cmd/shortfall@latest` will work and the
 release build resolves the graph the same way an adopter does
-(workspace-47f). The published v0.2.0 still carries the replaces and always
-will — a published `go.mod` is immutable — so `@v0.2.0` fails; the working
-install path starts at v0.3.0.
+(workspace-47f). It does not work yet: `@latest` resolves to the newest
+published `cmd/shortfall/v*` tag, which is v0.2.0, and that go.mod carries
+the replaces and always will — a published `go.mod` is immutable. The
+working install path starts at v0.3.0.
 
 Two things follow, and both are enforced rather than remembered:
 
