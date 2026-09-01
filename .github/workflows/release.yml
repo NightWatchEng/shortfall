@@ -72,16 +72,29 @@ jobs:
           mod=cmd/shortfall/go.mod
           test -f "$mod" || { echo "::error::$mod is missing — this guard would verify nothing."; exit 1; }
 
-          # `go install pkg@version` refuses a module carrying ANY replace, so
-          # the release must never publish one. test/modgraph holds the same
-          # line on every commit; this is the last gate before it ships.
-          if [ "$(go mod edit -json "$mod" | jq '.Replace | length')" != "0" ]; then
-            echo "::error::$mod carries replace directives, which break go install for every adopter:"
-            go mod edit -json "$mod" | jq -r '.Replace[] | "  \(.Old.Path) => \(.New.Path)"'
+          # Parse once, and fail on a parse error as a parse error: `go mod
+          # edit -json` writes its diagnosis to stderr and nothing to stdout,
+          # so reading its output inside a later test would report a malformed
+          # go.mod as whatever that test is about.
+          if ! parsed=$(go mod edit -json "$mod"); then
+            echo "::error::$mod could not be parsed by \`go mod edit -json\` (output above)."
+            exit 1
+          fi
+          if [ -z "$parsed" ]; then
+            echo "::error::\`go mod edit -json $mod\` produced no output, so nothing below would be checked."
             exit 1
           fi
 
-          requires=$(go mod edit -json "$mod" \
+          # `go install pkg@version` refuses a module carrying ANY replace, so
+          # the release must never publish one. test/modgraph holds the same
+          # line on every commit; this is the last gate before it ships.
+          if [ "$(printf '%s' "$parsed" | jq '.Replace | length')" != "0" ]; then
+            echo "::error::$mod carries replace directives, which break go install for every adopter:"
+            printf '%s' "$parsed" | jq -r '.Replace[] | "  \(.Old.Path) => \(.New.Path)"'
+            exit 1
+          fi
+
+          requires=$(printf '%s' "$parsed" \
             | jq -r '.Require[]? | select(.Path == "github.com/NightWatchEng/shortfall" or (.Path | startswith("github.com/NightWatchEng/shortfall/"))) | "\(.Path) \(.Version)"')
           if [ -z "$requires" ]; then
             echo "::error::no first-party requires found in $mod. The CLI depends on the core and two query adapters, so zero means this guard read the wrong thing."
@@ -93,8 +106,10 @@ jobs:
           # must already exist and be reachable from here — wave 1 for the
           # core, wave 2 for each adapter. Checking only the root tag would
           # let a skipped wave 2 through to an opaque goreleaser failure.
-          # A herestring, not a pipe: a `while read` in a pipeline runs in a
-          # subshell, where `exit 1` ends the subshell and the step passes.
+          # A herestring, not a pipe: `exit 1` inside a piped `while read`
+          # ends only the subshell. `set -e` would still fail the step here,
+          # but on the pipeline's status rather than at the line that decided,
+          # and the loop's later iterations would run first.
           while IFS=' ' read -r path got; do
             if [ "$got" != "$version" ]; then
               echo "::error::$mod requires $path at $got, not $version — the CLI would ship under $version built against $got."
@@ -116,10 +131,21 @@ jobs:
           done <<< "$requires"
 
           echo "GORELEASER_CURRENT_TAG=$version" >> "$GITHUB_ENV"
+      # `--skip=validate` drops two goreleaser checks, and both are replaced
+      # rather than dropped. It requires GORELEASER_CURRENT_TAG to name a tag
+      # at HEAD (`git describe --exact-match`), which this release shape makes
+      # impossible: the root tag is on the earlier commit by construction, so
+      # that check cannot pass on a correct release. It also refuses a dirty
+      # tree — asserted below instead, since a fresh checkout is the only way
+      # this job runs. Everything else the step above checks (no replaces,
+      # every first-party require naming this version, every wave's tag
+      # present and reachable) is strictly more than goreleaser validates.
+      - name: the checkout is clean
+        run: git diff --quiet && git diff --cached --quiet
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
         with:
           version: v2.18.0
-          args: release --clean
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

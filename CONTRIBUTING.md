@@ -162,25 +162,36 @@ So a release is three ordered waves, and the order is load-bearing: each
 wave's tags must exist on the remote before the next wave's `go.mod` can
 resolve them.
 
-**Two commits, not one, and the order below is the whole reason.** Every
-first-party require in the tree names one version (`test/modgraph` fails the
-core test step otherwise), so a release starts by bumping all of them — the
-fourteen adapters, the three `test/` modules that import first-party code,
-and `cmd/shortfall` — in a merged commit. For every module but
-`cmd/shortfall` that is the end of it: a local `replace` means the version is
-never resolved and no `go.sum` entry exists to update.
+**Two commits, and the requires bump splits between them.** Every module
+that carries a local `replace` can name the new version before it exists —
+the replace means the version is never resolved — so the seventeen of them
+(the fourteen adapters plus `test/docsnippets`, `test/loggolden` and
+`test/promgolden`) are bumped in the release commit, which is what keeps each
+one's published `go.mod` naming the release it ships in.
 
-`cmd/shortfall` is the exception, and it cannot be finished in that commit.
-It has no replace, so its `go.sum` needs the module hashes for the new
-version — and those cannot be computed before that version is tagged and
-fetchable. `go mod tidy` at this point fails with `unknown revision`, and
-there is no flag that invents the hash. So the bump commit lands with
-`go.mod` naming the new version and `go.sum` still on the old one, which
-`go.work` hides from every local and CI build. **It is waves 1-2 that make
-the tidy possible, and the tidied `go.sum` is its own commit, tagged as wave
-3.**
+`cmd/shortfall` cannot be bumped there, and the reason is worth stating
+because it is not obvious and it is not merely about `go.sum`. It has no
+replace, so a require it carries is really resolved — and a require naming a
+version that is not yet tagged does not just fail for that module. It fails
+the build of **every module in the workspace**, because `go.work` computes
+one module graph across all of them: `./scripts/ci-go.sh build` goes red for
+`biz`, `emit`, `registry` and the rest, on a commit that has not been tagged
+yet. Its `go.sum` has the same shape of problem — the hashes for a version
+cannot be computed before that version is fetchable, and `go mod tidy` says
+`unknown revision`.
+
+So `cmd/shortfall` keeps naming the PREVIOUS release until waves 1-2 make the
+new one resolvable, and is bumped and tidied in its own commit, which wave 3
+tags. `test/modgraph` therefore holds the tree-wide version-agreement check
+over every module except the install targets, and the release job is what
+closes the gap: it refuses to build unless every first-party require in
+`cmd/shortfall` names the version being released and each one's tag exists
+and is reachable.
 
 ```sh
+# 0. on the release commit: bump the seventeen replaced modules' first-party
+#    requires to v0.2.0 and merge. cmd/shortfall is NOT bumped here.
+
 # 1. the core module
 git tag v0.2.0 && git push origin v0.2.0
 
@@ -196,11 +207,15 @@ for m in adapters/export/cloudwatch adapters/export/gcp \
 done
 git push origin --tags
 
-# 3. the CLI. Its versions are only NOW resolvable, so tidy first — this
-#    writes the go.sum entries for the tags pushed in waves 1-2 — commit
-#    that, and tag the commit that carries it.
-(cd cmd/shortfall && GOWORK=off go mod tidy)
-git commit -am "chore: cmd/shortfall go.sum for v0.2.0" && git push
+# 3. the CLI. Only NOW can it name v0.2.0: bump its three first-party
+#    requires, tidy so go.sum gains the hashes for the tags just pushed,
+#    and tag the commit that carries both.
+(cd cmd/shortfall && GOWORK=off go mod edit \
+   -require=github.com/NightWatchEng/shortfall@v0.2.0 \
+   -require=github.com/NightWatchEng/shortfall/adapters/query/promql@v0.2.0 \
+   -require=github.com/NightWatchEng/shortfall/adapters/query/sql@v0.2.0 \
+ && GOWORK=off go mod tidy)
+git commit -am "chore: cmd/shortfall requires v0.2.0" && git push
 git tag cmd/shortfall/v0.2.0 && git push origin cmd/shortfall/v0.2.0
 ```
 
@@ -211,6 +226,13 @@ re-derives the version from the tag and refuses to continue unless
 `cmd/shortfall/go.mod` carries no `replace`, every first-party require names
 that version, and each one's tag exists and is reachable from the commit
 being built. Skip a wave and it says which.
+
+It runs goreleaser with `--skip=validate`, which is a consequence of this
+shape rather than a relaxation of it. That flag's two checks are that the
+named tag sits at `HEAD` and that the tree is clean; the first can never hold
+here, since the root tag is on the earlier commit by construction, and the
+second is asserted by the job instead. What the job checks in their place is
+strictly more than goreleaser ever did.
 
 **Then ask pkg.go.dev to index each path.** It does not reliably notice a
 new version on its own — after the v0.2.0 waves the site still served
@@ -353,7 +375,7 @@ Two things follow, and both are enforced rather than remembered:
 - **`cmd/shortfall` must never regain a `replace`.** One reinstated line
   breaks the install path for every adopter while `go.work` keeps every
   build here green. `test/modgraph` fails on it
-  (`TestInstallTargetsCarryNoFirstPartyReplace`); the inverse check still
+  (`TestInstallTargetsCarryNoReplaceAtAll`); the inverse check still
   holds for every other module, which is replaced locally as before.
 - **The release fires on the wave-3 tag**, not the root `v*` tag, because
   the CLI now builds against published modules and they must exist first.

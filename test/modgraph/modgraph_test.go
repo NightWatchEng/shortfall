@@ -250,8 +250,27 @@ func loadMods(t *testing.T) []Mod {
 	return mods
 }
 
+// TestEveryFirstPartyRequireNamesOneVersion holds across every module the
+// workspace resolves locally. InstallTargets are excluded, and the exclusion
+// is a consequence of having no replace rather than a convenience: such a
+// module cannot name a version before that version is tagged and fetchable —
+// pointing it at an unpublished one does not merely skew this check, it
+// fails the build of every module in the workspace — so within a release it
+// necessarily lags by one version until its own wave is cut. The release
+// job is where that lag is closed and checked: it refuses to build unless
+// every first-party require in the install target names the version being
+// released and each one's tag exists and is reachable. See CONTRIBUTING,
+// "Releases".
 func TestEveryFirstPartyRequireNamesOneVersion(t *testing.T) {
-	byPath := Versions(loadMods(t))
+	byPath := Versions(installTargetsExcluded(loadMods(t)))
+	// The exclusion above is the one way this check could come to examine
+	// nothing while still reporting green — every module named, and the loop
+	// below running zero times.
+	if len(byPath) == 0 {
+		t.Fatal("no first-party require left to compare after excluding InstallTargets; " +
+			"this check would pass having examined nothing")
+	}
+
 	for _, path := range sortedKeys(byPath) {
 		t.Run(path, func(t *testing.T) {
 			versions := byPath[path]
@@ -423,6 +442,19 @@ func TestTrackedModFilesExplainsAGitFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+// installTargetsExcluded drops the modules held to the no-replace rule, whose
+// requires are judged by the release job rather than by tree-wide agreement.
+func installTargetsExcluded(mods []Mod) []Mod {
+	kept := make([]Mod, 0, len(mods))
+	for _, m := range mods {
+		if !InstallTargets[m.File] {
+			kept = append(kept, m)
+		}
+	}
+
+	return kept
 }
 
 func sortedKeys[V any](m map[string]V) []string {
