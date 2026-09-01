@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "911f3fa402a9c15988b0e26e6189a7f2130a9b52",
+  "base_sha": "5a4646db96ed178e92c0378541f3186b075a3d36",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-01T18:30:38+00:00",
+  "range_patch_ids": [
+    "a0c7bdb116e016e45e9a9b2f4aa44f6342bc14e6"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (combined finder+verifier, per the trivial-diff clause: 17 files, 20 mechanical version lines)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same subagent, instructed to refute each candidate before reporting; five candidates raised and all five refuted"
+    }
+  ],
+  "records": []
+}
