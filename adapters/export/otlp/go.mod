@@ -3,7 +3,7 @@ module github.com/NightWatchEng/shortfall/adapters/export/otlp
 go 1.25.0
 
 require (
-	github.com/NightWatchEng/shortfall v0.2.0
+	github.com/NightWatchEng/shortfall v0.3.0
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0
