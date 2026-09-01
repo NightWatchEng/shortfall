@@ -1,4 +1,20 @@
-# Release: goreleaser ships cmd/shortfall binaries on v* tags.
+# Release: goreleaser ships cmd/shortfall binaries, triggered by the WAVE-3
+# tag (`cmd/shortfall/v*`), not the root `v*` tag.
+#
+# The trigger is the wave-3 tag because cmd/shortfall carries no `replace`
+# directives — that is what makes `go install .../cmd/shortfall@version`
+# work (workspace-47f) — so its build resolves the core and the two query
+# adapters from published tags, exactly as an adopter does. Firing on the
+# root `v*` tag would build the CLI before waves 2 and 3 exist, against the
+# PREVIOUS release's library, and ship it under the new version's name.
+# Waves are documented in CONTRIBUTING, "Releases"; all three are tagged on
+# one commit, so the root tag is at HEAD here and names the version.
+#
+# goreleaser cannot read a slash-prefixed tag as semver, and `monorepo:
+# tag_prefix` is a Pro-only field the pinned OSS build rejects, so the
+# version is handed over explicitly as GORELEASER_CURRENT_TAG — the root
+# tag, which is also where the GitHub release and its assets land.
+#
 # Dry-run: workflow_dispatch runs a snapshot build (no tag, no publish) —
 # the release-tooling acceptance evidence and a rehearsal before any tag.
 # Library consumers are unaffected: modules are consumed by git tag via
@@ -10,7 +26,7 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["cmd/shortfall/v*"]
   workflow_dispatch: {}   # snapshot dry-run
 
 permissions:
@@ -30,6 +46,49 @@ jobs:
         with:
           go-version: stable
           cache: true
+      # Fail here, with a sentence, rather than shipping a wrong binary or
+      # letting goreleaser fail three steps later on a tag it cannot explain.
+      # Every check below is fatal: `set -euo pipefail`, and each comparison
+      # exits non-zero on mismatch, so no branch of this step can pass by
+      # having found nothing.
+      - name: the release names one version, and the CLI requires it
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#cmd/shortfall/}"
+          echo "wave-3 tag $TAG -> version $version"
+
+          # Wave 1 must have run, and on this commit — that is the whole
+          # ordering guarantee, and goreleaser's own validation would report
+          # it far less legibly.
+          if ! git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+            echo "::error::root tag $version does not exist. Tag waves 1-3 on one commit before pushing $TAG (CONTRIBUTING, Releases)."
+            exit 1
+          fi
+          if [ "$(git rev-parse "refs/tags/$version^{commit}")" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::root tag $version is not on this commit, so the CLI would ship under a version whose library tree is different."
+            exit 1
+          fi
+
+          # The dangerous failure this guard exists for: cmd/shortfall has no
+          # replaces, so a stale require silently builds the new CLI against
+          # the OLD library and the binary is wrong in a way nothing else
+          # notices. test/modgraph proves the requires agree tree-wide; only
+          # here is the release's own version known.
+          # Both require forms, and a trailing `// indirect` comment, must
+          # be read — an anchored pattern that quietly matches neither is
+          # how a guard reports green over the case it was written for.
+          first_party='(^|[[:space:]])github\.com/NightWatchEng/shortfall(/[^[:space:]]+)?[[:space:]]+v[0-9]'
+          stale=$(grep -E "$first_party" cmd/shortfall/go.mod \
+                  | grep -vE "[[:space:]]${version}([[:space:]]|$)" || true)
+          if [ -n "$stale" ]; then
+            echo "::error::cmd/shortfall/go.mod requires a first-party module at a version other than $version:"
+            echo "$stale"
+            exit 1
+          fi
+
+          echo "GORELEASER_CURRENT_TAG=$version" >> "$GITHUB_ENV"
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
         with:
           version: v2.18.0

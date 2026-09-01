@@ -133,11 +133,19 @@ only the backend you use:
 go get github.com/NightWatchEng/shortfall/adapters/export/prometheus
 ```
 
-**The CLI is a separate question.** `cmd/shortfall` is its own module and
-carries `replace` directives, which `go install pkg@version` refuses
-outright — so no `go install` form produces the `shortfall` binary used
-below. It ships as a **release archive** attached to every `v*` tag, and from
-a clone it runs as `go run ./cmd/shortfall`. See CONTRIBUTING, "Releases".
+**The CLI installs from v0.3.0 on.** `cmd/shortfall` is its own module, and
+it carries no `replace` directives so that `go install` accepts it:
+
+```sh
+go install github.com/NightWatchEng/shortfall/cmd/shortfall@latest
+```
+
+That path lands with v0.3.0. The published v0.2.0 predates the change and
+still carries the replaces, which `go install pkg@version` refuses outright,
+so `@v0.2.0` fails and `@latest` will keep failing until v0.3.0 is tagged.
+Until then — and afterwards, if you would rather not build — the CLI also
+ships as a **release archive** with checksums, and from a clone it runs as
+`go run ./cmd/shortfall`. See CONTRIBUTING, "Releases".
 
 The core module pulls `otel` and `yaml.v3` and nothing else, so a Prometheus
 shop never compiles the AWS SDK and nobody compiles stripe-go by accident.

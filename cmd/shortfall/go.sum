@@ -1,3 +1,9 @@
+github.com/NightWatchEng/shortfall v0.2.0 h1:4IzAAnRgm8pVFpDMntW15BHxhka+ZcjF8nrXI0Hwx88=
+github.com/NightWatchEng/shortfall v0.2.0/go.mod h1:u+YclkiF99xLrjJ10DenrW8pjq3pniiR5V42szriJpc=
+github.com/NightWatchEng/shortfall/adapters/query/promql v0.2.0 h1:HxWzcTvHIj51ogxJevK2vxb3IpemhQVHqb4xBIMTLas=
+github.com/NightWatchEng/shortfall/adapters/query/promql v0.2.0/go.mod h1:CVZgACXxhp44L5TEyB72QWRZbKqcqZb3BhJaUtPiZik=
+github.com/NightWatchEng/shortfall/adapters/query/sql v0.2.0 h1:qyBKsZh8Z7GsK90DjyfakYYzss6Mk0GaI2NduvFtgNg=
+github.com/NightWatchEng/shortfall/adapters/query/sql v0.2.0/go.mod h1:6GLzTDspk1JngLJGmSjy1MTOuRQ9B4ls192jaO9mqi8=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
@@ -29,7 +35,9 @@ go.opentelemetry.io/otel/trace v1.46.0/go.mod h1:J7GAXweO77XSFkB/rmAqk9D6ihszhFj
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
 golang.org/x/mod v0.38.0 h1:MECBjubtXD7yj4HrhIUcywNaGeNVUdfVnxmPajOk4yk=
+golang.org/x/mod v0.38.0/go.mod h1:V6Xz0pq8TQ3dGqVQ1FVHuelZpAL0uNhSkk9ogYP3c40=
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=
+golang.org/x/sync v0.22.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
 golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/tools v0.48.0 h1:3+hClM1aLL5mjMKm5ovokw9epgRXPuu2tILgismM6RE=

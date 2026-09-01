@@ -23,11 +23,20 @@
 //   - a require naming a version that was never tagged (v0.0.0),
 //   - the same module required at different versions by different modules,
 //     and
-//   - a first-party require with no local replace.
+//   - a first-party require with no local replace, in a module that is
+//     supposed to carry one.
 //
 // The first two are invisible because a local replace makes the require
 // version dead weight for every build that runs here; the third because
 // go.work's `use` list supplies the module regardless.
+//
+// That third check is not universal, and the exception runs the other way.
+// `go install pkg@version` refuses any module whose go.mod carries replace
+// directives at all — benign ones included — so a module meant to be
+// installed that way must carry none. For those (InstallTargets) the
+// requirement inverts: a first-party replace is the defect, because it
+// breaks `go install` for everyone while go.work keeps every build here
+// green. Both directions are checked; neither module is simply exempt.
 //
 // A checker for that bug class has one failure mode worse than not
 // existing: understanding a go.mod less than it thinks it does, and
@@ -60,6 +69,23 @@ import (
 // ModulePrefix is this repository's module path. A require or replace whose
 // path is this, or is under it, is first-party and subject to these checks.
 const ModulePrefix = "github.com/NightWatchEng/shortfall"
+
+// InstallTargets names the go.mod files of modules published for
+// `go install pkg@version`, keyed by repo-relative path. That command
+// rejects any module whose go.mod carries a replace directive — "it must
+// not contain directives that would cause it to be interpreted differently
+// than if it were the main module" (`go help install`), enforced
+// unconditionally — so these modules resolve their first-party
+// dependencies through published tags, not relative paths, and the release
+// build reaches them the same way an adopter does.
+//
+// Adding a module here is a release-pipeline decision, not a convenience:
+// its dependencies must already be tagged and published when it is built,
+// which is why the release fires on `cmd/shortfall/v*` (wave 3) rather than
+// the root `v*` tag (wave 1). See CONTRIBUTING, "Releases".
+var InstallTargets = map[string]bool{
+	"cmd/shortfall/go.mod": true,
+}
 
 // Mod is one go.mod's first-party edges.
 type Mod struct {

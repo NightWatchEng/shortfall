@@ -268,16 +268,26 @@ func TestNoFirstPartyRequireNamesAPlaceholderVersion(t *testing.T) {
 	}
 }
 
-// TestEveryFirstPartyRequireIsReplacedLocally is a deliberate ratchet on the
-// CURRENT posture, not a permanent law of the repository. While no
-// first-party version is published, a require without a local replace cannot
-// resolve outside the workspace — goreleaser builds with GOWORK=off. Once the
-// tag waves in CONTRIBUTING have run, dropping a replace becomes the correct
-// move rather than a defect (it is the tracked path to a working `go
-// install`), and this test is expected to be revisited in that change rather
-// than to keep enforcing a posture that has ended.
+// TestEveryFirstPartyRequireIsReplacedLocally holds for every module that is
+// consumed as a library: a require without a local replace could not resolve
+// outside the workspace while nothing was published, and goreleaser builds
+// with GOWORK=off.
+//
+// This was written as a ratchet on a posture that has since ended — the tag
+// waves in CONTRIBUTING have run and every module resolves from the proxy —
+// so it no longer applies to the whole tree. It applies to everything except
+// InstallTargets, which are held to the opposite rule by the test below
+// (workspace-47f). The check is narrowed rather than deleted because the
+// reason it exists is unchanged for the fourteen adapter modules and the
+// test harnesses: they are never `go install`ed, they gain nothing from
+// dropping a replace, and a require that quietly stops resolving is still
+// invisible to every build that runs here.
 func TestEveryFirstPartyRequireIsReplacedLocally(t *testing.T) {
 	for _, m := range loadMods(t) {
+		if InstallTargets[m.File] {
+			continue
+		}
+
 		for _, path := range sortedKeys(m.Requires) {
 			t.Run(m.File+" "+path, func(t *testing.T) {
 				target, ok := m.Replaces[path]
@@ -295,6 +305,62 @@ func TestEveryFirstPartyRequireIsReplacedLocally(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestInstallTargetsCarryNoFirstPartyReplace is the inverse of the check
+// above, and it is the whole reason `go install` works at all: `go install
+// pkg@version` refuses a module whose go.mod carries ANY replace directive,
+// benign ones included, and it refuses before it resolves anything — so one
+// reinstated `replace ... => ../..` breaks the documented install path for
+// every adopter.
+//
+// Nothing else in the suite can see that. go.work's `use` list supplies the
+// modules regardless, so fmt, vet, build, test, vuln and lint all stay green
+// with the replace present; that is exactly how the broken install path
+// survived from before v0.1.0 until workspace-47f. The failure surfaces only
+// outside the workspace, in a command this repository does not run.
+//
+// The check is on first-party replaces specifically because those are the
+// ones a contributor reaches for by reflex when a local build will not
+// resolve. A third-party replace would break `go install` too and is
+// reported the same way, since ParseMod records only first-party edges and a
+// third-party one would arrive here as neither — see the guard below.
+func TestInstallTargetsCarryNoFirstPartyReplace(t *testing.T) {
+	mods := loadMods(t)
+
+	seen := 0
+	for _, m := range mods {
+		if !InstallTargets[m.File] {
+			continue
+		}
+
+		seen++
+
+		t.Run(m.File, func(t *testing.T) {
+			if len(m.Replaces) == 0 {
+				return
+			}
+
+			var detail []string
+			for _, path := range sortedKeys(m.Replaces) {
+				detail = append(detail, path+" => "+m.Replaces[path])
+			}
+
+			t.Fatalf("%s is published for `go install` but carries %d first-party replace(s): %s. "+
+				"`go install pkg@version` refuses any module with a replace directive, so this "+
+				"breaks the documented install path for every adopter while go.work keeps every "+
+				"build here green. Require the published versions instead",
+				m.File, len(m.Replaces), strings.Join(detail, "; "))
+		})
+	}
+
+	// A typo in InstallTargets, or a module that moved, would otherwise make
+	// this test pass having checked nothing at all — the same vacuous-green
+	// this package exists to refuse.
+	if seen != len(InstallTargets) {
+		t.Fatalf("matched %d of %d InstallTargets against the tracked go.mod files; "+
+			"every entry must name a real one, or this test verifies nothing", seen, len(InstallTargets))
 	}
 }
 

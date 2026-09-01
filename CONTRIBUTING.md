@@ -136,12 +136,16 @@ git config core.hooksPath .githooks
 
 ## Releases
 
-Tags drive everything. `v*` tags trigger the `release` workflow: goreleaser
-builds `cmd/shortfall` binaries (linux/darwin × amd64/arm64) with checksums
-and a changelog, attached to the GitHub release. A tag with a semver
-pre-release suffix (`v0.3.0-rc1`) is marked pre-release; a plain `v0.x.y`
-publishes as a normal release — v0.x instability is the README's semver
-policy, not a release flag. Library consumers just `go get` the tag.
+Tags drive everything. The `cmd/shortfall/v*` tag — the LAST of the three
+waves below, not the root `v*` tag — triggers the `release` workflow:
+goreleaser builds `cmd/shortfall` binaries (linux/darwin × amd64/arm64) with
+checksums and a changelog, attached to the GitHub release for the root tag.
+It fires last because the CLI carries no `replace` directives and so builds
+against the published core and adapter modules, which have to exist first.
+A tag with a semver pre-release suffix (`v0.3.0-rc1`) is marked pre-release;
+a plain `v0.x.y` publishes as a normal release — v0.x instability is the
+README's semver policy, not a release flag. Library consumers just `go get`
+the tag.
 Dry-run rehearsal: run the `release` workflow manually (workflow_dispatch)
 — it builds a snapshot and uploads `dist/` as an artifact without tagging
 or publishing.
@@ -157,6 +161,14 @@ publishes nothing under `adapters/`.
 So a release is three ordered waves, and the order is load-bearing: each
 wave's tags must exist on the remote before the next wave's `go.mod` can
 resolve them.
+
+**Bump `cmd/shortfall/go.mod` first, in a merged commit, before any tag.**
+It requires the core and the two query adapters by published version and
+replaces nothing, so those three requires must already name the version you
+are about to tag. All three waves then tag that one commit — the root tag
+and the CLI tag point at the same tree, which is what lets the release name
+one version honestly. The release job refuses to build if the root tag is
+missing, sits on another commit, or disagrees with those requires.
 
 ```sh
 # 1. the core module
@@ -174,8 +186,29 @@ for m in adapters/export/cloudwatch adapters/export/gcp \
 done
 git push origin --tags
 
-# 3. the CLI, which requires the promql and sql tags from wave 2
+# 3. the CLI, which requires the promql and sql tags from wave 2.
+#    This push is also what triggers the `release` workflow: goreleaser
+#    builds cmd/shortfall with GOWORK=off against the tags from waves 1-2,
+#    and publishes the archives onto the root tag's release.
 git tag cmd/shortfall/v0.2.0 && git push origin cmd/shortfall/v0.2.0
+```
+
+**Then ask pkg.go.dev to index each path.** It does not reliably notice a
+new version on its own — after the v0.2.0 waves the site still served
+v0.1.0 fourteen hours later, and `@v0.2.0` returned 404 for every path but
+one (workspace-isc). The proxy was correct throughout; only the display was
+behind. One POST per module path fixes it:
+
+```sh
+for m in "" /cmd/shortfall /adapters/export/cloudwatch /adapters/export/gcp \
+         /adapters/export/otlp /adapters/export/prometheus \
+         /adapters/incident/firehydrant /adapters/incident/incidentio \
+         /adapters/incident/pagerduty /adapters/incident/rootly \
+         /adapters/incident/slack /adapters/payment/stripe \
+         /adapters/query/cwinsights /adapters/query/gcplogging \
+         /adapters/query/promql /adapters/query/sql; do
+  curl -sS -X POST "https://pkg.go.dev/fetch/github.com/NightWatchEng/shortfall${m}@v0.2.0" >/dev/null
+done
 ```
 
 **Then bump the quickstart's download URL.** `docs/quickstart.md` step 2
@@ -189,21 +222,26 @@ release.
 Modules under `test/` are internal harnesses that nothing imports from
 outside this repository; they are deliberately never tagged.
 
-**The `replace` directives are not a substitute.** Every nested module that
-depends on a first-party module replaces it with a relative path to the
-repository root: the fourteen under `adapters/<kind>/<name>/` with `../../..`,
-and `cmd/shortfall`, `test/docsnippets`, `test/loggolden` and
-`test/promgolden`, one level shallower, with `../..`. Three of them replace
-sibling adapters too: `cmd/shortfall` two (promql, sql), `test/loggolden` two
-(cloudwatch, cwinsights), `test/promgolden` one (promql). (The remaining
-`test/` modules — `blankline`, `licensehdr`, `modgraph`, `symbolcheck`,
-`wikisync` — are standalone checkers importing nothing first-party, so they
-carry neither.)
+**The `replace` directives are not a substitute.** Every nested module
+consumed as a library replaces its first-party dependencies with a relative
+path to the repository root: the fourteen under `adapters/<kind>/<name>/`
+with `../../..`, and `test/docsnippets`, `test/loggolden` and
+`test/promgolden`, one level shallower, with `../..`. Two of them replace
+sibling adapters too: `test/loggolden` two (cloudwatch, cwinsights),
+`test/promgolden` one (promql). (The remaining `test/` modules —
+`blankline`, `licensehdr`, `modgraph`, `symbolcheck`, `wikisync` — are
+standalone checkers importing nothing first-party, so they carry neither.)
+
+`cmd/shortfall` is the one exception, and it runs the other way: it carries
+no replace at all, because `go install` refuses a module that has one. It
+requires the core, promql and sql at their published versions and resolves
+them from the proxy like any adopter.
 
 `test/modgraph` is what keeps this paragraph from being the only thing
 holding the invariant: it fails the core test step when first-party requires
-disagree about a version, name one that was never tagged, or lack the local
-replace that makes them resolvable here. A `replace` in a
+disagree about a version, name one that was never tagged, lack the local
+replace that makes them resolvable here, or — for `cmd/shortfall` — carry
+one. A `replace` in a
 *dependency's* `go.mod` is ignored by whoever consumes it, so those lines
 make the require versions invisible to us while leaving them fully
 load-bearing for an adopter. That is exactly how `cmd/shortfall` shipped
@@ -251,21 +289,52 @@ The import is the point — `go build ./...` in a module with no `.go` files
 matches no packages and exits 0, which would make this block look like a
 compile check while compiling nothing.
 
-**`go install` of the CLI is deliberately not on that list.** `go install
-pkg@version` refuses any module whose `go.mod` carries `replace` directives
-— "it must not contain directives that would cause it to be interpreted
-differently than if it were the main module" (`go help install`), enforced
-unconditionally, benign replaces included. `cmd/shortfall/go.mod` carries
-three, and they are what resolves the release build: goreleaser builds that
-module with `GOWORK=off` and no `GOPRIVATE`, so without them the build has
-no way to reach the core and sibling-adapter modules at all.
+The CLI has its own leg, and from v0.3.0 on it is the one an adopter reaches
+for first:
 
-So the CLI ships as **release binaries** — the `release` workflow attaches
-linux/darwin × amd64/arm64 archives with checksums to every `v*` tag — and
-from a clone it runs as `go run ./cmd/shortfall`. Making `go install` work
-means dropping those three replaces and giving the release build another way
-to resolve the graph; that is a real change to the release pipeline, and it
-is tracked as its own item rather than assumed.
+```sh
+cd "$(mktemp -d)"
+GOWORK=off GOFLAGS= go install github.com/NightWatchEng/shortfall/cmd/shortfall@v0.3.0
+shortfall --help    # from GOBIN; the archive is no longer the only way in
+```
+
+Run it from an empty directory with the flags cleared. Inside the workspace,
+or with a stray `GOFLAGS`, you are testing something else — a `replace` that
+would break this for every adopter resolves perfectly well from here.
+
+**`go install` of the CLI is on that list from v0.3.0 on**, and the reason
+it took a decision is worth keeping. `go install pkg@version` refuses any
+module whose `go.mod` carries `replace` directives — "it must not contain
+directives that would cause it to be interpreted differently than if it were
+the main module" (`go help install`), enforced unconditionally, benign
+replaces included. `cmd/shortfall/go.mod` carried three, and while nothing
+was published they were also the only thing resolving the release build:
+goreleaser builds that module with `GOWORK=off` and no `GOPRIVATE`, so
+without them the build could not reach the core and sibling-adapter modules
+at all.
+
+Publishing the tag waves ended that. `cmd/shortfall` now requires the core
+and the two query adapters at their published versions and replaces
+nothing, so `go install
+github.com/NightWatchEng/shortfall/cmd/shortfall@latest` works and the
+release build resolves the graph the same way an adopter does
+(workspace-47f). The published v0.2.0 still carries the replaces and always
+will — a published `go.mod` is immutable — so `@v0.2.0` fails; the working
+install path starts at v0.3.0.
+
+Two things follow, and both are enforced rather than remembered:
+
+- **`cmd/shortfall` must never regain a `replace`.** One reinstated line
+  breaks the install path for every adopter while `go.work` keeps every
+  build here green. `test/modgraph` fails on it
+  (`TestInstallTargetsCarryNoFirstPartyReplace`); the inverse check still
+  holds for every other module, which is replaced locally as before.
+- **The release fires on the wave-3 tag**, not the root `v*` tag, because
+  the CLI now builds against published modules and they must exist first.
+
+The CLI also still ships as **release binaries** — linux/darwin ×
+amd64/arm64 archives with checksums — and from a clone it runs as `go run
+./cmd/shortfall`.
 
 ## Code style
 
