@@ -221,8 +221,9 @@ git push origin --tags
 git tag cmd/shortfall/v0.3.0 && git push origin cmd/shortfall/v0.3.0
 ```
 
-Both commits go through a PR. The wave-3 one is a two-line `go.mod`/`go.sum`
-change whose title needs the usual tracked-item id, e.g.
+Both commits go through a PR. The wave-3 one changes only
+`cmd/shortfall`'s `go.mod` and `go.sum`, and its title needs the usual
+tracked-item id, e.g.
 `chore: cmd/shortfall requires v0.3.0 (no-bead: release step)`.
 
 Wave 3 is what triggers the `release` workflow: goreleaser builds
@@ -356,6 +357,7 @@ for first:
 cd "$(mktemp -d)"
 GOWORK=off GOFLAGS= go install github.com/NightWatchEng/shortfall/cmd/shortfall@v0.3.0
 shortfall --help    # from GOBIN; the archive is no longer the only way in
+# substitute the version you just tagged
 ```
 
 Run it from an empty directory with the flags cleared. Inside the workspace,
@@ -373,15 +375,13 @@ goreleaser builds that module with `GOWORK=off` and no `GOPRIVATE`, so
 without them the build could not reach the core and sibling-adapter modules
 at all.
 
-Publishing the tag waves ended that. `cmd/shortfall` now requires the core
-and the two query adapters at their published versions and replaces
-nothing, so from v0.3.0 on `go install
-github.com/NightWatchEng/shortfall/cmd/shortfall@latest` will work and the
-release build resolves the graph the same way an adopter does
-(workspace-47f). It does not work yet: `@latest` resolves to the newest
-published `cmd/shortfall/v*` tag, which is v0.2.0, and that go.mod carries
-the replaces and always will — a published `go.mod` is immutable. The
-working install path starts at v0.3.0.
+Publishing the tag waves ended that. `cmd/shortfall` requires the core and
+the two query adapters at their published versions and replaces nothing, so
+`go install github.com/NightWatchEng/shortfall/cmd/shortfall@latest` works
+and the release build resolves the graph the same way an adopter does
+(workspace-47f). The install path starts at v0.3.0, shipped 2026-09-01:
+`@v0.2.0` and earlier carry the replaces and always will, because a
+published `go.mod` is immutable.
 
 Two things follow, and both are enforced rather than remembered:
 
