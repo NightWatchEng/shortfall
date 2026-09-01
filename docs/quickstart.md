@@ -11,36 +11,17 @@ stages, queues, propagation across services — is the
 
 ## 1. Install
 
-**While the repository is private, `go get` cannot resolve it** — the
-checksum database returns 404 for a private module. Clone it and point a
-`replace` at your checkout:
-
 ```sh
-git clone https://github.com/NightWatchEng/shortfall
 mkdir shortfall-demo && cd shortfall-demo && go mod init demo
 
-cat >> go.mod <<'EOF'
-
-replace github.com/NightWatchEng/shortfall => ../shortfall
-
-replace github.com/NightWatchEng/shortfall/adapters/export/prometheus => ../shortfall/adapters/export/prometheus
-EOF
-```
-
-A `replace` says *where* a module is, not that you want it. `go mod tidy`
-comes in step 4, once there is code importing them — run it now and it
-resolves nothing.
-
-The exporter is a separate module, so you pull only the backend you use —
-hence the second `replace`.
-
-Once the repository is public and carries a current tag, this step becomes
-the ordinary two lines, and the `replace` directives come out:
-
-```sh
 go get github.com/NightWatchEng/shortfall
 go get github.com/NightWatchEng/shortfall/adapters/export/prometheus
 ```
+
+Two modules, because the exporter is one: you pull only the backend you use,
+and a Prometheus shop never compiles the AWS SDK. Each adapter carries its own
+tag under its own path — `adapters/export/prometheus/v0.2.0`, not the root
+`v0.2.0` — which is why the second line resolves independently of the first.
 
 ## 2. Declare the flow
 
@@ -75,17 +56,23 @@ Unknown fields are rejected, so a typo fails rather than silently
 defaulting. Every field is in the [registry reference](registry.md).
 Check it before you run:
 
+That needs the CLI, which is **not** a `go install` away: `cmd/shortfall` is
+its own module and carries `replace` directives, which `go install
+pkg@version` refuses outright. Take the release archive for your platform
+instead — every `v*` tag carries one, with checksums:
+
 ```sh
-(cd ../shortfall && go run ./cmd/shortfall validate ../shortfall-demo/registry.yaml)
-# ../shortfall-demo/registry.yaml: ok — 1 flow(s), 2 segment(s)
+# pick your platform; darwin_arm64 shown
+curl -sSLO https://github.com/NightWatchEng/shortfall/releases/download/v0.2.0/shortfall_0.2.0_darwin_arm64.tar.gz
+tar xzf shortfall_0.2.0_darwin_arm64.tar.gz
+
+./shortfall validate registry.yaml
+# registry.yaml: ok — 1 flow(s), 2 segment(s)
 ```
 
-The `cd` is not incidental. `cmd/shortfall` is its own nested module, and
-the repo's `go.work` is what stitches the modules together — run it from
-the clone root or the CLI will not resolve. The `pkg@latest` form does not
-become available at the flip either: it refuses a module whose `go.mod`
-carries `replace` directives, and this one's does — see [Next](#next) for how
-to get a binary instead.
+Working from a clone instead? `go run ./cmd/shortfall validate …` from the
+repo root does the same thing — `go.work` is what stitches the nested modules
+together, so the repo root is where it resolves.
 
 ## 3. Instrument
 
@@ -229,23 +216,14 @@ sum by (flow, currency) (rate(biz_value_total{outcome="failed"}[5m])) * 60
 
 Getting the four-leg impact report out of these signals needs a query
 adapter pointed at wherever they land — the CLI reads Prometheus and SQL.
-Run it from the clone, as in step 2:
+Using the binary from step 2:
 
 ```sh
-(cd ../shortfall && go run ./cmd/shortfall impact \
-  --registry ../shortfall-demo/registry.yaml \
+./shortfall impact \
+  --registry registry.yaml \
   --from 2026-08-27T14:00:00Z --to 2026-08-27T15:00:00Z \
-  --flow invoice.pay --prometheus http://prometheus:9090)
+  --flow invoice.pay --prometheus http://prometheus:9090
 ```
-
-Running it from the clone is not a temporary workaround for the repository
-being private — `go install` cannot install this CLI at all. `go install
-pkg@version` refuses any module whose `go.mod` carries `replace` directives,
-and `cmd/shortfall`'s carries three (they are what resolves the release
-build). Once the repository is public, the way to get a `shortfall` binary
-on your PATH is the **release archive** for your platform, attached to every
-`v*` tag; from a clone, `go run ./cmd/shortfall` is the one line. See
-CONTRIBUTING, "Releases".
 
 Metrics alone ground the deferred and unrealized legs and a realized
 upper bound; the exact, de-duplicated realized figure and the customer

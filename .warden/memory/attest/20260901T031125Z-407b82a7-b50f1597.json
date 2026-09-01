@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "407b82a7dcc9633d2e65af43b139e63d4cbddf1a",
+  "base_sha": "d7dd046d239f97a7b7c258ab7bd372b26e35480f",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-01T03:11:25+00:00",
+  "range_patch_ids": [
+    "3dd5b0a274247794c0c0911b5e0a6b7bc1e091f6"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent, independent context"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent; every finding re-verified against the live public repo and the published tags before fixing"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-01T03:11:25+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "407b82a7dcc9633d2e65af43b139e63d4cbddf1a",
+      "base_sha": "d7dd046d239f97a7b7c258ab7bd372b26e35480f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 288,
+      "severity": "MEDIUM",
+      "finding": "The README still deferred pkg.go.dev to a flip that had already happened \u2014 'and pkg.go.dev once the repo is public' \u2014 in the very file this PR edits to retire such claims. It is also the README's only pkg.go.dev mention, so the checklist's new line about 'the README's pkg.go.dev locators' pointed at a private-era caveat rather than a locator.",
+      "evidence": "README.md:286-288 vs `gh api repos/NightWatchEng/shortfall --jq .private` -> false.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Replaced with an actual pkg.go.dev link.",
+      "id": "aaf7ddea6de9e3a5"
+    },
+    {
+      "ts": "2026-09-01T03:11:25+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "407b82a7dcc9633d2e65af43b139e63d4cbddf1a",
+      "base_sha": "d7dd046d239f97a7b7c258ab7bd372b26e35480f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 213,
+      "severity": "MEDIUM",
+      "finding": "CONTRIBUTING's release-verification step asserted in the present tense that the module is private and that the checksum database therefore 404s \u2014 describing a state that no longer exists, and framing as blocked the exact step the checklist now records as executed. I wrote this line in PR #121 and did not revisit it.",
+      "evidence": "CONTRIBUTING.md:212-215 vs a verified `go get` of core and adapter at v0.2.0 from an empty module with default GOPROXY/GOSUMDB.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Rewritten; the proxy negative-cache caution it now carries is the real hazard that replaced the imagined one.",
+      "id": "57cb4a3461f81f95"
+    },
+    {
+      "ts": "2026-09-01T03:11:25+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "407b82a7dcc9633d2e65af43b139e63d4cbddf1a",
+      "base_sha": "d7dd046d239f97a7b7c258ab7bd372b26e35480f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 374,
+      "severity": "MEDIUM",
+      "finding": "The stated reason GitHub Pages stays off was a private-repo reason ('unavailable or publicly served for a private repo'), so neither branch of the disjunction applies now \u2014 and the new checklist prose cross-references this exact section as the authority for the policy.",
+      "evidence": "CONTRIBUTING.md:373-375; docs/internal/go-public-checklist.md cross-references it for 'why'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Rationale restated on grounds that survive the flip: two generated doc sites competing is how one goes stale. The policy is unchanged.",
+      "id": "0a909786fb899eba"
+    },
+    {
+      "ts": "2026-09-01T03:11:25+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "407b82a7dcc9633d2e65af43b139e63d4cbddf1a",
+      "base_sha": "d7dd046d239f97a7b7c258ab7bd372b26e35480f",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "scope-misstatement"
+      ],
+      "dir_prefix": "docs/internal",
+      "file": "docs/internal/go-public-checklist.md",
+      "line": 36,
+      "severity": "MEDIUM",
+      "finding": "The checklist is a state-of-record document and its new paragraph made a completeness claim that was wrong: it enumerated where the private claims lived and omitted CONTRIBUTING, which still carried two. A reader auditing the flip against this record would conclude the sweep was finished. The same paragraph scolds an earlier revision for exactly this undercount.",
+      "evidence": "The paragraph's enumeration vs CONTRIBUTING.md:213 and :374 still live at the time.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Enumeration corrected, and the paragraph now records the method failure \u2014 one phrasing grepped instead of the concept \u2014 so the next sweep reads the lesson.",
+      "id": "432ae90637b4c950"
+    },
+    {
+      "ts": "2026-09-01T03:11:25+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "407b82a7dcc9633d2e65af43b139e63d4cbddf1a",
+      "base_sha": "d7dd046d239f97a7b7c258ab7bd372b26e35480f",
+      "rule_id": "unmapped:stale-private-assumption-in-live-config",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "graph.yaml",
+      "line": 42,
+      "severity": "LOW",
+      "finding": "graph.yaml declared a founder boundary the flip retired: 'repo stays private until the pilot exit criterion'. Tracked config, not historical evidence, and it is the file stating the authorities under which this review runs.",
+      "evidence": "graph.yaml:42; sibling boundaries on 40-41 remain accurate.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded to keep the authority it asserts (visibility is the founder's) and drop the spent condition. graph validate PASS.",
+      "id": "0d8c5f72946ef269"
+    },
+    {
+      "ts": "2026-09-01T03:11:25+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "407b82a7dcc9633d2e65af43b139e63d4cbddf1a",
+      "base_sha": "d7dd046d239f97a7b7c258ab7bd372b26e35480f",
+      "rule_id": "unmapped:version-pinned-doc-with-no-release-time-update-hook",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 66,
+      "severity": "LOW",
+      "finding": "The new CLI acquisition step hard-codes v0.2.0 into a download URL and filename, and nothing updates or checks them at the next release. goreleaser puts the version in the asset name so GitHub's releases/latest/download alias cannot absorb it, the stale URL keeps returning 200, and test/docsnippets ignores sh fences.",
+      "evidence": "docs/quickstart.md:65-67; .goreleaser.yaml name_template includes {{ .Version }}; no hits for 'releases/download' under test/, scripts/ or .github/workflows/.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Not currently false, so left in place; CONTRIBUTING's release procedure gains an explicit step to bump it, which is where a releaser will actually look.",
+      "id": "fe214c817c7d9cf7"
+    }
+  ]
+}

@@ -126,22 +126,21 @@ prejudged it.
 go get github.com/NightWatchEng/shortfall
 ```
 
-**Not yet:** the repository is private, so the checksum database cannot
-verify the module and `go get` fails. Until the flip, clone it and use a
-`replace` directive — the [quickstart](docs/quickstart.md) has the exact
-steps.
+Every adapter under `adapters/` is a separate module on its own tag, so pull
+only the backend you use:
+
+```sh
+go get github.com/NightWatchEng/shortfall/adapters/export/prometheus
+```
 
 **The CLI is a separate question.** `cmd/shortfall` is its own module and
 carries `replace` directives, which `go install pkg@version` refuses
 outright — so no `go install` form produces the `shortfall` binary used
-below, before or after the flip. It ships as a **release archive** attached
-to every `v*` tag, and from a clone it runs as `go run ./cmd/shortfall`. See
-CONTRIBUTING, "Releases".
+below. It ships as a **release archive** attached to every `v*` tag, and from
+a clone it runs as `go run ./cmd/shortfall`. See CONTRIBUTING, "Releases".
 
-The core module pulls `otel` and `yaml.v3` and nothing else. Every
-adapter under `adapters/` is a separate nested module, so a Prometheus
-shop never compiles the AWS SDK and nobody compiles stripe-go by
-accident.
+The core module pulls `otel` and `yaml.v3` and nothing else, so a Prometheus
+shop never compiles the AWS SDK and nobody compiles stripe-go by accident.
 
 ## Instrument
 
@@ -286,7 +285,8 @@ at their source of truth.
 - [Decision records](docs/adr/README.md) — one ADR per irreversible choice.
 
 API reference: `go doc`, plus the runnable examples in the `biz`, `emit`
-and `engine` packages — and pkg.go.dev once the repo is public.
+and `engine` packages, and
+[pkg.go.dev](https://pkg.go.dev/github.com/NightWatchEng/shortfall).
 
 ## Status
 

@@ -39,7 +39,7 @@ nodes:
     boundaries:
       - "merge EXECUTION delegated to the Claude session agent by explicit founder instruction (2026-08-27); revocable by removing this line"
       - "delegated merges only when verify, gate, and attestation are all green"
-      - "repo stays private until the pilot exit criterion; the public flip is the founder's alone"
+      - "repository visibility is the founder's alone; the public flip was made 2026-09-01"
 edges:
   - {from: builder, to: code-reviewer, payload: diff}
   - {from: code-reviewer, to: cross-examiner, payload: findings}
