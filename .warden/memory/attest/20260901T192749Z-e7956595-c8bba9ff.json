@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "e795659535fbff80d742f7e297d98fcce3743503",
+  "base_sha": "bde52d15629c00e8f6cd1d3165b193741a5e83be",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-01T19:27:49+00:00",
+  "range_patch_ids": [
+    "fe939e5db0294cbbbaa4d8db746834140fef9d5b"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (combined finder+verifier on a small but tag-bearing diff)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same subagent, instructed to refute each candidate; four candidates raised and refuted, one survived"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-01T19:27:49+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "e795659535fbff80d742f7e297d98fcce3743503",
+      "base_sha": "bde52d15629c00e8f6cd1d3165b193741a5e83be",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 62,
+      "severity": "MEDIUM",
+      "finding": "README.md:143-145 and docs/quickstart.md:59-67 state the install path as a condition that expires at the tag this commit receives ('until v0.3.0 is tagged, take the release archive'). Followed literally, the tracked step 8 ('bump the quickstart download URL') would leave that false condition sitting above a v0.3.0 URL, steering readers away from the one-command install this release delivers.",
+      "evidence": "docs/quickstart.md:59-67 'until v0.3.0 is tagged, take the release archive for your platform' above 'curl -sSLO .../releases/download/v0.2.0/shortfall_0.2.0_darwin_arm64.tar.gz'; README.md:145 '@latest will keep failing until v0.3.0 is tagged.'",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Parked on workspace-uxc, whose scope was widened in the tracker before this attestation to name README.md:143-145, docs/quickstart.md:59-67, docs/internal/go-public-checklist.md:33 and the CONTRIBUTING paragraph explicitly. It cannot be fixed in this PR: the v0.3.0 release archive does not exist until wave 3 fires the release workflow, so correcting the URL and the prose is necessarily a post-tag change. It is not a defect in the artifact being tagged \u2014 the reviewer's verdict on that was 'safe to tag'.",
+      "id": "bee49d41e77dbb80"
+    }
+  ]
+}
