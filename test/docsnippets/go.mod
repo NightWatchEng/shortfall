@@ -2,7 +2,7 @@ module github.com/NightWatchEng/shortfall/test/docsnippets
 
 go 1.25.0
 
-require github.com/NightWatchEng/shortfall v0.2.0
+require github.com/NightWatchEng/shortfall v0.3.0
 
 require (
 	github.com/kr/text v0.2.0 // indirect

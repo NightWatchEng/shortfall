@@ -3,9 +3,9 @@ module github.com/NightWatchEng/shortfall/test/loggolden
 go 1.25.0
 
 require (
-	github.com/NightWatchEng/shortfall v0.2.0
-	github.com/NightWatchEng/shortfall/adapters/export/cloudwatch v0.2.0
-	github.com/NightWatchEng/shortfall/adapters/query/cwinsights v0.2.0
+	github.com/NightWatchEng/shortfall v0.3.0
+	github.com/NightWatchEng/shortfall/adapters/export/cloudwatch v0.3.0
+	github.com/NightWatchEng/shortfall/adapters/query/cwinsights v0.3.0
 )
 
 require (
