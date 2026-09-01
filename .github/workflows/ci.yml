@@ -205,6 +205,21 @@ jobs:
       - run: ./scripts/commit-lint-test.sh
       - run: ./scripts/commit-lint.sh "$PR_TITLE"
 
+  release-guard:
+    name: release guard regression
+    # Not in the required set — the founder adds it in branch protection if
+    # it should block. It runs on every PR regardless, and a red run here
+    # means the check standing between a wave-3 tag and published binaries
+    # has stopped catching a shape it was written to catch.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: stable
+          cache: true
+      - run: ./scripts/release-guard-test.sh
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest

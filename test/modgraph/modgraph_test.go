@@ -354,6 +354,56 @@ func TestEveryFirstPartyRequireIsReplacedLocally(t *testing.T) {
 	}
 }
 
+// TestInstallTargetsExcludedDropsExactlyTheInstallTargets pins the helper
+// that narrows the version-agreement check. Nothing else would notice if it
+// returned its input unchanged: every module in the tree names one version
+// today, so the exclusion is unobservable there — and a helper that excluded
+// too much would empty the check just as quietly.
+func TestInstallTargetsExcludedDropsExactlyTheInstallTargets(t *testing.T) {
+	target := "cmd/shortfall/go.mod"
+	if !InstallTargets[target] {
+		t.Fatalf("%s is not an InstallTarget, so this test no longer exercises the exclusion", target)
+	}
+
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{
+			name: "an install target is dropped and its neighbours kept",
+			in:   []string{"adapters/query/sql/go.mod", target, "test/loggolden/go.mod"},
+			want: []string{"adapters/query/sql/go.mod", "test/loggolden/go.mod"},
+		},
+		{
+			name: "a tree with no install target is returned whole",
+			in:   []string{"adapters/query/sql/go.mod", "go.mod"},
+			want: []string{"adapters/query/sql/go.mod", "go.mod"},
+		},
+		{
+			name: "a tree of nothing but install targets empties, so the caller's floor fires",
+			in:   []string{target},
+			want: []string{},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mods := make([]Mod, 0, len(c.in))
+			for _, f := range c.in {
+				mods = append(mods, Mod{File: f})
+			}
+
+			var got []string
+			for _, m := range installTargetsExcluded(mods) {
+				got = append(got, m.File)
+			}
+
+			assertPaths(t, "kept", got, c.want)
+		})
+	}
+}
+
 // TestInstallTargetsCarryNoReplaceAtAll is the inverse of the check above,
 // and it is the whole reason `go install` works at all: `go install
 // pkg@version` refuses a module whose go.mod carries ANY replace directive,

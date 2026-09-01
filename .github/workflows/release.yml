@@ -50,98 +50,35 @@ jobs:
         with:
           go-version: stable
           cache: true
-      # Fail here, with a sentence, rather than shipping a wrong binary or
-      # letting goreleaser fail three steps later on a tag it cannot explain.
-      # The requires are read with `go mod edit -json`, not grepped: quoted
-      # module paths are legal go.mod grammar, and a pattern that silently
-      # matches none of them would report green over exactly the release this
-      # step exists to stop. A missing or unreadable go.mod is fatal for the
-      # same reason, and so is finding no first-party require at all.
+      # The guard lives in scripts/release-guard.sh, with its branches driven
+      # by scripts/release-guard-test.sh in CI. Inline shell in a workflow is
+      # shell nothing can test, and every branch below is a way to publish a
+      # binary whose library code is not the version on its label.
       - name: the release names one version, and every wave it needs is tagged
         env:
           TAG: ${{ github.ref_name }}
+        run: echo "GORELEASER_CURRENT_TAG=$(./scripts/release-guard.sh "$TAG")" >> "$GITHUB_ENV"
+
+      # `--skip=validate` is honoured in two of goreleaser's pipes, and all
+      # three checks it costs are made elsewhere rather than dropped. In the
+      # git pipe it drops `git describe --exact-match` — which cannot hold
+      # here, since the root tag is on the earlier commit by construction, and
+      # the guard checks that tag's existence and reachability instead — and
+      # CheckDirty, replaced by the step below. In the semver pipe it
+      # downgrades a non-semver version from fatal to a warning, leaving
+      # ctx.Semver zeroed and `prerelease: auto` silently inert; the guard
+      # rejects a non-semver version outright.
+      - name: the checkout is clean
+        # `git status --porcelain`, matching goreleaser's own CheckDirty:
+        # `git diff` alone would ignore untracked files.
         run: |
           set -euo pipefail
-          version="${TAG#cmd/shortfall/}"
-          if [ "$version" = "$TAG" ]; then
-            echo "::error::tag $TAG does not carry the cmd/shortfall/ prefix this job triggers on."
+          dirty=$(git status --porcelain)
+          if [ -n "$dirty" ]; then
+            echo "::error::the release checkout is dirty, so the artifacts would not match the tag:"
+            echo "$dirty"
             exit 1
           fi
-          echo "wave-3 tag $TAG -> version $version"
-
-          mod=cmd/shortfall/go.mod
-          test -f "$mod" || { echo "::error::$mod is missing — this guard would verify nothing."; exit 1; }
-
-          # Parse once, and fail on a parse error as a parse error: `go mod
-          # edit -json` writes its diagnosis to stderr and nothing to stdout,
-          # so reading its output inside a later test would report a malformed
-          # go.mod as whatever that test is about.
-          if ! parsed=$(go mod edit -json "$mod"); then
-            echo "::error::$mod could not be parsed by \`go mod edit -json\` (output above)."
-            exit 1
-          fi
-          if [ -z "$parsed" ]; then
-            echo "::error::\`go mod edit -json $mod\` produced no output, so nothing below would be checked."
-            exit 1
-          fi
-
-          # `go install pkg@version` refuses a module carrying ANY replace, so
-          # the release must never publish one. test/modgraph holds the same
-          # line on every commit; this is the last gate before it ships.
-          if [ "$(printf '%s' "$parsed" | jq '.Replace | length')" != "0" ]; then
-            echo "::error::$mod carries replace directives, which break go install for every adopter:"
-            printf '%s' "$parsed" | jq -r '.Replace[] | "  \(.Old.Path) => \(.New.Path)"'
-            exit 1
-          fi
-
-          requires=$(printf '%s' "$parsed" \
-            | jq -r '.Require[]? | select(.Path == "github.com/NightWatchEng/shortfall" or (.Path | startswith("github.com/NightWatchEng/shortfall/"))) | "\(.Path) \(.Version)"')
-          if [ -z "$requires" ]; then
-            echo "::error::no first-party requires found in $mod. The CLI depends on the core and two query adapters, so zero means this guard read the wrong thing."
-            exit 1
-          fi
-          echo "checking $(printf '%s\n' "$requires" | grep -c .) first-party require(s)"
-
-          # Each require must name THIS release, and the tag that publishes it
-          # must already exist and be reachable from here — wave 1 for the
-          # core, wave 2 for each adapter. Checking only the root tag would
-          # let a skipped wave 2 through to an opaque goreleaser failure.
-          # A herestring, not a pipe: `exit 1` inside a piped `while read`
-          # ends only the subshell. `set -e` would still fail the step here,
-          # but on the pipeline's status rather than at the line that decided,
-          # and the loop's later iterations would run first.
-          while IFS=' ' read -r path got; do
-            if [ "$got" != "$version" ]; then
-              echo "::error::$mod requires $path at $got, not $version — the CLI would ship under $version built against $got."
-              exit 1
-            fi
-
-            sub="${path#github.com/NightWatchEng/shortfall}"
-            sub="${sub#/}"
-            tag="${sub:+$sub/}$version"
-            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              echo "::error::tag $tag does not exist. Push the earlier tag waves before $TAG (CONTRIBUTING, Releases)."
-              exit 1
-            fi
-            if ! git merge-base --is-ancestor "refs/tags/$tag^{commit}" HEAD; then
-              echo "::error::tag $tag is not reachable from this commit, so it does not publish the tree being built."
-              exit 1
-            fi
-            echo "  ok $path $version (tag $tag)"
-          done <<< "$requires"
-
-          echo "GORELEASER_CURRENT_TAG=$version" >> "$GITHUB_ENV"
-      # `--skip=validate` drops two goreleaser checks, and both are replaced
-      # rather than dropped. It requires GORELEASER_CURRENT_TAG to name a tag
-      # at HEAD (`git describe --exact-match`), which this release shape makes
-      # impossible: the root tag is on the earlier commit by construction, so
-      # that check cannot pass on a correct release. It also refuses a dirty
-      # tree — asserted below instead, since a fresh checkout is the only way
-      # this job runs. Everything else the step above checks (no replaces,
-      # every first-party require naming this version, every wave's tag
-      # present and reachable) is strictly more than goreleaser validates.
-      - name: the checkout is clean
-        run: git diff --quiet && git diff --cached --quiet
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
         with:
           version: v2.18.0
@@ -162,6 +99,14 @@ jobs:
         with:
           go-version: stable
           cache: true
+      # Without this the snapshot rehearses the wrong thing: with no tag on
+      # HEAD goreleaser falls back to `git describe --tags`, which in this
+      # namespace returns a slash-prefixed ADAPTER tag — so the version, and
+      # the archive names built from it, come out as nested directories.
+      - name: name the snapshot after the root module's latest tag
+        run: |
+          set -euo pipefail
+          echo "GORELEASER_CURRENT_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo v0.0.0)" >> "$GITHUB_ENV"
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
         with:
           version: v2.18.0

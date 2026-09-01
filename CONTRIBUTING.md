@@ -190,10 +190,10 @@ and is reachable.
 
 ```sh
 # 0. on the release commit: bump the seventeen replaced modules' first-party
-#    requires to v0.2.0 and merge. cmd/shortfall is NOT bumped here.
+#    requires to v0.3.0 and merge. cmd/shortfall is NOT bumped here.
 
 # 1. the core module
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.0 && git push origin v0.3.0
 
 # 2. every shipped nested module, on its own path prefix
 for m in adapters/export/cloudwatch adapters/export/gcp \
@@ -203,21 +203,27 @@ for m in adapters/export/cloudwatch adapters/export/gcp \
          adapters/incident/slack adapters/payment/stripe \
          adapters/query/cwinsights adapters/query/gcplogging \
          adapters/query/promql adapters/query/sql; do
-  git tag "$m/v0.2.0"
+  git tag "$m/v0.3.0"
 done
 git push origin --tags
 
-# 3. the CLI. Only NOW can it name v0.2.0: bump its three first-party
+# 3. the CLI. Only NOW can it name v0.3.0: bump its three first-party
 #    requires, tidy so go.sum gains the hashes for the tags just pushed,
 #    and tag the commit that carries both.
 (cd cmd/shortfall && GOWORK=off go mod edit \
-   -require=github.com/NightWatchEng/shortfall@v0.2.0 \
-   -require=github.com/NightWatchEng/shortfall/adapters/query/promql@v0.2.0 \
-   -require=github.com/NightWatchEng/shortfall/adapters/query/sql@v0.2.0 \
+   -require=github.com/NightWatchEng/shortfall@v0.3.0 \
+   -require=github.com/NightWatchEng/shortfall/adapters/query/promql@v0.3.0 \
+   -require=github.com/NightWatchEng/shortfall/adapters/query/sql@v0.3.0 \
  && GOWORK=off go mod tidy)
-git commit -am "chore: cmd/shortfall requires v0.2.0" && git push
-git tag cmd/shortfall/v0.2.0 && git push origin cmd/shortfall/v0.2.0
+# ...then open it as a PR like any other change — `main` is protected and
+# enforce_admins is on, so this commit merges, it does not get pushed —
+# and tag the merge commit:
+git tag cmd/shortfall/v0.3.0 && git push origin cmd/shortfall/v0.3.0
 ```
+
+Both commits go through a PR. The wave-3 one is a two-line `go.mod`/`go.sum`
+change whose title needs the usual tracked-item id, e.g.
+`chore: cmd/shortfall requires v0.3.0 (no-bead: release step)`.
 
 Wave 3 is what triggers the `release` workflow: goreleaser builds
 `cmd/shortfall` with `GOWORK=off` against the tags from waves 1-2 and
@@ -228,11 +234,18 @@ that version, and each one's tag exists and is reachable from the commit
 being built. Skip a wave and it says which.
 
 It runs goreleaser with `--skip=validate`, which is a consequence of this
-shape rather than a relaxation of it. That flag's two checks are that the
-named tag sits at `HEAD` and that the tree is clean; the first can never hold
-here, since the root tag is on the earlier commit by construction, and the
-second is asserted by the job instead. What the job checks in their place is
-strictly more than goreleaser ever did.
+shape rather than a relaxation of it. That flag costs three checks, and each
+is made elsewhere: the named tag sitting at `HEAD`, which can never hold here
+since the root tag is on the earlier commit by construction, and which the
+guard replaces with an existence-and-reachability check; a clean tree,
+asserted by the job with the same `git status --porcelain` goreleaser uses;
+and a semver version, which goreleaser downgrades to a warning under that
+flag — leaving `prerelease: auto` silently inert — and which the guard
+rejects outright.
+
+The guard is `scripts/release-guard.sh`, and every branch of it is driven by
+`scripts/release-guard-test.sh` in CI: a check that stands between a tag and
+published binaries should not be shell that nothing exercises.
 
 **Then ask pkg.go.dev to index each path.** It does not reliably notice a
 new version on its own — after the v0.2.0 waves the site still served
@@ -248,7 +261,7 @@ for m in "" /cmd/shortfall /adapters/export/cloudwatch /adapters/export/gcp \
          /adapters/incident/slack /adapters/payment/stripe \
          /adapters/query/cwinsights /adapters/query/gcplogging \
          /adapters/query/promql /adapters/query/sql; do
-  curl -fsS -X POST "https://pkg.go.dev/fetch/github.com/NightWatchEng/shortfall${m}@v0.2.0" \
+  curl -fsS -X POST "https://pkg.go.dev/fetch/github.com/NightWatchEng/shortfall${m}@v0.3.0" \
     >/dev/null && echo "indexed ${m:-/}" || echo "FAILED ${m:-/}"
 done
 ```
