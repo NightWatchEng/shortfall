@@ -57,7 +57,13 @@ jobs:
       - name: the release names one version, and every wave it needs is tagged
         env:
           TAG: ${{ github.ref_name }}
-        run: echo "GORELEASER_CURRENT_TAG=$(./scripts/release-guard.sh "$TAG")" >> "$GITHUB_ENV"
+        # Assign first, then echo. `echo "X=$(guard)"` exits 0 even when the
+        # guard exits 1 — the echo succeeded — so the whole check would be
+        # decorative. With `set -e` a failing assignment ends the step.
+        run: |
+          set -euo pipefail
+          version=$(./scripts/release-guard.sh "$TAG")
+          echo "GORELEASER_CURRENT_TAG=$version" >> "$GITHUB_ENV"
 
       # `--skip=validate` is honoured in two of goreleaser's pipes, and all
       # three checks it costs are made elsewhere rather than dropped. In the
