@@ -56,10 +56,11 @@ Unknown fields are rejected, so a typo fails rather than silently
 defaulting. Every field is in the [registry reference](registry.md).
 Check it before you run:
 
-That needs the CLI, which is **not** a `go install` away: `cmd/shortfall` is
-its own module and carries `replace` directives, which `go install
-pkg@version` refuses outright. Take the release archive for your platform
-instead — every `v*` tag carries one, with checksums:
+That needs the CLI. From v0.3.0 on it is one command — `go install
+github.com/NightWatchEng/shortfall/cmd/shortfall@latest` — but the published
+v0.2.0 still carries the `replace` directives that `go install pkg@version`
+refuses, so until v0.3.0 is tagged, take the release archive for your
+platform. Every release carries one, with checksums:
 
 ```sh
 # pick your platform; darwin_arm64 shown

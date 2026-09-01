@@ -1,4 +1,24 @@
-# Release: goreleaser ships cmd/shortfall binaries on v* tags.
+# Release: goreleaser ships cmd/shortfall binaries, triggered by the WAVE-3
+# tag (`cmd/shortfall/v*`), not the root `v*` tag.
+#
+# The trigger is the wave-3 tag because cmd/shortfall carries no `replace`
+# directives — that is what makes `go install .../cmd/shortfall@version`
+# work (workspace-47f) — so its build resolves the core and the two query
+# adapters from published tags, exactly as an adopter does. Firing on the
+# root `v*` tag would build the CLI before waves 2 and 3 exist, against the
+# PREVIOUS release's library, and ship it under the new version's name.
+#
+# The earlier waves are tagged on an EARLIER commit, not this one: with no
+# replaces, cmd/shortfall/go.sum can only gain a version's hashes once that
+# version is fetchable, so the tidied go.sum is committed after waves 1-2 and
+# the wave-3 tag lands on that commit. The guard below therefore asks for
+# reachability, not equality. Waves are documented in CONTRIBUTING, "Releases".
+#
+# goreleaser cannot read a slash-prefixed tag as semver, and `monorepo:
+# tag_prefix` is a Pro-only field the pinned OSS build rejects, so the
+# version is handed over explicitly as GORELEASER_CURRENT_TAG — the root
+# tag, which is also where the GitHub release and its assets land.
+#
 # Dry-run: workflow_dispatch runs a snapshot build (no tag, no publish) —
 # the release-tooling acceptance evidence and a rehearsal before any tag.
 # Library consumers are unaffected: modules are consumed by git tag via
@@ -10,7 +30,7 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["cmd/shortfall/v*"]
   workflow_dispatch: {}   # snapshot dry-run
 
 permissions:
@@ -30,10 +50,45 @@ jobs:
         with:
           go-version: stable
           cache: true
+      # The guard lives in scripts/release-guard.sh, with its branches driven
+      # by scripts/release-guard-test.sh in CI. Inline shell in a workflow is
+      # shell nothing can test, and every branch below is a way to publish a
+      # binary whose library code is not the version on its label.
+      - name: the release names one version, and every wave it needs is tagged
+        env:
+          TAG: ${{ github.ref_name }}
+        # Assign first, then echo. `echo "X=$(guard)"` exits 0 even when the
+        # guard exits 1 — the echo succeeded — so the whole check would be
+        # decorative. With `set -e` a failing assignment ends the step.
+        run: |
+          set -euo pipefail
+          version=$(./scripts/release-guard.sh "$TAG")
+          echo "GORELEASER_CURRENT_TAG=$version" >> "$GITHUB_ENV"
+
+      # `--skip=validate` is honoured in two of goreleaser's pipes, and all
+      # three checks it costs are made elsewhere rather than dropped. In the
+      # git pipe it drops `git describe --exact-match` — which cannot hold
+      # here, since the root tag is on the earlier commit by construction, and
+      # the guard checks that tag's existence and reachability instead — and
+      # CheckDirty, replaced by the step below. In the semver pipe it
+      # downgrades a non-semver version from fatal to a warning, leaving
+      # ctx.Semver zeroed and `prerelease: auto` silently inert; the guard
+      # rejects a non-semver version outright.
+      - name: the checkout is clean
+        # `git status --porcelain`, matching goreleaser's own CheckDirty:
+        # `git diff` alone would ignore untracked files.
+        run: |
+          set -euo pipefail
+          dirty=$(git status --porcelain)
+          if [ -n "$dirty" ]; then
+            echo "::error::the release checkout is dirty, so the artifacts would not match the tag:"
+            echo "$dirty"
+            exit 1
+          fi
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
         with:
           version: v2.18.0
-          args: release --clean
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -50,6 +105,14 @@ jobs:
         with:
           go-version: stable
           cache: true
+      # Without this the snapshot rehearses the wrong thing: with no tag on
+      # HEAD goreleaser falls back to `git describe --tags`, which in this
+      # namespace returns a slash-prefixed ADAPTER tag — so the version, and
+      # the archive names built from it, come out as nested directories.
+      - name: name the snapshot after the root module's latest tag
+        run: |
+          set -euo pipefail
+          echo "GORELEASER_CURRENT_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo v0.0.0)" >> "$GITHUB_ENV"
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
         with:
           version: v2.18.0

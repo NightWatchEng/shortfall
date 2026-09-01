@@ -38,6 +38,7 @@ func TestParseModReadsEveryDirectiveFormInThisRepo(t *testing.T) {
 		content  string
 		requires map[string]string
 		replaces map[string]string
+		others   []string
 		unparsed int
 	}{
 		{
@@ -131,6 +132,18 @@ func TestParseModReadsEveryDirectiveFormInThisRepo(t *testing.T) {
 			replaces: map[string]string{},
 			unparsed: 1,
 		},
+		{
+			// A third-party replace is irrelevant to every first-party check
+			// and fatal to `go install`, so it is recorded separately rather
+			// than read and forgotten. Both directive forms, since only the
+			// block form was covered when this was first written.
+			name: "third-party replaces are recorded, not discarded",
+			content: "module x\n\nreplace modernc.org/sqlite => ../vendored/sqlite\n\n" +
+				"replace (\n\tgolang.org/x/mod => ../vendored/mod\n)\n",
+			requires: map[string]string{},
+			replaces: map[string]string{},
+			others:   []string{"modernc.org/sqlite", "golang.org/x/mod"},
+		},
 	}
 
 	for _, c := range cases {
@@ -138,10 +151,24 @@ func TestParseModReadsEveryDirectiveFormInThisRepo(t *testing.T) {
 			got := ParseMod("go.mod", c.content)
 			assertMap(t, "requires", got.Requires, c.requires)
 			assertMap(t, "replaces", got.Replaces, c.replaces)
+			assertPaths(t, "otherReplaces", got.OtherReplaces, c.others)
 			if len(got.Unparsed) != c.unparsed {
 				t.Fatalf("unparsed = %d %v, want %d", len(got.Unparsed), got.Unparsed, c.unparsed)
 			}
 		})
+	}
+}
+
+func assertPaths(t *testing.T, label string, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s = %v, want %v", label, got, want)
+	}
+
+	for i, w := range want {
+		if got[i] != w {
+			t.Fatalf("%s[%d] = %q, want %q", label, i, got[i], w)
+		}
 	}
 }
 
@@ -223,8 +250,27 @@ func loadMods(t *testing.T) []Mod {
 	return mods
 }
 
+// TestEveryFirstPartyRequireNamesOneVersion holds across every module the
+// workspace resolves locally. InstallTargets are excluded, and the exclusion
+// is a consequence of having no replace rather than a convenience: such a
+// module cannot name a version before that version is tagged and fetchable —
+// pointing it at an unpublished one does not merely skew this check, it
+// fails the build of every module in the workspace — so within a release it
+// necessarily lags by one version until its own wave is cut. The release
+// job is where that lag is closed and checked: it refuses to build unless
+// every first-party require in the install target names the version being
+// released and each one's tag exists and is reachable. See CONTRIBUTING,
+// "Releases".
 func TestEveryFirstPartyRequireNamesOneVersion(t *testing.T) {
-	byPath := Versions(loadMods(t))
+	byPath := Versions(installTargetsExcluded(loadMods(t)))
+	// The exclusion above is the one way this check could come to examine
+	// nothing while still reporting green — every module named, and the loop
+	// below running zero times.
+	if len(byPath) == 0 {
+		t.Fatal("no first-party require left to compare after excluding InstallTargets; " +
+			"this check would pass having examined nothing")
+	}
+
 	for _, path := range sortedKeys(byPath) {
 		t.Run(path, func(t *testing.T) {
 			versions := byPath[path]
@@ -268,16 +314,26 @@ func TestNoFirstPartyRequireNamesAPlaceholderVersion(t *testing.T) {
 	}
 }
 
-// TestEveryFirstPartyRequireIsReplacedLocally is a deliberate ratchet on the
-// CURRENT posture, not a permanent law of the repository. While no
-// first-party version is published, a require without a local replace cannot
-// resolve outside the workspace — goreleaser builds with GOWORK=off. Once the
-// tag waves in CONTRIBUTING have run, dropping a replace becomes the correct
-// move rather than a defect (it is the tracked path to a working `go
-// install`), and this test is expected to be revisited in that change rather
-// than to keep enforcing a posture that has ended.
+// TestEveryFirstPartyRequireIsReplacedLocally holds for every module that is
+// consumed as a library: a require without a local replace could not resolve
+// outside the workspace while nothing was published, and goreleaser builds
+// with GOWORK=off.
+//
+// This was written as a ratchet on a posture that has since ended — the tag
+// waves in CONTRIBUTING have run and every module resolves from the proxy —
+// so it no longer applies to the whole tree. It applies to everything except
+// InstallTargets, which are held to the opposite rule by the test below.
+// The check is narrowed rather than deleted because the
+// reason it exists is unchanged for the fourteen adapter modules and the
+// test harnesses: they are never `go install`ed, they gain nothing from
+// dropping a replace, and a require that quietly stops resolving is still
+// invisible to every build that runs here.
 func TestEveryFirstPartyRequireIsReplacedLocally(t *testing.T) {
 	for _, m := range loadMods(t) {
+		if InstallTargets[m.File] {
+			continue
+		}
+
 		for _, path := range sortedKeys(m.Requires) {
 			t.Run(m.File+" "+path, func(t *testing.T) {
 				target, ok := m.Replaces[path]
@@ -295,6 +351,116 @@ func TestEveryFirstPartyRequireIsReplacedLocally(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestInstallTargetsExcludedDropsExactlyTheInstallTargets pins the helper
+// that narrows the version-agreement check. Nothing else would notice if it
+// returned its input unchanged: every module in the tree names one version
+// today, so the exclusion is unobservable there — and a helper that excluded
+// too much would empty the check just as quietly.
+func TestInstallTargetsExcludedDropsExactlyTheInstallTargets(t *testing.T) {
+	target := "cmd/shortfall/go.mod"
+	if !InstallTargets[target] {
+		t.Fatalf("%s is not an InstallTarget, so this test no longer exercises the exclusion", target)
+	}
+
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{
+			name: "an install target is dropped and its neighbours kept",
+			in:   []string{"adapters/query/sql/go.mod", target, "test/loggolden/go.mod"},
+			want: []string{"adapters/query/sql/go.mod", "test/loggolden/go.mod"},
+		},
+		{
+			name: "a tree with no install target is returned whole",
+			in:   []string{"adapters/query/sql/go.mod", "go.mod"},
+			want: []string{"adapters/query/sql/go.mod", "go.mod"},
+		},
+		{
+			name: "a tree of nothing but install targets empties, so the caller's floor fires",
+			in:   []string{target},
+			want: []string{},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mods := make([]Mod, 0, len(c.in))
+			for _, f := range c.in {
+				mods = append(mods, Mod{File: f})
+			}
+
+			var got []string
+			for _, m := range installTargetsExcluded(mods) {
+				got = append(got, m.File)
+			}
+
+			assertPaths(t, "kept", got, c.want)
+		})
+	}
+}
+
+// TestInstallTargetsCarryNoReplaceAtAll is the inverse of the check above,
+// and it is the whole reason `go install` works at all: `go install
+// pkg@version` refuses a module whose go.mod carries ANY replace directive,
+// benign ones included, and it refuses before it resolves anything — so one
+// reinstated `replace ... => ../..` breaks the documented install path for
+// every adopter.
+//
+// Nothing else in the suite can see that. go.work's `use` list supplies the
+// modules regardless, so fmt, vet, build, test, vuln and lint all stay green
+// with the replace present; that is exactly how the broken install path
+// survived from before v0.1.0. The failure surfaces only outside the
+// workspace, in a command this repository does not run.
+//
+// ANY is the operative word, and it is why Mod carries OtherReplaces. A
+// first-party replace is the one a contributor reaches for by reflex when a
+// local build will not resolve, but `replace modernc.org/sqlite => ../x`
+// breaks `go install` exactly as completely, and every other check in this
+// package would read it and discard it as third-party.
+func TestInstallTargetsCarryNoReplaceAtAll(t *testing.T) {
+	mods := loadMods(t)
+
+	seen := 0
+	for _, m := range mods {
+		if !InstallTargets[m.File] {
+			continue
+		}
+
+		seen++
+
+		t.Run(m.File, func(t *testing.T) {
+			var detail []string
+			for _, path := range sortedKeys(m.Replaces) {
+				detail = append(detail, path+" => "+m.Replaces[path])
+			}
+
+			for _, path := range m.OtherReplaces {
+				detail = append(detail, path+" (third-party)")
+			}
+
+			if len(detail) == 0 {
+				return
+			}
+
+			t.Fatalf("%s is published for `go install` but carries %d replace directive(s): %s. "+
+				"`go install pkg@version` refuses any module with a replace directive, so this "+
+				"breaks the documented install path for every adopter while go.work keeps every "+
+				"build here green. Require the published versions instead",
+				m.File, len(detail), strings.Join(detail, "; "))
+		})
+	}
+
+	// A typo in InstallTargets, or a module that moved, would otherwise make
+	// this test pass having checked nothing at all — the same vacuous-green
+	// this package exists to refuse.
+	if seen != len(InstallTargets) {
+		t.Fatalf("matched %d of %d InstallTargets against the tracked go.mod files; "+
+			"every entry must name a real one, or this test verifies nothing", seen, len(InstallTargets))
 	}
 }
 
@@ -326,6 +492,19 @@ func TestTrackedModFilesExplainsAGitFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+// installTargetsExcluded drops the modules held to the no-replace rule, whose
+// requires are judged by the release job rather than by tree-wide agreement.
+func installTargetsExcluded(mods []Mod) []Mod {
+	kept := make([]Mod, 0, len(mods))
+	for _, m := range mods {
+		if !InstallTargets[m.File] {
+			kept = append(kept, m)
+		}
+	}
+
+	return kept
 }
 
 func sortedKeys[V any](m map[string]V) []string {

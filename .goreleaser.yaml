@@ -1,5 +1,8 @@
 # goreleaser config for the shortfall CLI. Library consumers use go get +
-# module tags; this ships cmd/shortfall binaries on v* tags.
+# module tags; this ships cmd/shortfall binaries, triggered by the wave-3
+# `cmd/shortfall/v*` tag and published onto the root tag's release (the
+# workflow passes that version as GORELEASER_CURRENT_TAG, since a
+# slash-prefixed tag is not semver and `monorepo: tag_prefix` is Pro-only).
 # Validate: goreleaser check · local dry-run: goreleaser release --snapshot --clean
 version: 2
 
@@ -11,6 +14,10 @@ builds:
     # deps stay out of the core library. Build it as a nested module: `dir`
     # cd's into it and `main: .` builds from its own go.mod — independent of
     # the root go.work (a release checkout must not depend on workspace mode).
+    # That module carries no `replace` directives (workspace-47f), so this
+    # build resolves the core and the two query adapters from published tags,
+    # exactly as `go install` does for an adopter. It fails loudly if a wave
+    # was skipped, which is why the trigger is the wave-3 tag.
     dir: ./cmd/shortfall
     main: .
     binary: shortfall
