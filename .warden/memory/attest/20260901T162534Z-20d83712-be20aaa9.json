@@ -1,0 +1,498 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+  "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-01T16:25:34+00:00",
+  "range_patch_ids": [
+    "221224382be1ab9af8e10dc6927858aac88fccbd",
+    "53697098fea5bb2522c252a6029220247ad2d25f",
+    "968c564c0f5da0133c4474176e1de98aa3c302bf",
+    "a3fa1e5cbe8de12f7b46f246a37d512a520c65ea",
+    "be46c4e3daa5af2b0dd84d441122623714ddb697",
+    "c0f96a519156e3ea7821a8c3f769a29eabf74bb7",
+    "ecdbaeaa67ba9dc9c66e4af3098cee6ef8f1eb4f"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (rounds 1-3, independent context per round)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (round 1 arbiter, per graph.yaml verification.independent_judges)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:unreleasable-tag-ordering",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 1,
+      "severity": "HIGH",
+      "finding": "The release could not be cut: with no replaces, cmd/shortfall/go.sum can only gain a version's hashes once that version is fetchable, so the same-commit runbook produced a release that failed under goreleaser's GOWORK=off + -mod=readonly, and the guard's root-tag-at-HEAD check forbade the only escape.",
+      "evidence": "`GOWORK=off CGO_ENABLED=0 go build .` in cmd/shortfall with a bumped require and untouched go.sum: 'missing go.sum entry needed to verify package ... is provided by exactly one module'. `go mod tidy` for an untagged version: 'unknown revision'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Release is now two commits: waves 1-2 tag the release commit, the CLI's requires bump and go.sum tidy are their own commit, wave 3 tags that. Verified end to end against the pinned goreleaser: 4/4 binaries, correct archives, checksums.",
+      "id": "360cb27571a73c85"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:unexecutable-release-pipeline",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 1,
+      "severity": "HIGH",
+      "finding": "The two-commit repair moved the failure rather than removing it: goreleaser's git pipe runs `git describe --exact-match` against GORELEASER_CURRENT_TAG, so naming the root tag demands it sit at HEAD, which this shape makes impossible. release --clean aborted with ErrWrongRef.",
+      "evidence": "goreleaser v2.18.0 internal/pipe/git/git.go validate(): `git describe --exact-match --tags --match ctx.Git.CurrentTag`. Reproduced: 'git tag v0.2.0 was not made against commit 37376848' with the root tag on the parent commit; green with --skip=validate.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Runs with --skip=validate; all three checks that flag costs are made elsewhere (tag existence+reachability in the guard, clean tree via git status --porcelain, semver in the guard). Verified: without the flag goreleaser aborts, with it the pipeline completes and the artifact's deps match its label.",
+      "id": "f22302c27926177f"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "enforcement-claim",
+        "vacuous-pass"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 1,
+      "severity": "MEDIUM",
+      "finding": "The stale-require guard passed green whenever its grep matched nothing \u2014 quoted module paths (legal go.mod grammar) and a missing go.mod both passed with every require stale \u2014 under a comment asserting no branch could pass having found nothing.",
+      "evidence": "`stale=$(grep -E \"$first_party\" cmd/shortfall/go.mod | grep -vE ... || true)` \u2014 zero matches leaves $stale empty and the step passes; and `echo \"X=$(guard)\"` exits 0 when the guard exits 1; and snapshot: '\u2022 building snapshot... version=adapters/export/cloudwatch/v0.2.0-SNAPSHOT' producing a `shortfall_adapters/` directory.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Requires are read with `go mod edit -json`, which normalises quoting; missing file, parse failure, empty parse output and zero first-party requires each fail explicitly. Both original shapes verified failing; covered by scripts/release-guard-test.sh.",
+      "id": "0d428a575d8c7fe9"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "ci-gate",
+        "vacuous-pass"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 168,
+      "severity": "MEDIUM",
+      "finding": "The workflow_dispatch snapshot \u2014 documented as the pre-tag rehearsal \u2014 derived its version from `git describe --tags`, which in this tag namespace returns a slash-prefixed adapter tag, so it built archives named as nested directories and validated neither version derivation nor artifact naming.",
+      "evidence": "`stale=$(grep -E \"$first_party\" cmd/shortfall/go.mod | grep -vE ... || true)` \u2014 zero matches leaves $stale empty and the step passes; and `echo \"X=$(guard)\"` exits 0 when the guard exits 1; and snapshot: '\u2022 building snapshot... version=adapters/export/cloudwatch/v0.2.0-SNAPSHOT' producing a `shortfall_adapters/` directory.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The snapshot job now names itself after the root module's latest tag. Verified: four correctly named archives plus checksums, where it previously produced a `shortfall_adapters/` directory.",
+      "id": "8a98646b87e2dab1"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "vacuous-pass",
+      "tags": [
+        "ci-gate",
+        "vacuous-pass"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 1,
+      "severity": "MEDIUM",
+      "finding": "Self-found before ship: the workflow consumed the guard as `echo \"X=$(guard)\"`, which exits 0 when the guard exits 1, so a rejected release would have proceeded with an empty version. The guard and its whole suite were decorative.",
+      "evidence": "`stale=$(grep -E \"$first_party\" cmd/shortfall/go.mod | grep -vE ... || true)` \u2014 zero matches leaves $stale empty and the step passes; and `echo \"X=$(guard)\"` exits 0 when the guard exits 1; and snapshot: '\u2022 building snapshot... version=adapters/export/cloudwatch/v0.2.0-SNAPSHOT' producing a `shortfall_adapters/` directory.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Assign first, then echo, under set -e. Verified both ways against the step body lifted out of the workflow: happy path exports the version, rejection exits 1.",
+      "id": "7662154318752599"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "tests-required",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 63,
+      "severity": "MEDIUM",
+      "finding": "~60 lines of new branch-heavy release-guard shell shipped with no automated coverage, in a repo that already tests its shell in CI (scripts/commit-lint-test.sh, wired to the pr-title-lint job). A real jq-handling bug survived because of it.",
+      "evidence": "scripts/commit-lint-test.sh is invoked at .github/workflows/ci.yml as the established pattern; no equivalent existed for the release guard. installTargetsExcluded had no direct test and no existing test would go red if it returned its input unchanged.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Extracted to scripts/release-guard.sh with scripts/release-guard-test.sh driving 15 cases, run by a new ci job. Proven non-vacuous: disabling the version check or the replace check turns the suite red.",
+      "id": "df72052f4fc37c4a"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "enforcement-claim"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 326,
+      "severity": "MEDIUM",
+      "finding": "The InstallTargets test's comment claimed third-party replaces were caught. ParseMod recorded only first-party ones, so `replace modernc.org/sqlite => ../x` was invisible and the test passed \u2014 while `go install` refuses ANY replace.",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Mod gains OtherReplaces, parseLine records non-first-party replace paths in both directive forms, the test is renamed TestInstallTargetsCarryNoReplaceAtAll and checks both. Negative control confirms a third-party replace now goes red.",
+      "id": "5d49437cc1dcb6d1"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 318,
+      "severity": "MEDIUM",
+      "finding": "CONTRIBUTING said `go install .../cmd/shortfall@latest` works; @latest resolves to the still-broken v0.2.0, contradicting README.md in the same diff.",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Reworded to 'from v0.3.0 on ... will work' with an explicit 'It does not work yet'. All four docs now agree.",
+      "id": "530280b2351731f7"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph.go",
+      "line": 8,
+      "severity": "MEDIUM",
+      "finding": "The package doc's opening premise \u2014 'Every nested go.mod replaces its first-party dependencies' \u2014 was falsified by this diff, in the sentence justifying the package's existence.",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Qualified to 'Every nested go.mod consumed as a library replaces...', matching the exception paragraph and CONTRIBUTING.",
+      "id": "246d1fd5dda5efae"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:runbook-step-fails-the-repos-own-gate",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 165,
+      "severity": "MEDIUM",
+      "finding": "The bump step was scoped to cmd/shortfall's three requires, but the tree-wide version-agreement test has no exemption, so bumping only those three turns the core test step red.",
+      "evidence": "TestEveryFirstPartyRequireNamesOneVersion runs over every module with no exemption; feeding Versions() a cmd/shortfall at v0.3.0 alongside an adapter at v0.2.0 yields 'github.com/NightWatchEng/shortfall -> 2 distinct version(s)', a t.Fatalf.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The runbook now splits the bump correctly: the seventeen replaced modules in the release commit, the CLI in the wave-3 commit; modgraph excludes install targets with a non-vacuity floor, and the release guard closes the gap at release time.",
+      "id": "fec36b44d82bb683"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 218,
+      "severity": "MEDIUM",
+      "finding": "The runbook's wave-3 step told the operator to commit and push straight to main, which the same document forbids and branch protection rejects, with a message that fails the repo's own commit-lint.",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Wave 3 goes through a PR like any other change, with a suggested title carrying the required tracked-item id form.",
+      "id": "0b7269dd3cc74c60"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 138,
+      "severity": "MEDIUM",
+      "finding": "The comment and CONTRIBUTING claimed the dropped dirty-tree check was replaced by an equivalent and that the job checks 'strictly more'; goreleaser's CheckDirty uses `git status --porcelain` (sees untracked files), the replacement used `git diff` (does not).",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The assertion now uses git status --porcelain, matching what it replaces; the docs say so.",
+      "id": "74db2785bad072c7"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 196,
+      "severity": "LOW",
+      "finding": "The runbook's worked example was pinned to v0.2.0, already fully tagged and published, while the verification block used v0.3.0 \u2014 the two halves of one procedure disagreed, and step 1 followed literally fails with 'tag already exists'.",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The worked example moves to v0.3.0 throughout; the remaining v0.2.0 mentions are historical statements, not commands.",
+      "id": "fd147ccbb83e185f"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 13,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift",
+        "enforcement-claim"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 134,
+      "severity": "LOW",
+      "finding": "'--skip=validate drops two goreleaser checks' undercounts: v2.18.0 honours skips.Validate in the semver pipe too, downgrading a non-semver version to a warning and leaving `prerelease: auto` silently inert.",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The comment names all three, and the guard rejects a non-semver version outright \u2014 with a regression case for it, and one asserting a semver prerelease is still accepted.",
+      "id": "3def99d33650eed8"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 14,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:unverified-release-tag",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 133,
+      "severity": "LOW",
+      "finding": "The root tag's existence was proven only incidentally, because the CLI happens to require the core module by name; if it ever stopped doing so the guard would pass and GitHub would mint the release tag at the default branch head.",
+      "evidence": "`sub=\"${path#github.com/NightWatchEng/shortfall}\"; tag=\"${sub:+$sub/}$version\"` \u2014 the root tag is reached only when a require's path equals the prefix. goreleaser internal/client/github.go sets TargetCommitish only when release.target_commitish is configured; it is not.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The guard asserts refs/tags/$version directly, before the per-require loop.",
+      "id": "0ddce5bf56bedc7c"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 15,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:guard-misdiagnosis",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 91,
+      "severity": "LOW",
+      "finding": "jq was invoked inside `[ ... ]`, so a jq failure was swallowed and reported as the go.mod carrying replace directives \u2014 the same misdiagnosis class an earlier fix was written to remove.",
+      "evidence": "With jq absent from PATH: 'jq: command not found' followed by '::error::cmd/shortfall/go.mod carries replace directives', on a go.mod with zero replaces.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Every jq invocation now runs where its exit status survives, with its own diagnostic.",
+      "id": "a62d912f85c4abf2"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 16,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/release.yml",
+      "line": 96,
+      "severity": "LOW",
+      "finding": "The herestring comment claimed a piped `while read` would let the step pass, and then that later iterations would run first; `set -euo pipefail` prevents the first and neither is true.",
+      "evidence": "Quoted claims contradicted by the tree: 'Every nested go.mod replaces its first-party dependencies' with cmd/shortfall carrying none; '`go install ...@latest` works' while @latest resolves to cmd/shortfall/v0.2.0 whose go.mod carries the replaces; 'both replaced rather than dropped' against goreleaser's CheckDirty using `git status --porcelain`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "The comment now states the real difference \u2014 the loop runs in this shell, so the exit is the script's own rather than the pipeline's status. Verified both forms.",
+      "id": "2d3e7ddcb796be93"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 17,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "tests-required",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 449,
+      "severity": "LOW",
+      "finding": "installTargetsExcluded shipped with no direct test; returning its input unchanged \u2014 the exact weakening this PR must bound \u2014 would leave every test green, since all modules currently agree on one version.",
+      "evidence": "scripts/commit-lint-test.sh is invoked at .github/workflows/ci.yml as the established pattern; no equivalent existed for the release guard. installTargetsExcluded had no direct test and no existing test would go red if it returned its input unchanged.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Added a three-case table test pinning drop, no-op and empty-result behaviour.",
+      "id": "ddf3b11a712bd442"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 18,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:decision-record-scope-drift",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": ".warden/memory",
+      "file": ".warden/memory/decide/20260901T1410020000-cc55ccd9-7eb8bde3.json",
+      "line": 8,
+      "severity": "LOW",
+      "finding": "The first decision record names goreleaser's monorepo.tag_prefix, which the pinned OSS build rejects, and states a scope the delivered change exceeds.",
+      "evidence": "`goreleaser check` on v2.18.0 with a monorepo block: 'yaml: unmarshal errors: field monorepo not found in type config.Project'. The shard's scope says '.github/workflows/release.yml (the tag filter only)'; the delivered change adds two steps and new scripts.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "A second decision record supersedes it, naming the real mechanism, the founder's re-decision, and the actual scope. The first is left in place as the record of what was decided when.",
+      "id": "7ecb321453411de7"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 19,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:version-pinned-doc-with-no-release-time-update-hook",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 202,
+      "severity": "MEDIUM",
+      "finding": "The pkg.go.dev indexing block hard-codes a version with no bump hook, so run verbatim at the next release it would POST fetches for the previous one.",
+      "evidence": "`curl -sS -X POST \"https://pkg.go.dev/fetch/...${m}@v0.2.0\"` inside a runbook whose three preceding blocks carry the same literal version (`git tag v0.2.0`, `git tag \"$m/v0.2.0\"`, `git tag cmd/shortfall/v0.2.0`).",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Refuted by the cross-examiner, the declared single arbiter: the entire Releases runbook is one worked example with the version substituted line by line, and the three git-tag blocks above it carry the same literal. Treating the fourth as a defect while treating those as templates is not a consistent standard. The genuinely weak property \u2014 that the POST could not report its own failure \u2014 was filed separately and fixed.",
+      "id": "d6f74d602019d234"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 20,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "unmapped:silent-success-on-a-remote-call",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 210,
+      "severity": "LOW",
+      "finding": "The pkg.go.dev POST used `curl -sS ... >/dev/null` with no -f, so an HTTP error was not a curl error and the output was discarded \u2014 in the step whose whole purpose is to fix a silent staleness failure.",
+      "evidence": "`curl -sS -X POST \"https://pkg.go.dev/fetch/...\" >/dev/null` \u2014 no -f, so a 4xx is not a curl error, and stdout is discarded.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Uses curl -fsS and echoes indexed/FAILED per module path.",
+      "id": "d475a36e533fa8f2"
+    },
+    {
+      "ts": "2026-09-01T16:25:34+00:00",
+      "seq": 21,
+      "source": "attest",
+      "sha": "20d837121f73bebdc9229a72c2f7c9e33f808e87",
+      "base_sha": "cc55ccd9bb0d91890ea38cc4b0560f1972bc0db4",
+      "rule_id": "comment-hygiene",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/modgraph",
+      "file": "test/modgraph/modgraph_test.go",
+      "line": 280,
+      "severity": "MEDIUM",
+      "finding": "Two tracked-item ids in Go comments, which ADR-0014 places in commit headers and PR bodies only. Caught by the deterministic gate.",
+      "evidence": "`// (workspace-47f). The check is narrowed rather than deleted because the` and `// survived from before v0.1.0 until workspace-47f.` \u2014 flagged by the deterministic gate at test/modgraph/modgraph_test.go:280,321.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "Removed; the surrounding sentences carry the reasoning without the id.",
+      "id": "0a3a7c9d27108666"
+    }
+  ]
+}
