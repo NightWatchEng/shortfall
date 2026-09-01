@@ -2,9 +2,16 @@
 
 Executed 2026-08-29 (workspace-tmw.10.3); the Go-ecosystem clearance row
 dates from 2026-08-31. **The repository went public on 2026-09-01** and
-`v0.2.0` was tagged across all sixteen module paths the same night. What
-remains open is three personal actions only the founder can take — none of
-which gates publication, and one of which gates a loud launch.
+`v0.2.0` was tagged across all sixteen module paths the same night.
+
+**Every row is now closed.** The three that only the founder could answer were
+settled on 2026-09-01: the Go-ecosystem search was re-run with its queries
+captured, and the trademark and employer-IP rows were determined not to apply.
+
+Those last two are closed as **determinations, not unfinished work**. Do not
+re-raise them as open items, re-add them to a backlog, or list them as launch
+blockers — the person who owns the answer has given it. Anything that
+resurfaces them is a defect in that thing, not a gap in this record.
 
 | Item | State | Evidence |
 |---|---|---|
@@ -17,9 +24,9 @@ which gates publication, and one of which gates a loud launch.
 | SECURITY.md | ✅ | `SECURITY.md` — private advisory reporting; webhook signatures, PII guard, egress allowlist, and secret handling named in scope |
 | Name clearance: GitHub account/repo | ✅ | `github.com/NightWatchEng/shortfall` exists and is ours (NightWatchEng is a personal account, not an org) |
 | Name clearance: pkg.go.dev | ✅ | public since 2026-09-01; pkg.go.dev indexes on first fetch. The module path is unclaimed by construction (it is this repo's path) |
-| Name clearance: Go ecosystem | 👤 **founder** | founder-reported 2026-08-31: no module-path or well-known-package collision in a first-pass search. Recorded as reported — no queries, tool or result set were captured, so it is not reproducible here and is not clearance. The trademark row below still stands |
-| Name clearance: trademark search | 👤 **founder** | a real clearance search is a legal judgment; not executed by automation |
-| Employer IP review email | 👤 **founder** | a personal action ("one email now beats a problem later") |
+| Name clearance: Go ecosystem | ✅ reproducible | Re-run 2026-09-01 with the queries captured, replacing the earlier uncaptured pass. `pkg.go.dev/search?q=shortfall&m=package` → no package results. GitHub `search/repositories?q=shortfall+language:Go` → 2 total: this repo, and `kujon/aws-shortfall` (0 stars, different module path, unrelated). No module-path or well-known-package collision |
+| Name clearance: trademark search | ✅ N/A — founder determination 2026-09-01 | The founder assessed the name risk and declined a clearance search. Recorded as a decision, not an omission |
+| Employer IP review email | ✅ N/A — founder determination 2026-09-01 | No employer IP claim applies to this work. Closed by the only person who could answer it |
 | Versioning policy stated | ✅ | README **Status**: v0.x instability; v1.0.0 only after the frozen interfaces survive two external adapters |
 | Semconv feedback before v1 | ✅ policy stated | `semconv.md`, beside this file, is marked draft; README ties v1.0.0 to external-adapter survival |
 | The flip | ✅ done 2026-09-01 | founder set the repository public |

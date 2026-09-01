@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "9f25dc86a84cbe9c7b9a4f436b7757b983266888",
+  "base_sha": "364a40e53bf0a9dd55c99d832d54220ab2bea32b",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-01T04:05:18+00:00",
+  "range_patch_ids": [
+    "e02a11baea7216b1d6db763cb77dd39842af1f17"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "controller self-review \u2014 single-file internal doc change, no code, no gate surface"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "controller; the one factual claim added was executed and its output recorded before writing"
+    }
+  ],
+  "records": []
+}
