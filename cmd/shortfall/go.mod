@@ -3,9 +3,9 @@ module github.com/NightWatchEng/shortfall/cmd/shortfall
 go 1.25.0
 
 require (
-	github.com/NightWatchEng/shortfall v0.2.0
-	github.com/NightWatchEng/shortfall/adapters/query/promql v0.2.0
-	github.com/NightWatchEng/shortfall/adapters/query/sql v0.2.0
+	github.com/NightWatchEng/shortfall v0.3.0
+	github.com/NightWatchEng/shortfall/adapters/query/promql v0.3.0
+	github.com/NightWatchEng/shortfall/adapters/query/sql v0.3.0
 	modernc.org/sqlite v1.57.0
 )
 
