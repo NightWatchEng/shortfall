@@ -1,6 +1,3 @@
-# Maintainer note: the "repository is private" paragraph below is true only
-# until the public flip. Delete that markdown block in the same PR as the
-# flip — a stale claim is a docs defect under ADR-0008.
 name: Bug report
 description: A number looks wrong, a leg is missing, or something errors.
 title: "[bug] "
@@ -9,13 +6,6 @@ body:
   - type: markdown
     attributes:
       value: |
-        **This repository is private today.** While it stays private only
-        collaborators can reach this form, so nobody outside can file
-        anything yet. These templates are ready ahead of the public flip
-        rather than waiting on it.
-
-        ---
-
         shortfall's answers depend on **which backend grounds which leg**.
         Metrics ground the deferred and unrealized legs; events ground
         realized de-dup and customer impact; coverage needs a ledger on top.

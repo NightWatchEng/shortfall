@@ -1,6 +1,3 @@
-# Maintainer note: the "repository is private" paragraph below is true only
-# until the public flip. Delete that markdown block in the same PR as the
-# flip — a stale claim is a docs defect under ADR-0008.
 name: Adapter request / backend support
 description: Ask for a backend shortfall does not speak yet — or tell us you are writing the adapter.
 title: "[adapter] "
@@ -9,13 +6,6 @@ body:
   - type: markdown
     attributes:
       value: |
-        **This repository is private today.** While it stays private only
-        collaborators can reach this form, so nobody outside can file
-        anything yet. These templates are ready ahead of the public flip
-        rather than waiting on it.
-
-        ---
-
         Adapters are the only vendor-aware code here, and each one is its own
         nested Go module so that a Prometheus shop never pulls the AWS SDK.
         There are two boundaries an adapter can implement:

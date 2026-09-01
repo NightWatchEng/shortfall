@@ -3,9 +3,6 @@ This template asks for the evidence chain a reviewer reads, in the order they
 read it. The standards behind it live in CONTRIBUTING.md and docs/adr/ — this
 file asks for evidence, it does not restate the rules.
 
-Maintainer note: this repository is private today, so only collaborators see
-this template. It is ready ahead of the public flip, not waiting on it.
-
 Delete a comment block once you have filled its section in.
 -->
 

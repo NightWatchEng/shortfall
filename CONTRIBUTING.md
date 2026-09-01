@@ -178,6 +178,14 @@ git push origin --tags
 git tag cmd/shortfall/v0.2.0 && git push origin cmd/shortfall/v0.2.0
 ```
 
+**Then bump the quickstart's download URL.** `docs/quickstart.md` step 2
+names a release asset by version (`shortfall_<version>_darwin_arm64.tar.gz`),
+because goreleaser puts the version in the filename and GitHub's
+`releases/latest/download/` alias cannot absorb that. Nothing checks it: the
+old URL keeps returning 200, and `test/docsnippets` reads `go` and `yaml`
+fences, never `sh`. Miss this and the next new reader downloads the previous
+release.
+
 Modules under `test/` are internal harnesses that nothing imports from
 outside this repository; they are deliberately never tagged.
 
@@ -209,12 +217,17 @@ so it cannot see a resolution failure. `test/modgraph` catches the version
 version — but it reads the tree, not the proxy, so it cannot tell you whether
 that version was ever published.
 
-Only a real resolution can, and it needs the repository public and the tag
-waves above pushed; while the module is private the checksum database returns
-404 and `go mod tidy` below fails on that alone. Note what this checks and
-what it does not: module resolution finds the newest *published tag* for each
-path, never this working tree — so run it after tagging, to confirm what you
-published, not before, to preview what you are about to.
+Only a real resolution can, and it needs the tag waves above pushed. Note what
+this checks and what it does not: module resolution finds the newest
+*published tag* for each path, never this working tree — so run it after
+tagging, to confirm what you published, not before, to preview what you are
+about to.
+
+Do not probe a version before you tag it. `proxy.golang.org` caches negative
+lookups, so a `go get` of an untagged version leaves it serving `unknown
+revision` for some minutes after the tag lands — which reads exactly like a
+broken release and is not one. If a fresh tag 404s, check `GOPROXY=direct`
+before you conclude anything.
 
 ```sh
 cd "$(mktemp -d)" && go mod init scratch
@@ -370,9 +383,11 @@ Two sequence rules are render correctness, not taste:
 
 Sequences also use `autonumber` and take no markup in labels.
 
-No GitHub Pages on this repo — depending on plan it is unavailable or
-publicly served for a private repo; either way it stays off. The wiki is
-the published surface instead.
+No GitHub Pages on this repo: the wiki is the published surface, and two
+generated sites competing to be the docs is how one of them goes stale
+without anyone noticing. It stayed off while the repo was private for a
+different reason (plan-dependent availability), and it stays off now for
+this one.
 
 ## Design decisions
 
