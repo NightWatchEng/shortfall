@@ -56,16 +56,25 @@ Unknown fields are rejected, so a typo fails rather than silently
 defaulting. Every field is in the [registry reference](registry.md).
 Check it before you run:
 
-That needs the CLI. From v0.3.0 on it is one command — `go install
-github.com/NightWatchEng/shortfall/cmd/shortfall@latest` — but the published
-v0.2.0 still carries the `replace` directives that `go install pkg@version`
-refuses, so until v0.3.0 is tagged, take the release archive for your
-platform. Every release carries one, with checksums:
+That needs the CLI, and it is one command:
+
+```sh
+go install github.com/NightWatchEng/shortfall/cmd/shortfall@latest
+
+# installs to $(go env GOBIN), or $(go env GOPATH)/bin if GOBIN is unset —
+# put that on your PATH, or run the binary by its full path
+shortfall validate registry.yaml
+# registry.yaml: ok — 1 flow(s), 2 segment(s)
+```
+
+That works from v0.3.0 on; `@v0.2.0` and earlier refuse to install, for good
+(they carry `replace` directives, and a published `go.mod` is immutable).
+Prefer not to build? Every release also carries archives with checksums:
 
 ```sh
 # pick your platform; darwin_arm64 shown
-curl -sSLO https://github.com/NightWatchEng/shortfall/releases/download/v0.2.0/shortfall_0.2.0_darwin_arm64.tar.gz
-tar xzf shortfall_0.2.0_darwin_arm64.tar.gz
+curl -sSLO https://github.com/NightWatchEng/shortfall/releases/download/v0.3.0/shortfall_0.3.0_darwin_arm64.tar.gz
+tar xzf shortfall_0.3.0_darwin_arm64.tar.gz
 
 ./shortfall validate registry.yaml
 # registry.yaml: ok — 1 flow(s), 2 segment(s)

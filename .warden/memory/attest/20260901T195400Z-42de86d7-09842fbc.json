@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "42de86d751b9ccd0feaf0f7fbfcc9e433323f16e",
+  "base_sha": "f585f3582780260cea64e62d9280f417e39c29ac",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-01T19:54:00+00:00",
+  "range_patch_ids": [
+    "cce4e5a28bcb723644b03daf21b816fe8dde861e"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (combined finder+verifier on a docs-accuracy diff)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "same subagent; six candidates raised and all six refuted, each against the shipped artifacts"
+    }
+  ],
+  "records": []
+}
