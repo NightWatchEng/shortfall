@@ -222,12 +222,14 @@ Metrics ground the deferred and unrealized legs; events ground realized
 de-duplication and customer impact. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. The coverage ratio comes from a second command, which needs the
-provider's ledger rows and takes its own flags:
+provider's ledger rows — and renders in the same formats, so the trust
+number goes into the same postmortem as the four legs:
 
 ```sh
 shortfall reconcile --registry registry.yaml \
   --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
-  --ledger rows.json --prometheus http://prometheus:9090
+  --ledger rows.json --format markdown \
+  --prometheus http://prometheus:9090
 ```
 
 `--prometheus` is what the wiring above feeds: the collector writes the

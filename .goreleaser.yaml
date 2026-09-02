@@ -25,7 +25,19 @@ builds:
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}
+      # v{{.Version}}, not {{.Version}} and not {{.Tag}}. .Version strips the
+      # leading "v", while the other provenance path — the build info Go
+      # records for `go install pkg@version` — reports the module version WITH
+      # it, so a bare .Version makes one binary answer "0.3.0" where another
+      # says "v0.3.0". .Tag would fix the release and break the dry run: the
+      # snapshot job hands goreleaser the LAST ROOT TAG as
+      # GORELEASER_CURRENT_TAG, and .Tag ignores snapshot mode, so every
+      # snapshot binary would claim to BE v0.3.0. .Version is snapshot-aware
+      # (0.3.1-SNAPSHOT-<sha>), so prefixing it is honest on both paths.
+      # TestReleaseStampIsVPrefixed pins all three. The archive names below
+      # keep bare .Version deliberately: published asset names are already
+      # that shape and renaming them would break existing links.
+      - -s -w -X main.version=v{{.Version}} -X main.commit={{.ShortCommit}}
 
 archives:
   - id: default

@@ -41,10 +41,13 @@ body:
     attributes:
       label: Version / commit
       description: >-
-        `shortfall version` prints `shortfall <version> (<commit>)`. If you are
-        using the library rather than the CLI, give the module version you
-        `go get`-ed, or the commit you built from.
-      placeholder: "shortfall v0.2.0 (1a2b3c4) — or: github.com/NightWatchEng/shortfall@v0.2.0"
+        `shortfall version` prints `shortfall <version> (<commit>)`, or
+        `shortfall <version>` alone when the build carries no revision — a
+        binary from `go install` knows its version but not its commit, because
+        the module proxy carries no VCS metadata. If you are using the library
+        rather than the CLI, give the module version you `go get`-ed, or the
+        commit you built from.
+      placeholder: "shortfall v0.3.0 — or: shortfall v0.3.0 (1a2b3c4) — or: github.com/NightWatchEng/shortfall@v0.3.0"
     validations:
       required: true
 

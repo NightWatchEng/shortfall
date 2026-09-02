@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/engine"
+	"github.com/NightWatchEng/shortfall/engine/report"
 	"github.com/NightWatchEng/shortfall/query"
 	"github.com/NightWatchEng/shortfall/registry"
 )
@@ -33,6 +33,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		toStr      = fs.String("to", "", "window end, RFC3339 (required)")
 		ledgerPath = fs.String("ledger", "", "path to a JSON array of ledger rows (required)")
 		source     = fs.String("source", "", "ledger source label for the report (defaults to the ledger path)")
+		format     = fs.String("format", "text", "output format: "+formatUsage())
 		promURL    = fs.String("prometheus", "", "Prometheus base URL for telemetry")
 		sqlDSN     = fs.String("sql", "", "SQL DSN for telemetry")
 		sqlDriver  = fs.String("sql-driver", "sqlite", "database/sql driver name for --sql")
@@ -44,7 +45,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *regPath == "" || *fromStr == "" || *toStr == "" || *ledgerPath == "" {
-		wln(stderr, "usage: shortfall reconcile --registry r.yaml --from <RFC3339> --to <RFC3339> --ledger rows.json [--flow f]... [--prometheus URL] [--sql DSN] [--source label]")
+		wln(stderr, "usage: shortfall reconcile --registry r.yaml --from <RFC3339> --to <RFC3339> --ledger rows.json [--flow f]... [--prometheus URL] [--sql DSN] [--source label] [--format "+formatUsage()+"]")
 		return 2
 	}
 
@@ -63,6 +64,11 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	to, err := time.Parse(time.RFC3339, *toStr)
 	if err != nil {
 		wf(stderr, "--to: %v\n", err)
+		return 2
+	}
+
+	if !knownFormat(*format) {
+		wf(stderr, "--format: unknown %q (want %s)\n", *format, formatUsage())
 		return 2
 	}
 
@@ -92,8 +98,11 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	renderCoverage(stdout, leg, slices)
-	return 0
+	return renderFormat(stdout, stderr, *format, renderings{
+		text:     func() string { return report.RenderCoverageText(leg, slices) },
+		markdown: func() string { return report.RenderCoverageMarkdown(leg, slices) },
+		json:     func() ([]byte, error) { return report.RenderCoverageJSON(leg, slices) },
+	})
 }
 
 // loadLedger reads a JSON array of ledger rows and validates each — a malformed
@@ -116,29 +125,4 @@ func loadLedger(path string) ([]biz.LedgerRow, error) {
 	}
 
 	return rows, nil
-}
-
-// renderCoverage prints the coverage headline and the per-slice attribution so a
-// sub-100% number names exactly where telemetry and the ledger diverge.
-func renderCoverage(w io.Writer, leg engine.CoverageLeg, slices []engine.CoverageSlice) {
-	if leg.Unavailable != "" {
-		wf(w, "COVERAGE   unavailable: %s\n", leg.Unavailable)
-		return
-	}
-
-	wf(w, "COVERAGE   [%s] %.1f%% reconciled against %s\n", leg.Evidence, leg.Ratio*100, leg.Source)
-	sort.Slice(slices, func(i, j int) bool {
-		if slices[i].Flow != slices[j].Flow {
-			return slices[i].Flow < slices[j].Flow
-		}
-
-		return slices[i].Currency < slices[j].Currency
-	})
-	for _, s := range slices {
-		wf(w, "  %-16s %s  telemetry %s  ledger %s  (%.1f%%)\n",
-			s.Flow, s.Currency,
-			biz.Money{Amount: s.TelemetryMinor, Currency: s.Currency, Exponent: s.Exponent}.String(),
-			biz.Money{Amount: s.LedgerMinor, Currency: s.Currency, Exponent: s.Exponent}.String(),
-			s.Ratio*100)
-	}
 }
