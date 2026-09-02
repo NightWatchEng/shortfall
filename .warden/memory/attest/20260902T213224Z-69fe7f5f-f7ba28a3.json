@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "69fe7f5f14465685f855abc462053dd59e200417",
+  "base_sha": "686ec20f9c00e732bf981358c315254f75479819",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-02T21:32:24+00:00",
+  "range_patch_ids": [
+    "62253069c594c3c69325386fdecd5177dc9ddd3d"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 3 of 3 on head 69fe7f5; rounds 1 and 2 ran on the two earlier heads of this branch"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + review package) \u2014 pre-pr-review examiner pass, round 3 of 3"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-02T21:32:24+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "69fe7f5f14465685f855abc462053dd59e200417",
+      "base_sha": "686ec20f9c00e732bf981358c315254f75479819",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/engine.go",
+      "line": 144,
+      "severity": "MEDIUM",
+      "finding": "README's new 'every leg described above is implemented' disagreed with Compute's doc comment saying the coverage leg is 'not yet computed'.",
+      "evidence": "README.md:310 'every leg described above is implemented' vs engine/engine.go:143-144 (at the time) 'The coverage leg is / not yet computed and says so explicitly.' Contradicting artifact: engine/coverage.go:41 defines func Coverage(...), called at cmd/shortfall/reconcile.go:88. Round 1.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "129",
+      "reason": "REFUTED by the cross-examiner on scope \u2014 README.md:109 already claimed coverage 'is computed' at the base sha, so the disagreement predated this branch and the stale side was engine/engine.go, which the README-only diff did not touch. Fixed anyway in this PR rather than parked, because the doc comment was genuinely stale: engine.Coverage exists and cmd/shortfall/reconcile.go calls it. Comment-only.",
+      "id": "4bca8740fac04452"
+    },
+    {
+      "ts": "2026-09-02T21:32:24+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "69fe7f5f14465685f855abc462053dd59e200417",
+      "base_sha": "686ec20f9c00e732bf981358c315254f75479819",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 312,
+      "severity": "MEDIUM",
+      "finding": "'What is unsettled is the shape of the public interfaces, not whether they work' called an absolute contradicted by an unapplied holiday calendar and by negative amounts being rejected in v0.x.",
+      "evidence": "README.md:312-313 'What is unsettled is the shape of the public interfaces, not whether they / work.' Cited as contradicting: engine/unrealized.go:93-99 'flow %q declares holiday calendar %q, which v0 does not yet apply'; docs/portability/open-questions.md:55 '### 7.3 Negative amounts'. Round 1.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "pr": "129",
+      "reason": "REFUTED on the merits. Both cited gaps are self-announcing, documented scope limits, not interfaces failing: engine/unrealized.go:93-99 emits a runtime note for the unapplied holiday calendar and both docs that document the field say '(v0 does not yet apply it)'; negative amounts are an explicit v0.x validation rejection with a port instruction. docs/portability.md:38 indexes the cited page as 'the shapes not yet frozen', the same shape framing the README sentence uses. The README makes no claim about holidays or refunds anywhere.",
+      "id": "3dc92e84b7cc9c61"
+    },
+    {
+      "ts": "2026-09-02T21:32:24+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "69fe7f5f14465685f855abc462053dd59e200417",
+      "base_sha": "686ec20f9c00e732bf981358c315254f75479819",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/engine.go",
+      "line": 12,
+      "severity": "MEDIUM",
+      "finding": "The round-1 fix to Compute's doc comment left its twin in the package doc eight lines above, which still framed the Unavailable marker as meaning a leg is not yet implemented ('Until a leg is implemented, Compute says so explicitly').",
+      "evidence": "engine/engine.go:12-14 'Until a leg is / implemented, Compute says so explicitly rather than returning a / plausible-looking zero.' Contradicting artifacts: docs/adr/0017-unavailable-leg-marker.md (marker is 'true when the leg could not be grounded at all'); docs/architecture/c4-l3-components.md:57; engine/coverage.go. Round 2.",
+      "status": "fixed",
+      "origin": "interactive",
+      "pr": "129",
+      "reason": "CONFIRMED, and correctly: at base the two sentences were twins in one framing and this branch rewrote only the function half, so the divergence was created by this diff. ADR-0017 scopes the marker to legs that could not be grounded, not unimplemented ones, and all five leg implementations exist. Package doc now reads 'A leg its backend cannot ground carries that marker and the reason why, rather than a plausible-looking zero.' Comment-only. The same v0.1.0 residue in engine_test.go's t.Fatal message was fixed in the same commit on the examiner's explicit endorsement.",
+      "id": "fb434c00ff9534e0"
+    },
+    {
+      "ts": "2026-09-02T21:32:24+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "69fe7f5f14465685f855abc462053dd59e200417",
+      "base_sha": "686ec20f9c00e732bf981358c315254f75479819",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/engine.go",
+      "line": 142,
+      "severity": "MEDIUM",
+      "finding": "Compute's doc comment says the unavailability reason lands as 'a caveat for the money legs', but EstLeg (unrealized) has no Caveats field \u2014 Compute writes that reason to Notes.",
+      "evidence": "engine/engine.go:141-142 'a caveat for the money legs, a NotAvailableReason for customers'. Contradicting artifact: engine/engine.go:79-86, type EstLeg has Notes and no Caveats field; Compute's unrealized branch sets Notes at engine/engine.go:193. Round 3.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "pr": "129",
+      "reason": "REFUTED on scope. The clause is byte-identical at base 686ec20 and appears on no '-' line of this diff; the apparent same-sentence overlap is a line-wrapping artifact, since the sentence this diff rewrote is the NEXT one and merely shares a physical line with this clause's tail. Accepting 'you edited this sentence so its other words are in scope' would make any comment touch-up liable for every stale word around it. Merit is also weaker than claimed: engine_test.go:75 uses 'money legs' for just the deterministic pair, and the sentence's leading 'marked unavailable on that leg' already covers unrealized generically \u2014 imprecise about which legs count, not false. NOT FIXED and NOT FILED: reported to the founder as a two-word follow-up ('a caveat or note for the money legs', matching ADR-0017 and docs/architecture/money-path.md:296) for them to call.",
+      "id": "50faf19634b8981e"
+    }
+  ]
+}

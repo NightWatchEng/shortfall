@@ -25,8 +25,8 @@ It simulates a checkout system through a payment-API incident — four weeks of
 traffic first, so the baseline has real history to fit against — then computes
 the report from only what a real emitter could have observed. Abridged below:
 three header lines are cut — the report's title, then the window with the
-registry and library versions, then the never-add rule — and the ten-row
-customer list is truncated at three.
+registry version and the report-contract version, then the never-add
+rule — and the ten-row customer list is truncated at three.
 
 ```text
 
@@ -221,7 +221,14 @@ shortfall impact --registry registry.yaml \
 Metrics ground the deferred and unrealized legs; events ground realized
 de-duplication and customer impact. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
-matrix. `shortfall reconcile --ledger` adds the coverage ratio.
+matrix. The coverage ratio comes from a second command, which needs the
+provider's ledger rows and takes its own flags:
+
+```sh
+shortfall reconcile --registry registry.yaml \
+  --from 2026-08-28T14:00:00Z --to 2026-08-28T15:30:00Z \
+  --ledger rows.json --prometheus http://prometheus:9090
+```
 
 `--prometheus` is what the wiring above feeds: the collector writes the
 `biz_*` families to Prometheus. `--sql` is the events half, and it reads
@@ -271,8 +278,8 @@ sizing anything.
 Everything below is on the
 **[wiki](https://github.com/NightWatchEng/shortfall/wiki)**, which is the
 readable surface — one page per topic, in reading order, regenerated from
-`docs/` on every push to main. The in-repo links here are the same pages
-at their source of truth.
+`docs/` and this README on every push to main that touches them. The
+in-repo links here are the same pages at their source of truth.
 
 **Start here**
 - [Quickstart](docs/quickstart.md) — instrument a service and watch `biz_*` come out, in 10 minutes, no external services.
@@ -298,7 +305,13 @@ and `engine` packages, and
 
 ## Status
 
-Pre-release, under active construction. Nothing here is stable yet.
+v0.3.0 is released and meant to be used: the library installs with `go
+get`, the CLI installs with `go install` or as a release archive with
+checksums, and every leg described above is implemented.
+
+What is unsettled is the shape of the public interfaces, not whether they
+work. That is what v0.x means here, and the paragraph below is the whole
+of it.
 
 **Versioning:** v0.x — the public interfaces (`biz`, `registry`, `emit`,
 `engine`, `query`, `propagate/*`) may change between minor versions.
