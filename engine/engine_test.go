@@ -55,7 +55,7 @@ func TestComputeAssemblesDeterministicLegs(t *testing.T) {
 
 	// Unavailable legs say why instead of rendering zeros.
 	if len(report.Unrealized.Notes) == 0 || report.Coverage.Unavailable == "" {
-		t.Fatal("unrealized and coverage must state they are not yet computed")
+		t.Fatal("unrealized and coverage must state why they are unavailable")
 	}
 
 	if report.LibraryVersion == "" || report.GeneratedAt.IsZero() {

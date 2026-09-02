@@ -9,8 +9,8 @@
 //
 // The Request/Report shapes and the Compute signature are frozen; the
 // one amendment since the v0.1.0 freeze is the additive Unavailable
-// marker on the legs (ADR-0017, contract v0.2.0). Until a leg is
-// implemented, Compute says so explicitly rather than returning a
+// marker on the legs (ADR-0017, contract v0.2.0). A leg its backend cannot
+// ground carries that marker and the reason why, rather than a
 // plausible-looking zero.
 package engine
 
@@ -140,8 +140,9 @@ const defaultTopN = 10
 // Compute assembles the impact report against whatever backend the Querier
 // fronts. A leg its backend cannot ground is marked unavailable on that leg —
 // a caveat for the money legs, a NotAvailableReason for customers — rather
-// than failing the whole report or fabricating a zero. The coverage leg is
-// not yet computed and says so explicitly.
+// than failing the whole report or fabricating a zero. Compute never grounds
+// the coverage leg — that is a reconcile-time number (see Coverage), and it
+// is marked unavailable here with the reason, not left as a zero.
 func Compute(ctx context.Context, reg *registry.Registry, q query.Querier, req Request) (Report, error) {
 	report := Report{
 		Request:        req,
