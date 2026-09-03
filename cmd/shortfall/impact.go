@@ -47,7 +47,7 @@ func runImpact(args []string, stdout, stderr io.Writer) int {
 		regPath   = fs.String("registry", "", "path to the flow registry YAML (required)")
 		fromStr   = fs.String("from", "", "window start, RFC3339 (required)")
 		toStr     = fs.String("to", "", "window end, RFC3339 (required)")
-		format    = fs.String("format", "text", "output format: text|json|markdown")
+		format    = fs.String("format", "text", "output format: "+formatUsage())
 		promURL   = fs.String("prometheus", "", "Prometheus base URL for the metric legs")
 		sqlDSN    = fs.String("sql", "", "SQL DSN for the event legs")
 		sqlDriver = fs.String("sql-driver", "sqlite", "database/sql driver name for --sql")
@@ -61,7 +61,7 @@ func runImpact(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *regPath == "" || *fromStr == "" || *toStr == "" {
-		wln(stderr, "usage: shortfall impact --registry r.yaml --from <RFC3339> --to <RFC3339> [--flow f]... [--scope k=v]... [--prometheus URL] [--sql DSN] [--format text|json|markdown]")
+		wln(stderr, "usage: shortfall impact --registry r.yaml --from <RFC3339> --to <RFC3339> [--flow f]... [--scope k=v]... [--prometheus URL] [--sql DSN] [--format "+formatUsage()+"]")
 		return 2
 	}
 
@@ -80,6 +80,11 @@ func runImpact(args []string, stdout, stderr io.Writer) int {
 	to, err := time.Parse(time.RFC3339, *toStr)
 	if err != nil {
 		wf(stderr, "--to: %v\n", err)
+		return 2
+	}
+
+	if !knownFormat(*format) {
+		wf(stderr, "--format: unknown %q (want %s)\n", *format, formatUsage())
 		return 2
 	}
 
@@ -107,25 +112,11 @@ func runImpact(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	switch *format {
-	case "text":
-		ws(stdout, report.RenderText(rep))
-	case "markdown":
-		ws(stdout, report.RenderMarkdown(rep))
-	case "json":
-		b, err := report.RenderJSON(rep)
-		if err != nil {
-			wf(stderr, "render: %v\n", err)
-			return 1
-		}
-
-		wln(stdout, string(b))
-	default:
-		wf(stderr, "--format: unknown %q (want text|json|markdown)\n", *format)
-		return 2
-	}
-
-	return 0
+	return renderFormat(stdout, stderr, *format, renderings{
+		text:     func() string { return report.RenderText(rep) },
+		markdown: func() string { return report.RenderMarkdown(rep) },
+		json:     func() ([]byte, error) { return report.RenderJSON(rep) },
+	})
 }
 
 func parseScopes(scopes stringList) (engine.Scope, error) {

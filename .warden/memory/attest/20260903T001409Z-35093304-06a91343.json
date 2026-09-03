@@ -1,0 +1,192 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "35093304f9ce2ed204272f21332f91024913361e",
+  "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-03T00:14:09+00:00",
+  "range_patch_ids": [
+    "42147a60fcbfbe860a9fb99984bf559607e025aa"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 3 of 3 on head abe111e; rounds 1-2 ran on the two earlier heads of this branch"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 3 of 3"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".github/ISSUE_TEMPLATE",
+      "file": ".github/ISSUE_TEMPLATE/1-bug-report.yml",
+      "line": 44,
+      "severity": "MEDIUM",
+      "finding": "The bug-report template documented `shortfall <version> (<commit>)` unconditionally, but this diff makes the parenthesised commit conditional, and the case that drops it is the `go install` path the README recommends.",
+      "evidence": "Template said '`shortfall version` prints `shortfall <version> (<commit>)`'. At base, main.go:36 printed that shape unconditionally; at head, formatVersionLine omits the parens when resolveBuild returns an empty commit, which it does for any module-proxy install.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "CONFIRMED in scope \u2014 unchanged doc bytes, but the diff changed the behavior the doc describes, which the examiner identified as the LIMIT of the earlier 'pre-existing text' precedent rather than an instance of it. Round 1. NOTE: .github/ is gate surface, forbidden on a feature branch by skills-policy 'Forbidden paths'; the founder was asked and explicitly waived it for this line so the doc and behavior land together (charter item 8). The PR body says so.",
+      "id": "d440d2648c656641"
+    },
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "unmapped:build-provenance-inconsistency",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": ".goreleaser.yaml",
+      "line": 28,
+      "severity": "LOW",
+      "finding": "goreleaser stamped {{.Version}}, which strips the leading 'v', while the new build-info path reports the module version with it \u2014 one binary, two version shapes.",
+      "evidence": "'-X main.version={{.Version}}'; the published assets are shortfall_0.3.0_darwin_arm64.tar.gz from the same template, so a release binary would print 'shortfall 0.3.0' where an installed one prints 'shortfall v0.3.0'. The test fixture ldVersion 'v0.3.0' encoded the wrong assumption and passed anyway, that arm being a passthrough.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "CONFIRMED in scope \u2014 the examiner verified the v-strip empirically against the published asset names and rejected the 'ldflags are pre-existing' defence, since at base ldflags were the ONLY real version source and there was no second shape to disagree with. Round 1.",
+      "id": "95004bce4be58559"
+    },
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/format.go",
+      "line": 12,
+      "severity": "MEDIUM",
+      "finding": "format.go's comment claims the flag help reads formatVocabulary, but main.go's usage() hardcodes text|json|markdown.",
+      "evidence": "Comment: 'The flag help, the early rejection and the dispatcher all read it'. main.go usage() spelled the list out literally.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "REFUTED on the merits. The comment names three readers and all three genuinely read formatVocabulary: the flag package's help strings (impact.go:50, reconcile.go:36, both converted by this diff), knownFormat, and renderFormat. main.go's usage() is the top-level command banner, not flag help, and the comment never claimed it. Round 1. (The banner was nonetheless converted later for its own reasons \u2014 see the last finding.)",
+      "id": "ce075bade0f97399"
+    },
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine/report",
+      "file": "engine/report/doc.go",
+      "line": 4,
+      "severity": "MEDIUM",
+      "finding": "The package doc says the package 'renders an engine.Report three ways' while this diff adds four exported symbols whose input is not an engine.Report.",
+      "evidence": "doc.go: 'Package report renders an engine.Report three ways: JSON, the text ledger block, and markdown.'",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "REFUTED, out of scope. RenderJSON/RenderText/RenderMarkdown all still take engine.Report and are untouched, so nothing became old. The sentence was already non-exhaustive at base \u2014 CustomersCSV and Summary both predate this diff and are named by neither the sentence nor the doc. Round 1.",
+      "id": "e83f67ad15ac2826"
+    },
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "unmapped:snapshot-version-misreport",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": ".goreleaser.yaml",
+      "line": 35,
+      "severity": "MEDIUM",
+      "finding": "The {{.Tag}} fix for the release path regressed the snapshot path: .Tag ignores snapshot mode, and the dry-run job hands goreleaser the last root tag, so every snapshot binary would claim to BE the last release.",
+      "evidence": "release.yml's snapshot job sets GORELEASER_CURRENT_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*'), a plain root tag; with -X main.version={{.Tag}} a snapshot from any untagged commit stamps v0.3.0, while the archive name_template still uses the SNAPSHOT-suffixed .Version \u2014 the same artifact named one thing and reporting another.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "CONFIRMED. This is a defect the PREVIOUS round's own fix introduced, which is exactly why the round was re-run rather than assumed good. Stamp is now v{{.Version}}: v-prefixed on release, and honestly 0.3.1-SNAPSHOT-<sha> on the dry run. TestReleaseStampIsVPrefixed pins all three shapes by reading .goreleaser.yaml. Round 2.",
+      "id": "baefb9f6aee91f45"
+    },
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/main.go",
+      "line": 65,
+      "severity": "MEDIUM",
+      "finding": "The new usage() comment claimed the banner 'was the last statement of the vocabulary that formatVocabulary did not feed'. It was not \u2014 impact.go:64 still hardcoded the list.",
+      "evidence": "Comment on an added line; an exhaustive grep of cmd/shortfall found exactly one surviving hardcoded enumeration, impact.go:64, byte-identical at base and head, while its twin reconcile.go:48 WAS converted in this same diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "CONFIRMED in scope \u2014 the comment is on added lines, and the author's own conversion of impact.go's twin puts subcommand usage lines inside the class the comment claimed was empty. Fixed by converting impact.go and restating the comment as an invariant rather than a superlative, then ENFORCING it: TestNoHardcodedFormatVocabulary builds its needle from formatUsage() so it carries no copy of the list, and mutation-testing confirms re-hardcoding impact.go reds it. Round 3.",
+      "id": "7b8619e134a04a63"
+    },
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/version_test.go",
+      "line": 42,
+      "severity": "MEDIUM",
+      "finding": "A test fixture comment said 'goreleaser stamps the TAG', contradicting .goreleaser.yaml's -X main.version=v{{.Version}}; the test name TestReleaseStampUsesTheTag asserted the opposite of itself.",
+      "evidence": "Comment on added lines pointed the reader at two artifacts that both say the opposite: .goreleaser.yaml opens '# v{{.Version}}, not {{.Version}} and not {{.Tag}}', and the test's own third case asserts -X main.version={{.Tag}} is ABSENT.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "CONFIRMED on the COMMENT half only. The examiner split the finding: the docs-accuracy rule body excludes test names ('Do NOT flag: ... test names'), so the rename carried no rule weight and the .goreleaser.yaml citation resolves regardless. Comment corrected. The test was renamed to TestReleaseStampIsVPrefixed anyway \u2014 it is newly added in this diff and asserting the opposite of its own name, so leaving it because a rule excludes it would be knowingly shipping a misleading name. Round 3.",
+      "id": "8c4d8bddff1ab36a"
+    },
+    {
+      "ts": "2026-09-03T00:14:09+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "35093304f9ce2ed204272f21332f91024913361e",
+      "base_sha": "2005246f7818ef60a2df14155d6052f73c48c0cd",
+      "rule_id": "unmapped:tracked-id-in-comment",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/format.go",
+      "line": 16,
+      "severity": "MEDIUM",
+      "finding": "Five code comments carried tracked-item ids (workspace-g0o / workspace-7zs), which this repo forbids: ids live in commit headers and PR bodies, never in code.",
+      "evidence": "warden review --base origin/main reported 5 comment-hygiene [no-bead-ids-in-comments] findings across cmd/shortfall/{format.go:16, version.go:29, version_test.go:50, version_test.go:146, reconcile_test.go:192}, citing CONTRIBUTING and ADR-0014.",
+      "status": "fixed",
+      "origin": "interactive",
+      "reason": "CONFIRMED by the deterministic gate, not the review passes \u2014 recorded here because it was a real defect in this diff that I introduced five times. Non-blocking (0 HIGH), so the gate still exited 0; fixed anyway rather than shipped, since it is a documented convention. Re-run after the fix: 'No findings. All applicable rules passed.'",
+      "id": "cb9b38c92de095d3"
+    }
+  ]
+}

@@ -14,11 +14,12 @@ import (
 	"github.com/NightWatchEng/shortfall/registry"
 )
 
-// Stamped by goreleaser via -ldflags -X (see .goreleaser.yaml); "dev"/"none"
-// identify a non-release build.
+// Stamped by goreleaser via -ldflags -X (see .goreleaser.yaml). Left at the
+// dev sentinels, resolveBuild falls back to the toolchain's build info, so an
+// installed binary still names its version.
 var (
-	version = "dev"
-	commit  = "none"
+	version = devVersion
+	commit  = devCommit
 )
 
 func main() {
@@ -33,7 +34,7 @@ func run(args []string) int {
 
 	switch args[0] {
 	case "--version", "version":
-		fmt.Printf("shortfall %s (%s)\n", version, commit)
+		fmt.Println(versionLine())
 		return 0
 	case "validate":
 		if len(args) != 2 {
@@ -60,14 +61,18 @@ func run(args []string) int {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `shortfall — incident $ impact
+	// The format list interpolates rather than repeating it. Every statement
+	// of the vocabulary in this package reads formatVocabulary;
+	// TestNoHardcodedFormatVocabulary is what keeps that true.
+	fmt.Fprintf(os.Stderr, `shortfall — incident $ impact
 usage:
   shortfall validate <registry.yaml>   validate a flow registry
   shortfall impact --registry r.yaml --from <RFC3339> --to <RFC3339> [--flow f]...
-                   [--scope k=v]... [--prometheus URL] [--sql DSN] [--format text|json|markdown]
+                   [--scope k=v]... [--prometheus URL] [--sql DSN] [--format %[1]s]
                                        compute the impact ledger for a window
   shortfall reconcile --registry r.yaml --from <RFC3339> --to <RFC3339> --ledger rows.json [--flow f]...
-                   [--prometheus URL] [--sql DSN] [--source label]
+                   [--prometheus URL] [--sql DSN] [--source label] [--format %[1]s]
                                        publish the coverage ratio (telemetry vs a ledger)
-  shortfall version                    print build provenance`)
+  shortfall version                    print build provenance
+`, formatUsage())
 }
