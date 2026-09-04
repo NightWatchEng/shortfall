@@ -196,3 +196,50 @@ func postWebhook(t *testing.T, h http.Handler, payload []byte, sig string) *http
 	h.ServeHTTP(rec, req)
 	return rec
 }
+
+func TestWithStageMapRemapsMappedStages(t *testing.T) {
+	created := time.Date(2026, 8, 27, 14, 0, 0, 0, time.UTC)
+	payload, sig := fixture(t, "payment_intent.payment_failed", created, `{"amount":14900,"currency":"usd",`+meta+`}`)
+
+	// A registry that names Stripe's capture stage "charge" and leaves the
+	// rest alone: only the named stage moves, every other mapping is intact.
+	out, mapped, err := VerifyAndMap(payload, sig, testSecret, WithStageMap(map[string]string{"capture": "charge"}))
+	if err != nil || !mapped {
+		t.Fatalf("mapped=%v err=%v", mapped, err)
+	}
+
+	if out.Stage != "charge" {
+		t.Fatalf("stage = %q, want the remapped %q", out.Stage, "charge")
+	}
+
+	payload, sig = fixture(t, "invoice.paid", created, `{"amount_paid":9900,"currency":"usd",`+meta+`}`)
+	out, _, err = VerifyAndMap(payload, sig, testSecret, WithStageMap(map[string]string{"capture": "charge"}))
+	if err != nil || out.Stage != "settle" {
+		t.Fatalf("an unnamed stage must keep its default: stage=%q err=%v", out.Stage, err)
+	}
+}
+
+func TestWithStageMapReachesTheHandler(t *testing.T) {
+	var got []biz.Outcome
+	h := Handler(testSecret, func(o biz.Outcome) { got = append(got, o) },
+		WithStageMap(map[string]string{"capture": "charge"}))
+
+	payload, sig := fixture(t, "payment_intent.payment_failed", time.Now(), `{"amount":14900,"currency":"usd",`+meta+`}`)
+	if rec := postWebhook(t, h, payload, sig); rec.Code != http.StatusOK {
+		t.Fatalf("code %d", rec.Code)
+	}
+
+	if len(got) != 1 || got[0].Stage != "charge" {
+		t.Fatalf("handler must apply the remap before delivering: %+v", got)
+	}
+}
+
+func TestWithStageMapRejectsAnUnknownDefaultStage(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("remapping a stage this adapter never emits must panic: it is a typo, not a configuration")
+		}
+	}()
+
+	WithStageMap(map[string]string{"captur": "charge"})
+}

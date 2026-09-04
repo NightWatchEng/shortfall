@@ -85,16 +85,18 @@ fmt.Println(report.Realized.ByCurrency)
 ```
 
 **Pairing two read adapters.** No single AWS or GCP read boundary serves
-both signals, so the engine gets one adapter per signal kind and each
-declares the other unsupported: `cwinsights` or `gcplogging` grounds the
+both signals, so the engine gets one adapter per signal kind — paired with
+`query.Combine(metrics, events)`, which routes each verb to the side that
+owns its signal and takes each `Capabilities()` field from that side — and
+each declares the other unsupported: `cwinsights` or `gcplogging` grounds the
 realized and customer legs from events, and `promql` grounds the
 deferred, unrealized and baseline legs against a Prometheus-compatible
 metrics store (on GCP, Managed Service for Prometheus, fed by
 `adapters/export/otlp`). That is why `query.Caps` carries `Metrics` and
 `Events` independently: an events-only querier returns
 `query.ErrUnsupported` from `QueryMetric`, and the engine turns that into
-a leg marked unavailable with a reason. The CLI does the same pairing
-behind `--prometheus` and `--sql`.
+a leg marked unavailable with a reason. The CLI is the same call behind
+`--prometheus` and `--sql`.
 
 De-duplication is not the adapter's job. The per-entity de-dup and the
 later-success exclusion (ADR-0009) live in the engine; an adapter hands
@@ -193,7 +195,9 @@ defer em.Close(ctx)
   intents into `biz.LedgerRow`s (capture amount basis, ADR-0010); feed
   the rows to `shortfall reconcile --ledger rows.json`. It also wraps the
   Stripe backend to observe provider calls and maps webhooks to
-  `biz.Outcome`s — see the [money path](architecture/money-path.md).
+  `biz.Outcome`s, under the stage names `auth`, `capture`, `settle` and
+  `dispute` — `stripe.WithStageMap` renames them to what your registry
+  declares. See the [money path](architecture/money-path.md).
 - `adapters/incident/slack` — posts and refreshes the impact ledger in
   the incident channel: `slack.New(token).Post(ctx, channel, report)`,
   or `Refresh` to keep one message live as the incident evolves.
@@ -212,4 +216,6 @@ honest `Capabilities()`, and run the shared conformance suite
 (`testkit/conformance`) — it checks your adapter against the `memq`
 reference, so "same numbers on a real backend" is a test rather than a
 hope. The wire-level contract an adapter must satisfy is in
-[portability](portability.md).
+[portability](portability.md). A service that is not in Go needs no
+adapter at all: it writes the event shape directly — see
+[emit from any language](emit-any-language.md).

@@ -134,8 +134,9 @@ func parseScopes(scopes stringList) (engine.Scope, error) {
 }
 
 // buildQuerier composes a querier from the configured backends: Prometheus for
-// metrics, SQL for events. With both, a combining querier routes each verb;
-// with one, that backend is used directly. It returns a cleanup for any DB.
+// metrics, SQL for events. With both, query.Combine routes each verb to the
+// side that owns its signal; with one, that backend is used directly. It
+// returns a cleanup for any DB.
 func buildQuerier(promURL, sqlDSN, sqlDriver string) (query.Querier, func(), error) {
 	noop := func() {}
 	var metrics, events query.Querier
@@ -163,35 +164,12 @@ func buildQuerier(promURL, sqlDSN, sqlDriver string) (query.Querier, func(), err
 
 	switch {
 	case metrics != nil && events != nil:
-		return combined{metrics: metrics, events: events}, cleanup, nil
+		return query.Combine(metrics, events), cleanup, nil
 	case metrics != nil:
 		return metrics, cleanup, nil
 	case events != nil:
 		return events, cleanup, nil
 	default:
 		return nil, noop, fmt.Errorf("no querier configured: pass --prometheus and/or --sql")
-	}
-}
-
-// combined routes metric queries to one backend and event queries to another —
-// the common split of metrics in a TSDB and outcome events in a store.
-type combined struct {
-	metrics query.Querier
-	events  query.Querier
-}
-
-func (c combined) QueryMetric(ctx context.Context, q query.Query) (query.Series, error) {
-	return c.metrics.QueryMetric(ctx, q)
-}
-func (c combined) QueryEvents(ctx context.Context, q query.EventQuery) (query.EventGroups, error) {
-	return c.events.QueryEvents(ctx, q)
-}
-func (c combined) Capabilities() query.Caps {
-	m, e := c.metrics.Capabilities(), c.events.Capabilities()
-	return query.Caps{
-		Metrics:            m.Metrics,
-		Events:             e.Events,
-		MetricHistoryWeeks: m.MetricHistoryWeeks,
-		EventHistoryWeeks:  e.EventHistoryWeeks,
 	}
 }

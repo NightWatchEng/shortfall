@@ -287,6 +287,7 @@ in-repo links here are the same pages at their source of truth.
 - [Quickstart](docs/quickstart.md) — instrument a service and watch `biz_*` come out, in 10 minutes, no external services.
 - [Integration guide](docs/integration.md) — the step-by-step for wiring your own service.
 - [Worked example](docs/example-webhooks.md) — webhook Lambdas → payments-service, end to end.
+- [Emit from any language](docs/emit-any-language.md) — the event and header shapes a non-Go service writes, and the CLI check that proves them.
 
 **Reference**
 - [Backends & adapters](docs/adapters.md) — which backend grounds which leg.

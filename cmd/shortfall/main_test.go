@@ -17,6 +17,8 @@ func TestRunExitCodes(t *testing.T) {
 		{"validate ok", []string{"validate", "../../registry/testdata/registry.yaml"}, 0},
 		{"validate missing file", []string{"validate", "nope.yaml"}, 1},
 		{"validate wrong arity", []string{"validate"}, 2},
+		{"check-events wrong arity", []string{"check-events"}, 2},
+		{"check-events missing file", []string{"check-events", "nope.jsonl"}, 1},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

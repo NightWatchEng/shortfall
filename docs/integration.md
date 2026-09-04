@@ -8,7 +8,10 @@ Work through it in order — each step depends on the one before it. The
 running example is an `invoice.pay` flow with three stages,
 `auth → capture → settle`. If your payment path is a third-party
 provider rather than your own code, the same steps apply; the
-[worked example](example-webhooks.md) shows the two-service shape.
+[worked example](example-webhooks.md) shows the two-service shape. A
+service in the flow that is not written in Go writes the same signals by
+hand — [emit from any language](emit-any-language.md) is its version of
+this page.
 
 **Before you start:** money is always **minor units** (`14900` = $149.00
 at exponent 2) and never a float. Amounts and ids ride *events*; metrics

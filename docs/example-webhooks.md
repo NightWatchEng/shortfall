@@ -240,9 +240,9 @@ much you can trust the rest. Point the querier at the group carrying
 **To ground all four**, pair a metrics querier with the events one. Ship
 metrics through `adapters/export/otlp` to a collector that writes to a
 Prometheus-compatible store, then hand the engine one adapter per signal
-kind. The engine takes a single `query.Querier`, so the pairing is a small
-type of your own that routes `QueryMetric` to `promql` and `QueryEvents` to
-`cwinsights`, and takes each `Capabilities()` field from the backend that
-owns it — the CLI does exactly this behind `--prometheus` and `--sql`, but
-its `combined` type is unexported. See
-[backends & adapters](adapters.md) for the full matrix.
+kind. The engine takes a single `query.Querier`, so pair them with
+`query.Combine(metrics, events)`: it routes `QueryMetric` to `promql` and
+`QueryEvents` to `cwinsights`, and takes each `Capabilities()` field from
+the backend that owns it — the same call the CLI makes behind
+`--prometheus` and `--sql`. See [backends & adapters](adapters.md) for the
+full matrix.
