@@ -31,13 +31,15 @@ var ageBucketOrder = []string{"lt1m", "1m-5m", "5m-30m", "30m-2h", "gt2h"}
 // become lost, most of it not.
 //
 // Two groundings, in a fixed order (ADR-0019). The biz_inflight_value gauge
-// is authoritative whenever the backend returns any series for it — a level
-// of zero included, because a tracker that observed Done knows about
+// is authoritative whenever the backend returns any series for it in scope —
+// a level of zero included, because a tracker that observed Done knows about
 // completions the event stream may show only outside the window. When no
 // gauge series exists and the backend serves events, the leg is derived from
-// outcome events instead: an entity with a `deferred` outcome and no terminal
-// outcome at the same or a later stage is in flight, valued at its largest
-// single deferred amount (ADR-0009), aged from its first deferred event. A
+// outcome events instead: an entity with a `deferred` outcome and, within
+// the lookback, no terminal outcome and no further deferral at the same or a
+// later stage of the flow is in flight, valued at its largest single deferred
+// amount (ADR-0009), aged from its first deferred event. Ordering in time is
+// not known to this path — only stage order is — and the caveat says so. A
 // backend serving neither signal cannot ground the leg and Deferred returns
 // an error.
 //
@@ -145,18 +147,21 @@ func deferredFromGauge(ctx context.Context, reg *registry.Registry, q query.Quer
 
 // eventsDerivedCaveat names the events grounding and its two limits on the
 // leg it produces.
-const eventsDerivedCaveat = "events-derived: no biz_inflight_value gauge grounded this leg, so it is built from deferred outcome events with no later terminal outcome — ages run from the first deferred event, and work never recorded as deferred is not seen (ADR-0019)"
+const eventsDerivedCaveat = "events-derived: no biz_inflight_value gauge grounded this leg, so it is built from deferred outcome events whose entity has no terminal outcome at the same or a later stage within the lookback — ordering in time is not known, so a deferral retried after a failure at its stage is not seen; ages run from the first deferred event, and work never recorded as deferred is not seen (ADR-0019)"
 
 // terminalOutcomes resolve a deferral: the entity's money reached a terminal
 // state. `unknown` is not terminal — the money is still unresolved.
 var terminalOutcomes = []string{"success", "failed", "abandoned"}
 
 // ageCutoffs are the nested ranges the events path derives age buckets from,
-// oldest first: an entity whose first deferred event lies before To-2h is
-// gt2h, otherwise before To-30m is 30m-2h, and so on down to lt1m. The
-// event AST returns no per-event timestamps, so the age is read from which
-// range the entity first appears in — bucket granularity, which is all the
-// SLA arithmetic uses anyway (ADR-0005).
+// oldest first: an entity whose first deferred event is at or before To-2h
+// is gt2h, otherwise at or before To-30m is 30m-2h, and so on down to lt1m.
+// The event AST returns no per-event timestamps, so the age is read from
+// which range the entity first appears in — bucket granularity, which is
+// all the SLA arithmetic uses anyway (ADR-0005). "At or before" matters:
+// emit.AgeBucketFor's intervals are left-closed, so an entity exactly thirty
+// minutes old is 30m-2h on the gauge path, and the SLA breach test sits on
+// that floor. cutEnd makes each range end inclusive of the cut instant.
 var ageCutoffs = []struct {
 	bucket string
 	before time.Duration
@@ -186,7 +191,7 @@ func deferredFromEvents(ctx context.Context, reg *registry.Registry, q query.Que
 	}
 	inflight := map[entityStage]inflightItem{}
 	for _, cut := range ageCutoffs {
-		rng := query.TimeRange{From: start, To: req.Window.To.Add(-cut.before)}
+		rng := query.TimeRange{From: start, To: cutEnd(req.Window.To, cut.before)}
 		if !rng.To.After(rng.From) {
 			continue
 		}
@@ -291,6 +296,18 @@ func deferredFromEvents(ctx context.Context, reg *registry.Registry, q query.Que
 	}
 
 	return leg, nil
+}
+
+// cutEnd is the half-open end of the nested range for a cut: the window end
+// itself for the youngest bucket (the window is [From, To) already), and one
+// nanosecond past To-before otherwise, so an event stamped exactly at the
+// cut is inside the range — age >= before, the left-closed bucket rule.
+func cutEnd(to time.Time, before time.Duration) time.Time {
+	if before == 0 {
+		return to
+	}
+
+	return to.Add(-before).Add(time.Nanosecond)
 }
 
 // resolvedByLaterStage reports whether any of the entity's terminal stages

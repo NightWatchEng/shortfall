@@ -49,7 +49,8 @@ Every number is labelled by the kind of evidence behind it, and that is the
 whole point. **Realized** is deterministic. **Deferred** is the money still
 in the queues at the window's end — late, not lost — read from the gauge the
 in-flight tracker publishes, or derived from `deferred` outcome events when
-no tracker was alive to publish one (the report says which). **Unrealized**
+no tracker was alive to publish one, in which case the leg carries a caveat
+saying so. **Unrealized**
 is a range, because demand that never arrived can only be sized against a
 baseline — and it is never added to realized. **Coverage** says `unavailable` and names its reason
 rather than reporting `0%`, which would be a claim.
@@ -263,8 +264,8 @@ disagree with the library.
   unbounded-cardinality incident waiting to happen (ADR-0004).
 - **A leg that cannot be grounded says so.** On an events-only backend
   the unrealized leg comes back marked unavailable, with a caveat naming
-  why, because a zero is a claim (ADR-0017); the deferred leg says which
-  of its two sources it stands on (ADR-0019).
+  why, because a zero is a claim (ADR-0017); the deferred leg carries a
+  caveat whenever it stood on events rather than the gauge (ADR-0019).
 - **No severity ladder in the registry means no severity suggestion.**
 - **PII is fenced in code.** Raw emails, PANs and IBANs are rejected at
   the `biz.*` boundary, not discouraged in a style guide.

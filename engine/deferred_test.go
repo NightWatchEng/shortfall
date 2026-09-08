@@ -355,85 +355,136 @@ var eventsWindow = query.TimeRange{
 	To:   time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
 }
 
-func TestDeferredFromEventsGroundsTheLeg(t *testing.T) {
+func TestDeferredFromEventsResolution(t *testing.T) {
+	// One entity per case, judged alone, so a wrong resolution branch fails
+	// by name. The reference registry orders auth → capture → settle, with
+	// capture PT30M lost and settle P1D at_risk.
 	to := eventsWindow.To
-	events := []biz.Outcome{
-		// e1: deferred at capture three hours ago, never resolved — gt2h,
-		// past the capture SLA (PT30M, on_breach lost): breach + projected lost.
-		deferredEvent("e1", "capture", biz.ResultDeferred, 1000, to.Add(-3*time.Hour)),
-		// e2: deferred at capture ten minutes ago, twice (a retry) with two
-		// amounts — one entity, the larger amount, bucket 5m-30m, no breach.
-		deferredEvent("e2", "capture", biz.ResultDeferred, 300, to.Add(-10*time.Minute)),
-		deferredEvent("e2", "capture", biz.ResultDeferred, 500, to.Add(-8*time.Minute)),
-		// e3: deferred at capture, then captured (success at the same stage)
-		// — resolved, not in flight.
-		deferredEvent("e3", "capture", biz.ResultDeferred, 700, to.Add(-40*time.Minute)),
-		deferredEvent("e3", "capture", biz.ResultSuccess, 700, to.Add(-20*time.Minute)),
-		// e4: deferred at settle fifty minutes ago — 30m-2h; settle's SLA is
-		// P1D at_risk, so no breach and nothing projected lost.
-		deferredEvent("e4", "settle", biz.ResultDeferred, 2000, to.Add(-50*time.Minute)),
-		// e5: deferred at capture, then failed at the LATER settle stage — a
-		// terminal at a later registry stage resolves the earlier deferral.
-		deferredEvent("e5", "capture", biz.ResultDeferred, 900, to.Add(-45*time.Minute)),
-		deferredEvent("e5", "settle", biz.ResultFailed, 900, to.Add(-15*time.Minute)),
-		// e6: deferred at settle, and its EARLIER capture stage succeeded —
-		// an earlier-stage terminal does not resolve a later deferral.
-		deferredEvent("e6", "capture", biz.ResultSuccess, 400, to.Add(-30*time.Minute)),
-		deferredEvent("e6", "settle", biz.ResultDeferred, 400, to.Add(-25*time.Minute)),
-		// e7: deferred at capture, then deferred at settle with no capture
-		// terminal recorded (an emitter that records only at enqueue) —
-		// entering the settle queue resolves the capture deferral, so the
-		// money counts once, at settle, aged from the settle entry (1m-5m).
-		deferredEvent("e7", "capture", biz.ResultDeferred, 600, to.Add(-70*time.Minute)),
-		deferredEvent("e7", "settle", biz.ResultDeferred, 600, to.Add(-3*time.Minute)),
+	cases := []struct {
+		name          string
+		events        []biz.Outcome
+		wantCount     int64
+		wantUSD       int64
+		wantBucket    string
+		wantBreaches  int64
+		wantProjected int64
+	}{
+		{
+			name:      "deferred three hours ago, never resolved: gt2h, breached, projected lost",
+			events:    []biz.Outcome{deferredEvent("e", "capture", biz.ResultDeferred, 1000, to.Add(-3*time.Hour))},
+			wantCount: 1, wantUSD: 1000, wantBucket: "gt2h", wantBreaches: 1, wantProjected: 1000,
+		},
+		{
+			name: "retried deferral with two amounts counts once at the larger",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultDeferred, 300, to.Add(-10*time.Minute)),
+				deferredEvent("e", "capture", biz.ResultDeferred, 500, to.Add(-8*time.Minute)),
+			},
+			wantCount: 1, wantUSD: 500, wantBucket: "5m-30m",
+		},
+		{
+			name: "success at the same stage resolves",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultDeferred, 700, to.Add(-40*time.Minute)),
+				deferredEvent("e", "capture", biz.ResultSuccess, 700, to.Add(-20*time.Minute)),
+			},
+		},
+		{
+			name:      "deferred at settle: at_risk SLA breaches nothing and projects nothing",
+			events:    []biz.Outcome{deferredEvent("e", "settle", biz.ResultDeferred, 2000, to.Add(-50*time.Minute))},
+			wantCount: 1, wantUSD: 2000, wantBucket: "30m-2h",
+		},
+		{
+			name: "failed at a later stage resolves an earlier deferral",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultDeferred, 900, to.Add(-45*time.Minute)),
+				deferredEvent("e", "settle", biz.ResultFailed, 900, to.Add(-15*time.Minute)),
+			},
+		},
+		{
+			name: "success at an earlier stage does not resolve a later deferral",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultSuccess, 400, to.Add(-30*time.Minute)),
+				deferredEvent("e", "settle", biz.ResultDeferred, 400, to.Add(-25*time.Minute)),
+			},
+			wantCount: 1, wantUSD: 400, wantBucket: "5m-30m",
+		},
+		{
+			name: "a later-stage deferral resolves the earlier one: counted once, aged from the later entry",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultDeferred, 600, to.Add(-70*time.Minute)),
+				deferredEvent("e", "settle", biz.ResultDeferred, 600, to.Add(-3*time.Minute)),
+			},
+			wantCount: 1, wantUSD: 600, wantBucket: "1m-5m",
+		},
+		{
+			name: "abandoned at the same stage resolves",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultDeferred, 800, to.Add(-12*time.Minute)),
+				deferredEvent("e", "capture", biz.ResultAbandoned, 800, to.Add(-6*time.Minute)),
+			},
+		},
+		{
+			name: "unknown is not terminal",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultDeferred, 150, to.Add(-12*time.Minute)),
+				deferredEvent("e", "capture", biz.ResultUnknown, 150, to.Add(-6*time.Minute)),
+			},
+			wantCount: 1, wantUSD: 150, wantBucket: "5m-30m",
+		},
+		{
+			// The documented limit: the events path knows stage order, not
+			// time order, so a failure followed by a retried deferral at the
+			// same stage reads as resolved.
+			name: "a failure before a retried deferral at the same stage is not seen (documented limit)",
+			events: []biz.Outcome{
+				deferredEvent("e", "capture", biz.ResultFailed, 250, to.Add(-50*time.Minute)),
+				deferredEvent("e", "capture", biz.ResultDeferred, 250, to.Add(-10*time.Minute)),
+			},
+		},
+		{
+			// Bucket floors are left-closed, as on the gauge path: exactly
+			// thirty minutes old is 30m-2h, and the PT30M capture SLA is
+			// breached there.
+			name:      "exactly thirty minutes old sits on the 30m floor and breaches",
+			events:    []biz.Outcome{deferredEvent("e", "capture", biz.ResultDeferred, 100, to.Add(-30*time.Minute))},
+			wantCount: 1, wantUSD: 100, wantBucket: "30m-2h", wantBreaches: 1, wantProjected: 100,
+		},
+		{
+			name:      "one second short of thirty minutes is 5m-30m and does not breach",
+			events:    []biz.Outcome{deferredEvent("e", "capture", biz.ResultDeferred, 100, to.Add(-30*time.Minute).Add(time.Second))},
+			wantCount: 1, wantUSD: 100, wantBucket: "5m-30m",
+		},
+		{
+			name:      "exactly two hours old is gt2h",
+			events:    []biz.Outcome{deferredEvent("e", "capture", biz.ResultDeferred, 100, to.Add(-2*time.Hour))},
+			wantCount: 1, wantUSD: 100, wantBucket: "gt2h", wantBreaches: 1, wantProjected: 100,
+		},
 	}
-	q := memq.New(memq.WithEvents(events), memq.WithCaps(query.Caps{Events: true}))
-	leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: eventsWindow, Flows: []string{"invoice.pay"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			q := memq.New(memq.WithEvents(c.events), memq.WithCaps(query.Caps{Events: true}))
+			leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: eventsWindow, Flows: []string{"invoice.pay"}})
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	if leg.Unavailable {
-		t.Fatalf("an events-only backend must ground the leg, got unavailable: %v", leg.Caveats)
-	}
+			if leg.Unavailable || leg.Evidence != EvidenceDeterministic || len(leg.Caveats) != 1 || !strings.Contains(leg.Caveats[0], "events") {
+				t.Fatalf("leg must be a measured, events-derived leg with one caveat: %+v", leg)
+			}
 
-	// e1 1000 + e2 500 + e4 2000 + e6 400 + e7 600.
-	if leg.ByCurrency["USD"] != 4500 {
-		t.Fatalf("ByCurrency = %v, want USD 4500", leg.ByCurrency)
-	}
+			if leg.Count != c.wantCount || leg.ByCurrency["USD"] != c.wantUSD {
+				t.Fatalf("count %d USD %d, want %d / %d", leg.Count, leg.ByCurrency["USD"], c.wantCount, c.wantUSD)
+			}
 
-	if leg.Count != 5 {
-		t.Fatalf("Count = %d, want 5 in-flight entities", leg.Count)
-	}
+			if c.wantBucket != "" && leg.ByAgeBucket[c.wantBucket]["USD"] != c.wantUSD {
+				t.Fatalf("ByAgeBucket = %v, want USD %d in %s", leg.ByAgeBucket, c.wantUSD, c.wantBucket)
+			}
 
-	want := map[string]int64{"gt2h": 1000, "5m-30m": 900, "30m-2h": 2000, "1m-5m": 600}
-	for bucket, minor := range want {
-		if got := leg.ByAgeBucket[bucket]["USD"]; got != minor {
-			t.Fatalf("ByAgeBucket[%s] = %d, want %d (all: %v)", bucket, got, minor, leg.ByAgeBucket)
-		}
-	}
-
-	if leg.ProjectedLostMinor["USD"] != 1000 || leg.SLABreaches != 1 {
-		t.Fatalf("projected lost = %v breaches = %d, want USD 1000 and 1 (e1 only)", leg.ProjectedLostMinor, leg.SLABreaches)
-	}
-
-	if leg.OldestAgeMinutes != 120 {
-		t.Fatalf("OldestAgeMinutes = %d, want 120 (gt2h floor)", leg.OldestAgeMinutes)
-	}
-
-	if leg.Evidence != EvidenceDeterministic {
-		t.Fatalf("evidence = %q, want deterministic", leg.Evidence)
-	}
-
-	found := false
-	for _, c := range leg.Caveats {
-		if strings.Contains(c, "events") {
-			found = true
-		}
-	}
-
-	if !found {
-		t.Fatalf("the events-derived leg must carry a caveat naming its source: %v", leg.Caveats)
+			if leg.SLABreaches != c.wantBreaches || leg.ProjectedLostMinor["USD"] != c.wantProjected {
+				t.Fatalf("breaches %d projected %v, want %d / USD %d", leg.SLABreaches, leg.ProjectedLostMinor, c.wantBreaches, c.wantProjected)
+			}
+		})
 	}
 }
 

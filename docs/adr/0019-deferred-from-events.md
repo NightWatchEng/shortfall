@@ -30,17 +30,26 @@ on. It carries the flow, stage, entity, amount and time of every
 ## Decision
 
 - **A second grounding path, from events.** An entity is in flight at the
-  window end when it has a `deferred` outcome in scope and no terminal
-  outcome — `success`, `failed` or `abandoned` — in the same scope. Its
-  value is the largest single `deferred` amount per (currency, entity),
-  the representative rule ADR-0009 fixed for realized loss. `unknown` is
-  not terminal: the money is still unresolved.
+  window end when it has a `deferred` outcome in scope and, within the
+  lookback, no terminal outcome — `success`, `failed` or `abandoned` — at
+  the same stage or any later stage of the flow's registry order, and no
+  further `deferred` outcome at a later stage (entering the next queue
+  means the earlier one released it). A terminal at an earlier stage
+  resolves nothing: a settle deferral outlives its capture success. Its
+  value is the largest single `deferred` amount per (currency, entity,
+  stage), the representative rule ADR-0009 fixed for realized loss.
+  `unknown` is not terminal: the money is still unresolved. "Later" is
+  by stage order only — the event AST returns no per-event times — so a
+  deferral retried after a failure at the same stage is not seen, and the
+  leg's caveat says so.
 - **Age without a new verb.** The query surface is frozen (v0.1.0) and
   the event AST returns no per-event timestamps. Buckets are derived from
   nested ranges instead: the deferred query runs over
-  `[lookback, To-2h)`, `[lookback, To-30m)`, `[lookback, To-5m)`,
-  `[lookback, To-1m)` and `[lookback, To)`, and an entity's bucket is the
-  oldest range its first `deferred` event falls in. The SLA-breach test,
+  `[lookback, To-2h]`, `[lookback, To-30m]`, `[lookback, To-5m]`,
+  `[lookback, To-1m]` and `[lookback, To)`, each cut inclusive of its
+  instant so that an entity exactly thirty minutes old is `30m-2h` as
+  `emit.AgeBucketFor`'s left-closed intervals have it, and an entity's
+  bucket is the oldest range its first `deferred` event falls in. The SLA-breach test,
   projected-lost arithmetic, exact count and oldest-age floor then reuse
   the bucket-floor code the gauge path already has, unchanged. The
   lookback is the larger of two hours and the flow's longest SLA
@@ -53,8 +62,9 @@ on. It carries the flow, stage, entity, amount and time of every
   events. A backend serving neither stays unavailable (ADR-0017).
 - **Evidence and caveat.** The events-derived leg is deterministic — every
   amount is one recorded transaction's — and carries one caveat naming the
-  source and its two limits: age is measured from the first `deferred`
-  event, and work an emitter never recorded as `deferred` is unseen.
+  source and its limits: resolution is by stage order, not time; age is
+  measured from the first `deferred` event; and work an emitter never
+  recorded as `deferred` is unseen. The gauge path carries no caveat.
 - **Nothing on the wire changes.** `ValueContext.Deadline` stays encoded
   (ADR-0003's codec is unchanged) and stays unread by the engine; this
   ADR records that rather than leaving it implied.

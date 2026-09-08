@@ -267,7 +267,7 @@ sequenceDiagram
         Note over E,Q: Phase 3 — deferred, money still in flight
         E->>Q: QueryMetric(biz_inflight_value by flow · stage · age_bucket · currency)
         E->>Q: QueryMetric(biz_inflight_count by flow · stage · age_bucket · currency)
-        Note over E,Q: no gauge series → QueryEvents(outcome=deferred) over five nested ranges,<br/>less entities with a later terminal outcome (ADR-0019)
+        Note over E,Q: no gauge series → QueryEvents(outcome=deferred) over five nested ranges,<br/>less entities with a terminal outcome at that or a later stage (ADR-0019)
     end
     Note over E: Two gauges, read as levels rather than summed. The SLA deadline<br/>and on-breach rule come from the registry — a breach becomes<br/>projected-lost inside this leg and never moves into realized.
 

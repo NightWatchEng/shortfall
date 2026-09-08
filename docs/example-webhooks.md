@@ -29,7 +29,8 @@ flows:
       - { name: ingest,  signals: ["webhook:payment_intent.succeeded"] }
       - { name: process, signals: ["http:POST /internal/webhooks/process"] }
     sla:
-      process: { deadline: PT30M, on_breach: lost }  # backlog >30m projects to loss
+      ingest:  { deadline: PT30M, on_breach: lost }  # accepted but unprocessed >30m projects to loss
+      process: { deadline: PT30M, on_breach: lost }  # the same deadline on payments-service's own queue
     estimator:                   # value when the payload carries no amount
       default_minor: 18750
       by_segment: { smb: 14200, enterprise: 91000 }
@@ -44,10 +45,14 @@ flows:
       source: "stripe:payment_intents"
 ```
 
-Two choices worth making deliberately: `stages[0]` is the Lambda's
+Three choices worth making deliberately: `stages[0]` is the Lambda's
 ingest stage, so "the Lambdas themselves are down" is measured against
-that stage's baseline; and `recovered_fraction` is high because webhook
-providers retry delivery — tune it to your provider's redelivery policy.
+that stage's baseline; the SLA is declared on `ingest` as well as on
+`process`, because a webhook the Lambda accepted but could not hand off
+is a deferral recorded at `ingest`, and the breach arithmetic reads the
+SLA of the stage the deferral was recorded at; and `recovered_fraction`
+is high because webhook providers retry delivery — tune it to your
+provider's redelivery policy.
 
 ## 2. The Lambda — the entry stage
 
@@ -164,7 +169,7 @@ door, so the report is deterministic:
 | Leg | Grounded by |
 |---|---|
 | Realized loss | `ingest`/`process` failures, summed, de-duped by `EntityID` |
-| Deferred value | the backlog the tracker publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`). When payments-service is down its tracker publishes nothing, and the leg is derived instead from the Lambda's `ingest` deferred outcomes with no later terminal outcome (ADR-0019) — the same backlog, aged from the first deferred event |
+| Deferred value | the backlog the tracker publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`). When payments-service is down its tracker publishes nothing, and the leg is derived instead from the Lambda's `ingest` deferred outcomes whose entity reached no terminal outcome at `ingest` or `process` (ADR-0019) — the same backlog, aged from the first deferred event and projected against the `ingest` SLA |
 | Customer impact | distinct hashed customers, segments and top accounts, from the ingest stamps |
 
 That is what the *signals* support. What you can read back depends on the
@@ -224,7 +229,7 @@ you get:
 |---|---|---|
 | Realized loss | ✅ grounded, for the stages you read | events carry the amount and `EntityID`, so de-dup is exact |
 | Customer impact | ✅ grounded, for the stages you read | events carry the hashed customer and segment |
-| Deferred value | ✅ grounded from events, with a caveat | the `biz_inflight_*` gauges land in CloudWatch's **metric** store, which no shipped querier reads, so the leg is derived from `ingest` deferred outcomes with no later terminal outcome (ADR-0019): exact value and count, ages at bucket granularity, projected loss against the SLA |
+| Deferred value | ✅ grounded from events, with a caveat | the `biz_inflight_*` gauges land in CloudWatch's **metric** store, which no shipped querier reads, so the leg is derived from `ingest` deferred outcomes whose entity reached no terminal outcome at `ingest` or `process` (ADR-0019): exact value and count, ages at bucket granularity, projected loss against the `ingest` SLA |
 | Unrealized loss | ⚠️ unavailable | needs `biz_txn_total` history for the baseline, same reason |
 | Coverage | ⚠️ read the caveat | `engine.Coverage` takes the same events-only querier plus a ledger — **not** `shortfall reconcile`, which builds its querier from `--prometheus`/`--sql` exactly as `impact` does. But it sums telemetry at the flow's **value stage**, `process` here, so a querier that cannot see `process` events returns a real **0%**, not an unavailable marker |
 

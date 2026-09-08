@@ -238,9 +238,9 @@ processes, a stalled consumer stops publishing at exactly the wrong
 moment, and a Lambda cannot host one. So the `ResultDeferred` you
 recorded in step 5 is load-bearing too: with no gauge series in the
 window, the leg is derived from those `deferred` outcomes — every entity
-with one and no later terminal outcome, aged from its first deferred
-event at bucket granularity (ADR-0019). Wire the tracker where you can;
-record the deferred outcome everywhere.
+with one that reached no terminal outcome at that or a later stage, aged
+from its first deferred event at bucket granularity (ADR-0019). Wire the
+tracker where you can; record the deferred outcome everywhere.
 
 ```go
 tr := emit.NewInFlightTracker(em)

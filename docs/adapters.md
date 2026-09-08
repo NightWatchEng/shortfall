@@ -26,7 +26,7 @@ A backend may serve one, the other, or both (`query.Caps{Metrics, Events}`).
 | Leg | Needs | Notes |
 |---|---|---|
 | **Realized loss** | Events (preferred) or Metrics | Events give exact per-entity de-dup (ADR-0009); metrics-only is an upper bound, not de-duped |
-| **Deferred value** | Metrics (preferred) or Events | `biz_inflight_value`, plus `biz_inflight_count` for exact txn and breach counts (ADR-0012); with no gauge series, derived from `deferred` outcome events with no later terminal outcome, aged at bucket granularity (ADR-0019) |
+| **Deferred value** | Metrics (preferred) or Events | `biz_inflight_value`, plus `biz_inflight_count` for exact txn and breach counts (ADR-0012); with no gauge series, derived from `deferred` outcome events whose entity reached no terminal outcome at that or a later stage, aged at bucket granularity (ADR-0019) |
 | **Customer impact** | Events | distinct accounts, per-segment counts, top accounts by failed value — a time series cannot break these out |
 | **Unrealized loss** | Metrics | hour-of-week baseline from `biz_txn_total` history (needs `MetricHistoryWeeks` ≥ the flow's lookback) |
 | **Coverage** | Metrics or Events, **plus a ledger** | telemetry captured value vs the reconciled ledger |
