@@ -113,7 +113,7 @@ JSON keys, and `at` is the event time in Unix **nanoseconds**:
 INSERT INTO biz_outcomes
   (flow, stage, outcome, currency, segment, kind, customer_id, entity_id, amount_minor, at)
 VALUES
-  ('invoice.pay', 'capture', 'failed', 'USD', 'smb', 'fee', 'h:c0ffee', 'inv_000042', 14900, 1756389900000000000);
+  ('invoice.pay', 'capture', 'failed', 'USD', 'smb', 'fee', 'h:c0ffee', 'inv_000042', 14900, 1787925900000000000);
 ```
 
 **An OTLP log record.** Emit a log record named `biz.outcome` whose
@@ -143,7 +143,7 @@ runs in CI against a fixture your service's test suite writes. It is
 stricter than the stores' own readers where the contract is: the `event`
 marker must be present, because the log-store queriers select on it and a
 line without it is never read back; numbers must be JSON numbers; and the
-optional keys must be absent rather than empty. A file that holds no
+optional keys must be absent rather than empty or `null`. A file that holds no
 events fails too, so an empty fixture cannot read as green. The `time`
 key (or a file-only `at`) is parsed as RFC 3339 when present; nothing
 else outside the table above is allowed under the `biz.` prefix.
@@ -157,7 +157,7 @@ from datetime import datetime, timezone
 def outcome(at, flow, stage, result, entity_id, customer_hash, amount_minor, currency, exponent, kind, **opt):
     ev = {
         "event": "biz.outcome",
-        "time": at.strftime("%Y-%m-%dT%H:%M:%SZ"),   # the event's own time, not now()
+        "time": at.strftime("%Y-%m-%dT%H:%M:%SZ"),   # the event's own time, passed in — never now()
         "biz.flow": flow, "biz.stage": stage, "biz.outcome": result,
         "biz.entity.id": entity_id, "biz.customer.id": customer_hash,
         "biz.amount.minor": int(amount_minor),      # integer minor units, never float
@@ -169,8 +169,11 @@ def outcome(at, flow, stage, result, entity_id, customer_hash, amount_minor, cur
             ev["biz.segment" if k == "segment" else k] = opt[k]
     sys.stdout.write(json.dumps(ev, separators=(",", ":")) + "\n")
 
-outcome(datetime.now(timezone.utc), "invoice.pay", "capture", "failed", "inv_000042", "h:c0ffee",
-        14900, "USD", 2, "fee", segment="smb", source="billing-svc", error="card_declined")
+# The time is the provider's event time from the payload you are handling —
+# here the example's fixed instant — so a replayed delivery keeps its window.
+outcome(datetime(2026, 8, 28, 14, 5, tzinfo=timezone.utc), "invoice.pay", "capture", "failed",
+        "inv_000042", "h:c0ffee", 14900, "USD", 2, "fee",
+        segment="smb", source="billing-svc", error="card_declined")
 ```
 
 ## Carrying the context across a hop

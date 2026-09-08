@@ -136,9 +136,17 @@ func checkEventLine(raw []byte) error {
 		return fmt.Errorf("not a JSON object: %w", err)
 	}
 
-	for k := range fields {
+	for k, raw := range fields {
 		if strings.HasPrefix(k, "biz.") && !knownKeys[k] {
 			return fmt.Errorf("%s is not in the outcome-event contract (biz/semconv.go)", k)
+		}
+
+		// null is how several JSON libraries spell "no value"; the decoder
+		// would read it as the zero value — false, empty — which is a
+		// different fact from absence. A key with no value is a key you
+		// do not write.
+		if knownKeys[k] && string(raw) == "null" {
+			return fmt.Errorf("%s is null — omit the key instead", k)
 		}
 	}
 
