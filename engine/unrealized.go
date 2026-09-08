@@ -140,8 +140,6 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 				return EstLeg{}, fmt.Errorf("engine: unrealized baseline: %w", err)
 			}
 
-			sized = true // a baseline was fitted for this currency
-
 			aov, aovSource, warn, ok := aovMinor(ctx, q, flowName, currency, flow, req.Window)
 			if warn != "" {
 				notes = append(notes, warn)
@@ -173,6 +171,11 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 					continue // no history for this hour-of-week; the gap is noted below
 				}
 
+				// An hour with history and a valued AOV is an estimate; only
+				// then is the leg sized. A flow whose every incident hour is
+				// thin, or that has no AOV, contributes nothing and must not
+				// turn empty ranges into a measured zero.
+				sized = true
 				o := observedAt[hourKey(target[i])]
 				low += shortfallValue(e.Lower, o, aov, recovery)
 				mid += shortfallValue(e.Expected, o, aov, recovery)
@@ -196,10 +199,12 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 		}
 	}
 
-	// No requested flow could be sized: the leg is ungrounded, and the notes
-	// say why per flow. Empty ranges must not read as a measured zero.
+	// No requested flow valued a single incident hour: the leg is
+	// ungrounded, and the notes say why per flow. Empty or zero ranges must
+	// not read as a measured zero, so the maps are cleared with the marker.
 	if !sized {
 		leg.Unavailable = true
+		leg.LowMinor, leg.MidMinor, leg.HighMinor = map[string]int64{}, map[string]int64{}, map[string]int64{}
 	}
 
 	if thin {

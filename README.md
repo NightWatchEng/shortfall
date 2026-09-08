@@ -223,9 +223,10 @@ shortfall impact --registry registry.yaml \
   --prometheus http://prometheus:9090 --sql "file:outcomes.db"
 ```
 
-Metrics ground the unrealized leg and, through the in-flight gauge, the
-deferred leg; events ground realized de-duplication, customer impact, and
-the deferred leg when no gauge was published. Wiring both signal kinds is what
+Metrics ground the unrealized leg — for a flow whose registry declares a
+`baseline` — and, through the in-flight gauge, the deferred leg; events
+ground realized de-duplication, customer impact, and the deferred leg when
+no gauge was published. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. The coverage ratio comes from a second command, which needs the
 provider's ledger rows — and renders in the same formats, so the trust

@@ -537,8 +537,13 @@ func TestClampFractionNonFinite(t *testing.T) {
 // optionalBlocksRegistry is a one-week-lookback registry with the baseline
 // and recovery blocks given (or omitted when empty), for ADR-0020's
 // absent-block behaviour.
-func optionalBlocksRegistry(t *testing.T, baseline, recovery string) *registry.Registry {
+func optionalBlocksRegistry(t *testing.T, baseline, recovery string, estimator bool) *registry.Registry {
 	t.Helper()
+	est := ""
+	if estimator {
+		est = "    estimator: { default_minor: 5000 }\n"
+	}
+
 	reg, err := registry.Parse([]byte(`version: 1
 segments: [smb, enterprise]
 flows:
@@ -548,8 +553,7 @@ flows:
     stages:
       - { name: auth,   signals: ["http:POST /pay"] }
       - { name: settle, signals: ["queue:settle.q"] }
-    estimator: { default_minor: 5000 }
-` + baseline + recovery))
+` + est + baseline + recovery))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,25 +582,35 @@ func TestUnrealizedAbsentBlocks(t *testing.T) {
 		name            string
 		baseline        string
 		recovery        string
-		noHistory       bool // drop the lookback's history point: nothing to fit against
+		points          func() []emit.MetricPoint
+		estimator       bool
 		wantUnavailable bool
 		wantNote        string
 		wantNoNote      string
 	}{
-		{"no baseline: unavailable, naming the block", "", "", false, true, "declares no baseline", ""},
-		{"baseline but no history in the lookback: unavailable, not sized", withBaseline, "", true, true, "nothing to fit a baseline against", ""},
-		{"no recovery: sized gross, and the note says so", withBaseline, "", false, false, "declares no recovery", ""},
-		{"declared zero recovery: sized gross, no note", withBaseline, "    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n", false, false, "", "recovery"},
+		{"no baseline: unavailable, naming the block", "", "", func() []emit.MetricPoint { return pts }, true, true, "declares no baseline", ""},
+		{"baseline but no history in the lookback: unavailable, not sized", withBaseline, "",
+			func() []emit.MetricPoint { return pts[1:] }, true, true, "nothing to fit a baseline against", ""},
+		// History exists, but only for another hour of the week: every
+		// incident hour is thin, nothing is valued, and the leg must not
+		// return a measured zero.
+		{"baseline with history at another hour only: unavailable, not a zero", withBaseline, "",
+			func() []emit.MetricPoint {
+				return append([]emit.MetricPoint{txnPoint("auth", "success", baseMon.Add(hour+time.Hour), 100)}, pts[1:]...)
+			},
+			true, true, "no baseline history", ""},
+		// A fitted baseline with no way to value it — no success value in
+		// the window, no events, no estimator — is not sized either.
+		{"baseline fitted but no AOV from any source: unavailable", withBaseline, "",
+			func() []emit.MetricPoint { return pts[:2] }, false, true, "not valued", ""},
+		{"no recovery: sized gross, and the note says so", withBaseline, "", func() []emit.MetricPoint { return pts }, true, false, "declares no recovery", ""},
+		{"declared zero recovery: sized gross, no note", withBaseline, "    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n",
+			func() []emit.MetricPoint { return pts }, true, false, "", "recovery"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			points := pts
-			if c.noHistory {
-				points = pts[1:]
-			}
-
-			q := memq.New(memq.WithMetrics(points), memq.WithCaps(query.Caps{Metrics: true}))
-			leg, err := Unrealized(context.Background(), optionalBlocksRegistry(t, c.baseline, c.recovery), q, req)
+			q := memq.New(memq.WithMetrics(c.points()), memq.WithCaps(query.Caps{Metrics: true}))
+			leg, err := Unrealized(context.Background(), optionalBlocksRegistry(t, c.baseline, c.recovery, c.estimator), q, req)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -615,6 +629,10 @@ func TestUnrealizedAbsentBlocks(t *testing.T) {
 
 			if !c.wantUnavailable && leg.MidMinor["USD"] <= 0 {
 				t.Fatalf("a sized flow must carry a positive estimate, got %v", leg.MidMinor)
+			}
+
+			if c.wantUnavailable && (len(leg.LowMinor)+len(leg.MidMinor)+len(leg.HighMinor)) != 0 {
+				t.Fatalf("an unavailable leg must carry no ranges, got low=%v mid=%v high=%v", leg.LowMinor, leg.MidMinor, leg.HighMinor)
 			}
 		})
 	}

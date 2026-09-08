@@ -114,7 +114,10 @@ type Estimator struct {
 	BySegment    map[string]int64
 }
 
-// Baseline configures the counterfactual expectation (ADR-0006).
+// Baseline configures the counterfactual expectation (ADR-0006). The zero
+// value — LookbackWeeks 0 — is an absent block (ADR-0020): the flow
+// declares no baseline, and the unrealized leg reports itself unavailable
+// for it. A present block always has LookbackWeeks >= 1.
 type Baseline struct {
 	Seasonality   string
 	LookbackWeeks int
@@ -122,6 +125,10 @@ type Baseline struct {
 }
 
 // Recovery configures the usage-loss curve applied to suppressed demand.
+// The zero value — an empty Model — is an absent block (ADR-0020): nothing
+// is credited back and the unrealized leg's note says so. A present block
+// always names its Model, so a declared RecoveredFraction of 0 is
+// distinguishable from absence.
 type Recovery struct {
 	Model             string
 	RecoveredFraction float64
@@ -130,7 +137,9 @@ type Recovery struct {
 
 // Reconcile names the ledger source coverage is measured against, and
 // optionally the stage whose success observations telemetry is compared at
-// (the flow's value stage; the last stage when undeclared).
+// (the flow's value stage; the last stage when undeclared). The zero value
+// — an empty Source — is an absent block (ADR-0020); a present block
+// always names its Source.
 type Reconcile struct {
 	Source string
 	Stage  string
