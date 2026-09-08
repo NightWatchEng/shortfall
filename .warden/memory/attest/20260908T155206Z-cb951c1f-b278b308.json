@@ -1,0 +1,377 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+  "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-08T15:52:06+00:00",
+  "range_patch_ids": [
+    "246099480ff0c5808463fbab26210bda8ce5610b",
+    "3024b3ff53e0ec44bcf9d0d191f0a665718c1898",
+    "6ae93236ba5b0073f5eb85e551d50cc649e50311",
+    "925e38961a67544e2a58962ad4533cca51ae818f"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 1 of 3 on head d94f594; raw output round-gOEzHo/reviewers/code-reviewer.json (7 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 1 of 3 on head d94f594; raw output round-gOEzHo/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 2 of 3 on head 8a41866; raw output round-GjPH2c/reviewers/code-reviewer.json (3 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 2 of 3 on head 8a41866; raw output round-GjPH2c/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 3 of 3 on head 2b3635f; raw output round-CBCC12/reviewers/code-reviewer.json (4 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 3 of 3 on head 2b3635f; raw output round-CBCC12/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 round 4 of 4, scoped to the round-3 repair commit cb951c1 only (2b3635f..cb951c1); all three repairs verdicted addressed; raw output round-mfHHfB/reviewers/scoped-re-reviewer.json"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/emit-any-language.md",
+      "line": 75,
+      "severity": "MEDIUM",
+      "finding": "The doc's 'Types are the contract' bullet claims a quoted amount is rejected, but eventline.Parse decodes biz.amount.minor through json.Number, which accepts a quoted numeral, so `shortfall check-events` (and every querier that uses eventline) accepts `\"biz.amount.minor\":\"14900\"` \u2014 verified by running the verb on such a line: it reports the line ok. The claim describes a fence that does not exist.",
+      "evidence": "docs/emit-any-language.md: '**Types are the contract.** `\"14900\"` is not `14900`, and `\"false\"` is not `false`. A reader that compares by value alone would accept both; the engine does not.' \u2014 eventline/eventline.go: `var n json.Number; if err := json.Unmarshal(l.AmountMinor, &n)` (a JSON string holding a valid number unmarshals into json.Number without error); probe: `{\"biz.amount.minor\":\"14900\", ...}` -> '1 event(s) ok, 0 rejected' from check-events.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 1: Probe: a line with \"biz.amount.minor\":\"14900\" run through `go run ./cmd/shortfall check-events` reports '1 event(s) ok, 0 rejected', exit 0. eventline/eventline.go:76-81 decodes the raw value through json.Number, which accepts a JSON string holding a numeral, so the quoted form is accepted by check-events and by the cwinsights/gcplogging read path that shares eventline.Parse. The doc's claim (docs/emit-any-language.md:75-77, new in this range) that the engine rejects `\"14900\"` describes a fence that does not exist. Only the `\"false\"` half of the bullet is true (a quoted bool is rejected by the bool field decode). \u2014 fixed in 8a41866 (round-1 repair).",
+      "id": "80cde33704c5391c"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/emit-any-language.md",
+      "line": 78,
+      "severity": "MEDIUM",
+      "finding": "The doc says an explicit empty segment is rejected by check-events, but the checker never sees the distinction: eventline.Parse decodes `\"biz.segment\":\"\"` to the zero value, and biz.ValueContext.Validate only checks Segment when it is non-empty, so the line passes (verified: check-events reports it ok). This also disagrees with the portability contract, which says segment 'may be empty'.",
+      "evidence": "docs/emit-any-language.md: '`\"biz.segment\": \"\"` is a claim that the segment is the empty string, and it is rejected by the checker below.' \u2014 biz/context.go: `if vc.Segment != \"\" { if err := lowerToken(vc.Segment, maxSegmentLen) ...}`; cmd/shortfall/check.go checkEventLine has no empty-string check; docs/portability/telemetry.md \u00a75.5: '| segment | may be empty |'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 1: Probe: a line with \"biz.segment\":\"\" passes check-events ('1 event(s) ok, 0 rejected', exit 0). checkEventLine (cmd/shortfall/check.go:98-131) only screens unknown biz.* keys and the at field; eventline.Parse maps \"\" to the zero value; biz/context.go:128 guards the segment check with `if vc.Segment != \"\"`. docs/emit-any-language.md:78-80 says the checker rejects it, which is false, and docs/portability/telemetry.md:108 lists segment as 'may be empty'. \u2014 fixed in 8a41866 (round-1 repair).",
+      "id": "6187b1e7548c73f8"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "unmapped:lenient-contract-check",
+      "tags": [
+        "enforcement-claim"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/check.go",
+      "line": 104,
+      "severity": "MEDIUM",
+      "finding": "check-events accepts a line with no `event` marker, or with `\"event\":\"something.else\"` / `\"event\":42`, because eventline.Parse ignores the key and checkEventLine only inspects biz.*-prefixed keys. Both shipped log-store queriers select on event == \"biz.outcome\", so a non-Go service whose fixture passes this check can still be invisible to the report \u2014 the exact failure the verb exists to prevent. The doc lists `event` as 'the literal biz.outcome' and calls the check proof that the events 'would be accepted'.",
+      "evidence": "cmd/shortfall/check.go: `for k := range fields { if strings.HasPrefix(k, \"biz.\") && !knownKeys[k] {...} }` then `eventline.Parse(raw, at)`; adapters/query/cwinsights/cwinsights.go:119 `filter event = \"biz.outcome\"` and :218 `marker.Event != \"biz.outcome\" { continue }`; adapters/query/gcplogging/gcplogging.go:308 `JSON_VALUE(json_payload, '$.event') = @event_marker`; probe lines without/with a wrong `event` value -> check-events '4 event(s) ok'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 1: Probe file with three lines \u2014 no `event` key, \"event\":\"something.else\", and \"event\":42 \u2014 reports '3 event(s) ok, 0 rejected', exit 0. check.go:104-108 only inspects biz.*-prefixed keys and eventline.Parse never reads `event`. Both log-store queriers select on the marker: adapters/query/cwinsights/cwinsights.go:119 (`filter event = \"biz.outcome\"`) and :218 (`marker.Event != \"biz.outcome\" { continue }`), adapters/query/gcplogging/gcplogging.go:308 (`JSON_VALUE(json_payload, '$.event') = @event_marker`). check.go:47-49 states the verb's purpose is to prove events 'would be accepted before any land in a store', and docs/emit-any-language.md:56 declares `event` the literal biz.outcome, so a fixture that passes the check can still be invisible to the report on the log-store paths. \u2014 fixed in 8a41866 (round-1 repair).",
+      "id": "49964571085ad903"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/architecture",
+      "file": "docs/architecture/money-path.md",
+      "line": 246,
+      "severity": "MEDIUM",
+      "finding": "The CLI sequence diagram and its table still describe the OLD wiring \u2014 buildQuerier constructing a cmd/shortfall `combined{metrics: promql, events: sql}` literal \u2014 after this diff moved that type into package query behind query.Combine and made the CLI a one-line call. Row 3 ('the CLI builds a `combined` `Querier`') and the participant label ('combined query.Querier \u2026 cmd/shortfall') name a type the CLI package no longer has.",
+      "evidence": "docs/architecture/money-path.md:238 'participant Q as combined query.Querier<br/>cmd/shortfall \u2014 promql for metrics, sql for events'; :246 'CLI->>Q: buildQuerier \u2014 combined{metrics: promql, events: sql}'; :302 'With both flags the CLI builds a `combined` `Querier` over the two nested modules.' \u2014 cmd/shortfall/impact.go now: `return query.Combine(metrics, events), cleanup, nil`; the `combined` type was deleted from cmd/shortfall in this diff.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 1: docs/architecture/money-path.md is unchanged in the range but now describes the old wiring this diff removed: :238 'participant Q as combined query.Querier<br/>cmd/shortfall', :246 'buildQuerier \u2014 combined{metrics: promql, events: sql}', :302 'the CLI builds a `combined` `Querier`'. The diff deleted the combined type from cmd/shortfall/impact.go and buildQuerier now returns query.Combine(metrics, events); the type lives in query/combine.go in the core module. The diff updated docs/adapters.md and docs/example-webhooks.md to say query.Combine but left this diagram and its table row naming a cmd/shortfall literal that no longer exists \u2014 the rule's 'leaves a diagram describing the OLD behavior' clause. \u2014 fixed in 8a41866 (round-1 repair).",
+      "id": "aaff3f546874c099"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "unmapped:partial-stage-remap",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "adapters/payment",
+      "file": "adapters/payment/stripe/stripe.go",
+      "line": 104,
+      "severity": "MEDIUM",
+      "finding": "WithStageMap's comment says it 'renames the stages this adapter emits', but the remap is applied only inside VerifyAndMap; the wrapped-client path (WithAuthOutcome in client.go) emits `Stage: \"auth\"` as a literal and takes no Option, so a registry that passes {\"auth\": \"authorize\"} gets webhook outcomes under `authorize` and synchronous timeout/5xx outcomes under `auth` \u2014 the same transaction split across two stage names, the second of which the registry does not declare and the emitter will label `unregistered`. The panic-on-typo guard also does not help here because `auth` IS in eventMap.",
+      "evidence": "stripe.go: '// WithStageMap renames the stages this adapter emits \u2014 the keys are the adapter's defaults (\"auth\", \"capture\", \"settle\", \"dispute\")' and `stage := m.stage; if to, ok := cfg.stages[stage]; ok { stage = to }` (VerifyAndMap only); adapters/payment/stripe/client.go:100-101: `b.onAuth(biz.Outcome{ At: start, Stage: \"auth\", Result: biz.ResultFailed,` with no Option plumbing; package doc: 'emits synchronous auth-stage outcomes for the timeouts and 5xx Stripe never webhooks'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 1: stripe.go:104-105 says WithStageMap 'renames the stages this adapter emits' and lists \"auth\" among the renamable defaults; the package doc (stripe.go:7-8) counts the synchronous auth-stage outcomes as something this adapter emits. But the remap is applied only in VerifyAndMap (stripe.go:194-197); client.go:100-102 emits `Stage: \"auth\"` as a literal, WrapBackend takes BackendOption not Option, and no plumbing exists. A registry declaring the auth stage as e.g. \"authorize\" gets webhook requires_action outcomes under \"authorize\" and timeout/5xx outcomes under \"auth\", which emit/emitter.go:500-503 relabels \"unregistered\" \u2014 the exact outcome the WithStageMap comment says the guard prevents. The guard cannot catch it because emitsStage(\"auth\") is true via eventMap[payment_intent.requires_action]. The user-facing docs/adapters.md wording is scoped to webhooks, but the Go doc contract and the split-transaction scenario hold. \u2014 fixed in 8a41866 (round-1 repair).",
+      "id": "ce27db8b8274fbe4"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "tests-required",
+      "tags": [
+        "non-table-test"
+      ],
+      "dir_prefix": "adapters/payment",
+      "file": "adapters/payment/stripe/stripe_test.go",
+      "line": 200,
+      "severity": "MEDIUM",
+      "finding": "TestWithStageMapRemapsMappedStages is a two-case unit test (remapped `capture` -> `charge`; unnamed `settle` keeps its default) written as sequential fatal blocks rather than a t.Run-named table, which ADR-0007 requires 'the moment a second case appears'; none of the declared exception shapes apply.",
+      "evidence": "stripe_test.go:200-220: `out, mapped, err := VerifyAndMap(payload, sig, testSecret, WithStageMap(...)); ... if out.Stage != \"charge\" {t.Fatalf(...)}` followed by `payload, sig = fixture(t, \"invoice.paid\", ...); out, _, err = VerifyAndMap(...); if err != nil || out.Stage != \"settle\" {t.Fatalf(...)}` \u2014 two named scenarios, no table, no t.Run. The file's own TestVerifyAndMapEventTypes (line 42) shows the table shape these rows belong in.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 1: stripe_test.go:200-220 has two distinct input/output cases (payment_intent.payment_failed with {capture:charge} -> stage \"charge\"; invoice.paid with the same option -> stage \"settle\") written as sequential Fatalf blocks with no t.Run. ADR-0007 (docs/adr/0007-table-driven-tests.md:19-20, :58-60): every unit test asserting input/output behaviour must be table-driven and 'the moment a second case appears, the table does'. None of the four declared exceptions (fuzz/property loops, golden fences, end-to-end scenario tests, benchmarks) applies; the assertion body (stage == want) is uniform, and TestVerifyAndMapEventTypes at :42 in the same file already has the {eventType, payload, wantStage} table these rows belong in. \u2014 fixed in 8a41866 (round-1 repair).",
+      "id": "19043d00dcda80e6"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "tests-required",
+      "tags": [
+        "non-table-test"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/check_test.go",
+      "line": 75,
+      "severity": "MEDIUM",
+      "finding": "TestCheckEventsHonoursAnAtField (malformed `at` -> exit 1; well-formed `at` -> exit 0) and TestCheckEventsUsage (no args -> 2; missing file -> 1) are each two-case unit tests written as sequential if-blocks with manual buffer resets instead of ADR-0007 t.Run-named tables; TestCheckEventsUsage additionally duplicates the two rows main_test.go already added to TestRunExitCodes.",
+      "evidence": "check_test.go:513 `if code := runCheckEvents(...bad...); code != 1 || !strings.Contains(stderr.String(), \"at\") {` then `stdout.Reset(); stderr.Reset()` then `if code := runCheckEvents(...good...); code != 0 {`; check_test.go:527-533 `if code := runCheckEvents(nil, ...); code != 2 {...}` / `if code := runCheckEvents([]string{...\"missing.jsonl\"}, ...); code != 1 {...}`; main_test.go:687-688 `{\"check-events wrong arity\", ..., 2}, {\"check-events missing file\", ..., 1}`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 1: check_test.go:75-90 TestCheckEventsHonoursAnAtField runs two cases (at=\"yesterday\" -> exit 1 with stderr naming at; at=RFC3339 -> exit 0) as sequential if-blocks with manual buffer resets; check_test.go:92-101 TestCheckEventsUsage runs two cases (nil args -> 2; missing file -> 1) the same way. Both are input/output unit tests with a second case and no t.Run, which ADR-0007 :58-60 says requires the table; no declared exception applies. main_test.go:19-20 already carries 'check-events wrong arity' -> 2 and 'check-events missing file' -> 1 as TestRunExitCodes rows (one dispatcher level up), so TestCheckEventsUsage's two rows are duplicated assertions rather than new coverage. \u2014 fixed in 8a41866 (round-1 repair).",
+      "id": "8a458571389c4461"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "unmapped:required-money-field-defaults-silently",
+      "tags": [
+        "silent-default"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/check.go",
+      "line": 161,
+      "severity": "HIGH",
+      "finding": "check-events accepts a line with no biz.amount.exponent (and no biz.amount.estimated): eventline.Parse decodes the absent int8 as 0 and Money.Validate accepts exponent 0, so a producer that forgot the exponent gets a green check and every reader then treats `\"biz.amount.minor\":14900,\"biz.amount.currency\":\"USD\"` as USD 14,900 rather than USD 149.00 (semconv: 'the two are meaningless apart', ADR-0001); an absent biz.amount.estimated likewise decodes to false, i.e. realized. Verified: a line with `\"biz.amount.exponent\":2,` deleted passes as 'ok'. The verb must require both keys to be present (numericKeys only checks the type of keys that ARE present), the way the vector's required_only case and the doc's table list them.",
+      "evidence": "check.go:161 `out, err := eventline.Parse(raw, at)` after `for _, k := range numericKeys { if raw, ok := fields[k]; ok && !isNumberToken(raw) {` (line 134) \u2014 presence is never required; eventline.go:37 `Exponent int8 \\`json:\"biz.amount.exponent\"\\`` decodes absent as 0; docs/emit-any-language.md:63-65 lists `biz.amount.minor` and `biz.amount.exponent` with no 'optional' marker and line 122 says the check applies 'the same fences ... bounds, types'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Reproduced at HEAD 8a41866: a line with biz.amount.exponent and biz.amount.estimated both deleted (round fixture no-exponent.jsonl) prints '1 event(s) ok, 0 rejected' and exits 0. check.go:134-138 only type-checks numericKeys that are present; check.go:161 hands the raw line to eventline.Parse, whose `Exponent int8` (eventline.go:37) and `Estimated bool` (eventline.go:39) decode absence as 0/false; biz.Money.Validate (money.go:35) accepts exponent 0, so the decoded outcome renders as USD 14900 (money.go:51-52), not USD 149.00. The contrast with biz.amount.minor is telling: eventline.go:68-70 rejects an absent minor as 'carries no biz.amount.minor' (fixture no-minor.jsonl is rejected), so exponent and estimated are the only vector-required attrs (outcome-event.json required_only lists both) that the verb lets a producer omit. The doc's table (emit-any-language.md:63-67) marks neither as optional and line 122-124 promises 'the same fences'. Severity HIGH stands as filed (unmapped). \u2014 fixed in 2b3635f (round-2 repair).",
+      "id": "5b66b4bb7fe35ba8"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/emit-any-language.md",
+      "line": 86,
+      "severity": "MEDIUM",
+      "finding": "The page says the event 'carries no timestamp field' and that a log store 'stamps the entry', then in the same paragraph requires a replayed webhook to be 'written with the provider's event time, not receipt time' \u2014 but never tells a non-Go producer how, because the shipped exporters DO write the event time into the line: the GCP exporter writes `\"time\": o.At` (RFC3339Nano) and the CloudWatch exporter writes `_aws.Timestamp: o.At.UnixMilli()`, which is precisely what makes the store's @timestamp/`timestamp` equal the outcome's At. Telemetry \u00a75.5 makes 'event time \u2014 the observation's time \u2014 for a webhook-fed adapter, the provider's event timestamp' a contract fact; a producer following this page to stdout can only ever get receipt time, so an incident window will mis-bucket every late-delivered outcome. Line 31 ('This is exactly what the shipped exporters write ... indistinguishable') is inexact for the same reason.",
+      "evidence": "docs/emit-any-language.md:86-90 'The event carries no timestamp field. The store you land it in owns the time \u2014 a log store stamps the entry ... a provider webhook replayed hours late should be written with the provider's event time, not receipt time.' vs adapters/export/gcp/logging.go:33 `\"time\": o.At.UTC().Format(time.RFC3339Nano),` and adapters/export/cloudwatch/emf.go:112 `\"_aws\": map[string]any{\"Timestamp\": o.At.UnixMilli()},`; docs/portability/telemetry.md:104 '| event time | the *observation's* time \u2014 for a webhook-fed adapter, the provider's event timestamp, not receipt time |'.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 2: The sentence is false, not merely incomplete, on both counts. (1) What the shipped exporters write: gcp/logging.go:32 puts `\"time\": o.At.UTC().Format(time.RFC3339Nano)` in the same JSON object as the biz.* keys, and cloudwatch/emf.go:112 puts `_aws.Timestamp: o.At.UnixMilli()` in its object \u2014 both log-line exporters emit a timestamp field on the event line, so 'The event carries no timestamp field' (doc:86) and 'This is exactly what the shipped exporters write' (doc:31) do not describe the bytes. The repo's own test pins the mechanism the doc denies: gcp_test.go:189-209 TestEventRecordTimeIsObservationTime says the entry is stamped with the outcome's time via `time` because 'receipt-time stamping would move realized loss across incident windows'. (2) What a stdout-line producer can express: `time` is Cloud Logging's documented special field lifted into the entry timestamp (logging.go:14-16), and `_aws.Timestamp` is the same field the Go exporter relies on; the checker accepts both keys (round fixtures gcp-shaped.jsonl and cw-shaped.jsonl pass) since only unknown biz.* keys are rejected (check.go:121-125). So a producer can carry event time on the line exactly as the Go exporters do, but the page tells them the store owns the time and then requires provider event time (doc:88-90) without the one field that delivers it. Severity MEDIUM stands. \u2014 fixed in 2b3635f (round-2 repair).",
+      "id": "9c3e55c59222cdd9"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "unmapped:empty-input-exits-green",
+      "tags": [
+        "vacuous-pass"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/check.go",
+      "line": 103,
+      "severity": "MEDIUM",
+      "finding": "A file with zero non-blank lines exits 0 with '0 event(s) ok, 0 rejected'. The doc positions the verb as a CI gate 'against a fixture your service's test suite writes'; a producer that silently wrote nothing (the exact failure a wire-shape gate exists to catch) passes green. This is the repo's own named vacuous-pass shape (PR #55: opt-in check exiting 0 with nothing to check) in a file outside the vacuous-pass rule's globs. Exit non-zero, or at least say so, when ok == 0.",
+      "evidence": "check.go:102-107 `wf(stdout, \"%s: %d event(s) ok, %d rejected\\n\", args[0], ok, rejected)\\n\\tif rejected > 0 {\\n\\t\\treturn 1\\n\\t}\\n\\n\\treturn 0` \u2014 verified: a file containing only a newline prints '0 event(s) ok, 0 rejected' and exits 0; docs/emit-any-language.md:136-137 'Exit status is 0 when every line passes and 1 otherwise, so the check runs in CI against a fixture your service's test suite writes.'",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Reproduced at HEAD: round fixtures blank.jsonl (a single newline) and empty.jsonl (zero bytes) both print '<file>: 0 event(s) ok, 0 rejected' and exit 0. check.go:82-95 skips blank lines and counts nothing, and check.go:102-107 returns 1 only when rejected > 0, so ok == 0 is indistinguishable from a passing fixture. The doc (emit-any-language.md:136-137) positions the exit status as a CI gate 'against a fixture your service's test suite writes', which is exactly the case where a producer emitting nothing must not be green. The repo does name this shape: .github/workflows/ci.yml:10-11 fails closed 'rather than passing vacuously', and PR #55's body records a parity check that 'was vacuous' and was guarded 'so it can never silently go vacuous again'. Severity MEDIUM stands as filed (unmapped). \u2014 fixed in 2b3635f (round-2 repair).",
+      "id": "e0855d8ced27ebe3"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/emit-any-language.md",
+      "line": 116,
+      "severity": "MEDIUM",
+      "finding": "The SQL INSERT is presented as the row for the event shown above (\"insert a row per event ... `at` is the event time in Unix nanoseconds\"), but its `at` value decodes to 2025-08-28T14:05:00Z \u2014 one year before the JSON example's `\"time\": \"2026-08-28T14:05:00Z\"` (line 38). The two statements of one example disagree; the value for the example's time is 1787925900000000000.",
+      "evidence": "('invoice.pay', 'capture', 'failed', 'USD', 'smb', 'fee', 'h:c0ffee', 'inv_000042', 14900, 1756389900000000000);  \u2014 `date -u -r 1756389900` prints 2025-08-28T14:05:00Z; the JSON example line 38 reads \"time\": \"2026-08-28T14:05:00Z\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 3: Verified: python3 fromtimestamp(1756389900, UTC) = 2025-08-28T14:05:00Z, one year before the JSON example's \"time\": \"2026-08-28T14:05:00Z\" (docs/emit-any-language.md:38). The unit claim is right (adapters/query/sql/sql.go:20 declares `at INTEGER -- event time as Unix nanoseconds`), only the value is wrong; the matching value is 1787925900000000000. Both statements are presented as one example (line 109-110 'insert a row per event'), so they must agree. \u2014 fixed in cb951c1 (round-3 repair, scoped re-review in round 4).",
+      "id": "c60c000221c28493"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/emit-any-language.md",
+      "line": 172,
+      "severity": "MEDIUM",
+      "finding": "The Python producer's comment says the `time` field is \"the event's own time, not now()\", and the prose above insists a store must get the event's time \"not the moment you observed it\", yet the example's only invocation passes `datetime.now(timezone.utc)` as that argument \u2014 the code demonstrates exactly what the adjacent comment says not to do.",
+      "evidence": "line 160: \"time\": at.strftime(\"%Y-%m-%dT%H:%M:%SZ\"),   # the event's own time, not now()  \u2014 line 172: outcome(datetime.now(timezone.utc), \"invoice.pay\", \"capture\", \"failed\", ...",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 3: Verified at docs/emit-any-language.md:160 (`# the event's own time, not now()`) and :172 (`outcome(datetime.now(timezone.utc), ...`), under prose at :92-95 that says a store must get the event's time 'not the moment you observed it'. The function signature is fine, but the only invocation shown demonstrates the anti-pattern the adjacent comment forbids; the example is self-contradictory. \u2014 fixed in cb951c1 (round-3 repair, scoped re-review in round 4).",
+      "id": "28b2ec72fae5c4b5"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "unmapped:json-null-accepted",
+      "tags": [
+        "silent-default"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/check.go",
+      "line": 164,
+      "severity": "LOW",
+      "finding": "The absent-not-empty and type fences only look for the literal `\"\"` / a non-number token, so a JSON `null` \u2014 what Python's None, Jackson's null and most serializers emit for a missing optional \u2014 passes for `biz.segment`, `source`, `error`, `trace.id`, `biz.sla.deadline` and even `biz.amount.estimated` (decodes to false). Verified: a line with `\"biz.amount.estimated\":null` is reported ok. The verb's stated purpose is to catch the producer-side encoding mistakes a lenient decoder hides; null is the most common one.",
+      "evidence": "for _, k := range absentNotEmpty {\n\t\tif raw, ok := fields[k]; ok && string(raw) == `\"\"` {  \u2014 and isNumberToken/eventline let `null` through for the boolean; `go run ./cmd/shortfall check-events` on a fixture with \"biz.amount.estimated\":null \u2192 \"9 event(s) ok\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "CONFIRMED by the cross-examiner in round 3: Reproduced with fixtures under the round dir (xfx/*.jsonl) via `go run ./cmd/shortfall check-events`: null for biz.amount.estimated, biz.segment, source, error, trace.id and biz.sla.deadline each yield '1 event(s) ok, 0 rejected', exit 0 (only biz.amount.minor:null is caught, by the isNumberToken fence at check.go:158-162). cmd/shortfall/check.go:164-168 compares the raw token to the literal `\"\"` only, and no fence checks the boolean token at all; encoding/json decodes null into a bool as a no-op, so `\"biz.amount.estimated\":null` silently becomes false \u2014 the exact lenient-decoder leniency the verb says it exists to be stricter than (check.go:55-58; docs table at emit-any-language.md:69 says **boolean**, and :77-79 says 'Types are the contract'). Severity LOW stands as filed (unmapped). \u2014 fixed in cb951c1 (round-3 repair, scoped re-review in round 4).",
+      "id": "5add38fa0cb0b697"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 13,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "unmapped:silent-field-precedence",
+      "tags": [
+        "silent-default"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/check.go",
+      "line": 171,
+      "severity": "LOW",
+      "finding": "When a line carries both `time` and `at`, the loop lets whichever comes last in timeKeys (`at`) silently overwrite the parsed `time`; a producer that writes both with disagreeing values has a bug the checker neither reports nor resolves in the store's favour (the log stores read `time`, never `at`). Verified: a line with time=2026-08-28 and at=2020-01-01 is reported ok.",
+      "evidence": "var timeKeys = []string{\"time\", \"at\"} ... for _, k := range timeKeys { ... at = parsed }",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "REFUTED by the cross-examiner in round 3: Scenario reproduces (a line with time=2026-08-28 and at=2020-01-01 is reported ok) but no failure follows from it. Both keys are still individually parsed and rejected when malformed (check.go:171-188; tests 'malformed at'/'malformed time'/'non-string at'), which is the whole documented scope: check.go:22-24 says 'time is not what this verb checks \u2014 but one that has it must have it well-formed', and docs/emit-any-language.md:147-149 says the key 'is parsed as RFC 3339 when present'. The precedence itself has zero observable effect: the parsed value only reaches biz.Outcome.At, and Validate (biz/context.go:173-176) consults At solely via o.At.IsZero(), which any RFC3339-parsed time satisfies; eventline.Parse reads neither `time` nor `at` from the line. Nothing in the docs or the contract vector promises cross-field agreement or names one key authoritative, so 'reported ok' is the documented behaviour, not a defect at this location.",
+      "id": "f9ddcbe5e4edbe04"
+    },
+    {
+      "ts": "2026-09-08T15:52:06+00:00",
+      "seq": 14,
+      "source": "attest",
+      "sha": "cb951c1fc7ec50bdfec21278c16fcda66d994c99",
+      "base_sha": "9f0d07be828feeb1a25967c977a6a714843938a8",
+      "rule_id": "unmapped:misleading-diagnostic",
+      "tags": [
+        "misleading-diagnostic"
+      ],
+      "dir_prefix": "cmd/shortfall",
+      "file": "cmd/shortfall/check.go",
+      "line": 149,
+      "severity": "LOW",
+      "finding": "The null rejection tells the producer to 'omit the key instead' for every known key, including the ten requiredKeys and the `event` marker, where omitting the key is itself rejected. A producer following the advice for a required key trades one rejection for another.",
+      "evidence": "fx/null-flow.jsonl (biz.flow:null) -> 'line 1: biz.flow is null \u2014 omit the key instead'; the same line with biz.flow removed is rejected at check.go:162 with 'biz.flow is missing \u2014 the contract requires it on every event' (existing test 'missing flow'). fx/null-estimated.jsonl gets the same 'omit the key' advice although biz.amount.estimated is in requiredKeys (check.go:53-56) and test 'missing estimated' asserts omission is rejected. The advice is only correct for the optional keys; a message that names the required/optional split (e.g. 'omit it' vs 'write a value') would match the code. Docs line 144 ('optional keys must be absent rather than empty or null') is accurate; only the diagnostic's second clause overreaches.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "bead": "workspace-a8q.1",
+      "reason": "Raised by the scoped re-reviewer in round 4, at the cap. The advice 'omit the key instead' is right for the optional keys the doc scopes the null rule to and overreaches for a required key, whose omission the very next check rejects with its own message \u2014 so no line passes either way and the only defect is one sentence of guidance. Not fixed here because a commit after the cap would need a further round; to be corrected in the next change that touches cmd/shortfall/check.go (tracked on workspace-a8q).",
+      "id": "3ff466c5346367ff"
+    }
+  ]
+}
