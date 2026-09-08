@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "344821a7dbac40c29b10cd9e61def05ab1a293cf",
+  "base_sha": "aafbca4f8dd6f0bfdec5fab5166eae2d5cde192b",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-08T22:10:44+00:00",
+  "range_patch_ids": [
+    "3b6cda75509e71fe25625f6d25dfd0ee1ba58ccd"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 combined reviewer + cross-examiner pass for a trivial diff (one module's go.mod and go.sum), round 1 on head 344821a; verified diff scope, all six go.sum hashes against a cold-cache direct fetch of the tags, the GOWORK=off build, the release guard (exit 0, 15 tags reachable) and CONTRIBUTING agreement; raw output round-EQbuLs/reviewers/code-reviewer.json (0 findings)"
+    }
+  ],
+  "records": []
+}
