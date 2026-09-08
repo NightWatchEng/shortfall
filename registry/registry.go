@@ -320,9 +320,12 @@ type flowDoc struct {
 	Stages     []stageDoc        `yaml:"stages"`
 	SLA        map[string]slaDoc `yaml:"sla,omitempty"`
 	Estimator  *estimatorDoc     `yaml:"estimator,omitempty"`
-	Baseline   baselineDoc       `yaml:"baseline"`
-	Recovery   recoveryDoc       `yaml:"recovery"`
-	Reconcile  reconcileDoc      `yaml:"reconcile"`
+	// The three blocks below are optional (ADR-0020): a nil pointer is an
+	// absent block, which the legs that need it report as unavailable; a
+	// present block, empty included, is validated in full.
+	Baseline  *baselineDoc  `yaml:"baseline,omitempty"`
+	Recovery  *recoveryDoc  `yaml:"recovery,omitempty"`
+	Reconcile *reconcileDoc `yaml:"reconcile,omitempty"`
 }
 
 type moneyDoc struct {
@@ -610,22 +613,50 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 		}
 	}
 
-	if fd.Baseline.Seasonality != "hour_of_week" {
-		return fail("baseline seasonality %q is not supported (hour_of_week)", fd.Baseline.Seasonality)
+	// Absent blocks stay zero-valued: the unrealized leg reports a missing
+	// baseline as unavailable and an undeclared recovery as nothing credited
+	// back, and coverage takes its ledger from the reconcile command rather
+	// than from here (ADR-0020). A block that is present — `baseline: {}`
+	// included — is held to every rule below.
+	if fd.Baseline != nil {
+		if fd.Baseline.Seasonality != "hour_of_week" {
+			return fail("baseline seasonality %q is not supported (hour_of_week)", fd.Baseline.Seasonality)
+		}
+
+		if fd.Baseline.LookbackWeeks < 1 {
+			return fail("baseline lookback_weeks %d must be >= 1", fd.Baseline.LookbackWeeks)
+		}
+
+		f.Baseline = Baseline{
+			Seasonality:   fd.Baseline.Seasonality,
+			LookbackWeeks: fd.Baseline.LookbackWeeks,
+			Holidays:      fd.Baseline.Holidays,
+		}
 	}
 
-	if fd.Baseline.LookbackWeeks < 1 {
-		return fail("baseline lookback_weeks %d must be >= 1", fd.Baseline.LookbackWeeks)
+	if fd.Recovery != nil {
+		if rec, err := validateRecovery(*fd.Recovery); err != nil {
+			return fail("%v", err)
+		} else {
+			f.Recovery = rec
+		}
 	}
 
-	f.Baseline = Baseline{
-		Seasonality:   fd.Baseline.Seasonality,
-		LookbackWeeks: fd.Baseline.LookbackWeeks,
-		Holidays:      fd.Baseline.Holidays,
+	if fd.Reconcile != nil {
+		if rc, err := validateReconcile(*fd.Reconcile, f.stageSet); err != nil {
+			return fail("%v", err)
+		} else {
+			f.Reconcile = rc
+		}
 	}
 
-	if fd.Recovery.Model != "usage_loss_curve" {
-		return fail("recovery model %q is not supported (usage_loss_curve)", fd.Recovery.Model)
+	return f, nil
+}
+
+// validateRecovery holds a present recovery block to its rules.
+func validateRecovery(rd recoveryDoc) (Recovery, error) {
+	if rd.Model != "usage_loss_curve" {
+		return Recovery{}, fmt.Errorf("recovery model %q is not supported (usage_loss_curve)", rd.Model)
 	}
 
 	// Finiteness is checked before the bound, not folded into it: NaN fails
@@ -634,54 +665,57 @@ func buildFlow(name string, fd flowDoc, segments map[string]struct{}) (Flow, err
 	// it would not even be asked for a within window. The infinities are
 	// caught by the bound as well, but they are named here so the reason
 	// given is the true one.
-	if math.IsNaN(fd.Recovery.RecoveredFraction) || math.IsInf(fd.Recovery.RecoveredFraction, 0) {
-		return fail("recovery recovered_fraction %v is not a finite number", fd.Recovery.RecoveredFraction)
+	if math.IsNaN(rd.RecoveredFraction) || math.IsInf(rd.RecoveredFraction, 0) {
+		return Recovery{}, fmt.Errorf("recovery recovered_fraction %v is not a finite number", rd.RecoveredFraction)
 	}
 
-	if fd.Recovery.RecoveredFraction < 0 || fd.Recovery.RecoveredFraction > 1 {
-		return fail("recovery recovered_fraction %v outside [0, 1]", fd.Recovery.RecoveredFraction)
+	if rd.RecoveredFraction < 0 || rd.RecoveredFraction > 1 {
+		return Recovery{}, fmt.Errorf("recovery recovered_fraction %v outside [0, 1]", rd.RecoveredFraction)
 	}
 
-	rec := Recovery{Model: fd.Recovery.Model, RecoveredFraction: fd.Recovery.RecoveredFraction}
+	rec := Recovery{Model: rd.Model, RecoveredFraction: rd.RecoveredFraction}
 	switch {
-	case fd.Recovery.RecoveredFraction > 0:
-		if fd.Recovery.Within == "" {
-			return fail("recovery recovered_fraction is set but within is missing")
+	case rd.RecoveredFraction > 0:
+		if rd.Within == "" {
+			return Recovery{}, fmt.Errorf("recovery recovered_fraction is set but within is missing")
 		}
 
-		d, err := ParseISODuration(fd.Recovery.Within)
+		d, err := ParseISODuration(rd.Within)
 		if err != nil {
-			return fail("recovery within: %v", err)
+			return Recovery{}, fmt.Errorf("recovery within: %v", err)
 		}
 
 		rec.Within = d
-	case fd.Recovery.Within != "":
+	case rd.Within != "":
 		// The iff holds in both directions: a within with no fraction is
 		// a typo, and typos fail loudly here.
-		return fail("recovery within %q is set but recovered_fraction is 0 — remove one or set both", fd.Recovery.Within)
+		return Recovery{}, fmt.Errorf("recovery within %q is set but recovered_fraction is 0 — remove one or set both", rd.Within)
 	}
 
-	f.Recovery = rec
+	return rec, nil
+}
 
-	src := strings.TrimSpace(fd.Reconcile.Source)
+// validateReconcile holds a present reconcile block to its rules. A block
+// that names no source is rejected: a block is a statement, and an empty
+// one is a typo — the way to declare no ledger is to omit the block.
+func validateReconcile(rd reconcileDoc, stageSet map[string]struct{}) (Reconcile, error) {
+	src := strings.TrimSpace(rd.Source)
 	if src == "" {
-		return fail("reconcile source is required — coverage is how Finance comes to trust the numbers")
+		return Reconcile{}, fmt.Errorf("reconcile block names no source — name the ledger coverage is measured against, or omit the block")
 	}
 
 	scheme, _, ok := strings.Cut(src, ":")
 	if !ok || (scheme != "sql" && scheme != "stripe") {
-		return fail("reconcile source %q must use a known scheme (sql: or stripe:)", src)
+		return Reconcile{}, fmt.Errorf("reconcile source %q must use a known scheme (sql: or stripe:)", src)
 	}
 
-	if s := fd.Reconcile.Stage; s != "" {
-		if _, ok := f.stageSet[s]; !ok {
-			return fail("reconcile stage %q is not a declared stage", s)
+	if s := rd.Stage; s != "" {
+		if _, ok := stageSet[s]; !ok {
+			return Reconcile{}, fmt.Errorf("reconcile stage %q is not a declared stage", s)
 		}
 	}
 
-	f.Reconcile = Reconcile{Source: src, Stage: fd.Reconcile.Stage}
-
-	return f, nil
+	return Reconcile{Source: src, Stage: rd.Stage}, nil
 }
 
 // token enforces the bounded lowercase name shape shared with biz.

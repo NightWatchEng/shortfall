@@ -267,6 +267,9 @@ disagree with the library.
   why, because a zero is a claim (ADR-0017); the deferred leg carries a
   caveat whenever it stood on events rather than the gauge (ADR-0019).
 - **No severity ladder in the registry means no severity suggestion.**
+  Likewise no baseline means no counterfactual estimate, and no recovery
+  model means nothing credited back — each said in the report, never
+  defaulted (ADR-0020).
 - **PII is fenced in code.** Raw emails, PANs and IBANs are rejected at
   the `biz.*` boundary, not discouraged in a style guide.
 

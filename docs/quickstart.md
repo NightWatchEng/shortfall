@@ -38,19 +38,18 @@ flows:
     currencies: [USD]
     stages:
       - { name: auth, signals: ["http:POST /pay"] }
-    baseline:  { seasonality: hour_of_week, lookback_weeks: 1 }
-    recovery:  { model: usage_loss_curve, recovered_fraction: 0 }
-    reconcile: { source: "sql:ledger.payments" }
 ```
 
-`baseline`, `recovery` and `reconcile` are required — the validator
-rejects a flow without them — because the legs that need them must not
-silently guess: the baseline is how "demand that never arrived"
-gets sized, recovery is what fraction of it comes back, and `reconcile`
-names the ledger the trust number is measured against. You are not using
-those legs yet — the values above are placeholders you will tune when you
-do. `currencies` and the second segment are optional; they are here
-because a real registry has them.
+That is the whole registry for a first run: what counts as money, and the
+stages it moves through. A real registry also declares a `baseline` (how
+"demand that never arrived" is sized), a `recovery` model (what fraction
+of it comes back) and a `reconcile` source (the ledger the trust number
+is measured against). They are optional, and nothing guesses in their
+absence: a report for this flow marks the unrealized leg unavailable and
+names the missing baseline (ADR-0020). You will add them when you wire
+those legs — the [integration guide](integration.md) does. `currencies`
+and the second segment are optional too; they are here because a real
+registry has them.
 
 Unknown fields are rejected, so a typo fails rather than silently
 defaulting. Every field is in the [registry reference](registry.md).

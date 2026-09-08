@@ -47,15 +47,18 @@ invoice.pay:
     default_minor: 18750        # minor units at `exponent` (default 2)
     exponent: 2
     by_segment: { smb: 14200, enterprise: 91000 }
-  baseline:                     # the counterfactual expectation (ADR-0006)
+  baseline:                     # OPTIONAL (ADR-0020): the counterfactual expectation (ADR-0006).
+                                # Absent, the unrealized leg is unavailable and names it.
     seasonality: hour_of_week   # the only v0 model
     lookback_weeks: 8           # ≥1; needs this much querier metric history
     holidays: us                # optional calendar name (v0 does not yet apply it)
-  recovery:                     # usage-loss curve for suppressed demand
+  recovery:                     # OPTIONAL (ADR-0020): usage-loss curve for suppressed demand.
+                                # Absent, nothing is credited back and the leg's note says so.
     model: usage_loss_curve
     recovered_fraction: 0.6     # 0..1; fraction of suppressed demand that returns
     within: PT2H                # required when recovered_fraction is set
-  reconcile:                    # the ledger source coverage is measured against
+  reconcile:                    # OPTIONAL (ADR-0020): the ledger source coverage is measured
+                                # against. A present block must name its source.
     source: "sql:ledger.payments"   # scheme:path — known schemes: sql:, stripe:
     stage: capture              # optional: the flow's value stage — the stage
                                 # whose success observations telemetry is

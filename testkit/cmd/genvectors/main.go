@@ -341,8 +341,9 @@ const baseYAML = baseHeaderYAML + `flows:
 
 // minimalYAML is the smallest document that validates: no severity
 // ladder, no estimator, no declared currencies, no SLA, no propagation
-// block (an absent allowlist denies every host), and a value stage
-// derived from the last declared stage.
+// block (an absent allowlist denies every host), no baseline, recovery or
+// reconcile block (ADR-0020), and a value stage derived from the last
+// declared stage.
 const minimalYAML = `version: 1
 segments: [default]
 flows:
@@ -350,9 +351,6 @@ flows:
     money: { kind: gmv }
     stages:
       - { name: pay, signals: ["http:POST /pay"] }
-    baseline:  { seasonality: hour_of_week, lookback_weeks: 1 }
-    recovery:  { model: usage_loss_curve, recovered_fraction: 0 }
-    reconcile: { source: "stripe:charges" }
 `
 
 // noFlowsYAML is baseYAML with its flows block — and nothing else —
@@ -452,7 +450,7 @@ func buildRegistryVectors() testkit.RegistryVectors {
 		{"recovery_fraction_nan", "NaN fails both halves of a `< 0 || > 1` bound, so a range written as a pair of comparisons admits it", "recovery_fraction", sub("recovered_fraction: 0.6, within: PT2H", "recovered_fraction: .nan")},
 		{"recovery_within_missing", "", "recovery_within_missing", sub(", within: PT2H }", " }")},
 		{"recovery_within_without_fraction", "the iff holds in both directions", "recovery_within_without_fraction", sub("recovered_fraction: 0.6,", "recovered_fraction: 0,")},
-		{"reconcile_source_required", "coverage is how Finance comes to trust the numbers", "reconcile_source_required", sub(`source: "sql:ledger.payments"`, `source: ""`)},
+		{"reconcile_source_required", "a present reconcile block must name its ledger; the way to declare none is to omit the block (ADR-0020)", "reconcile_source_required", sub(`source: "sql:ledger.payments"`, `source: ""`)},
 		{"reconcile_source_scheme", "", "reconcile_source_scheme", sub(`source: "sql:ledger.payments"`, `source: "mongo:ledger.payments"`)},
 		{"reconcile_stage_unknown", "", "reconcile_stage_unknown", sub("stage: capture }", "stage: settle }")},
 	}

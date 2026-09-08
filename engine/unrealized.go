@@ -68,6 +68,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 
 	var notes []string
 	thin := false
+	sized := false // at least one requested flow reached the estimate
 	for _, flowName := range flows {
 		flow, ok := reg.Flow(flowName)
 		if !ok || len(flow.Stages) == 0 {
@@ -75,8 +76,12 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			continue
 		}
 
+		// An absent baseline block leaves LookbackWeeks at zero (ADR-0020); a
+		// present one cannot, the validator requires >= 1.
 		if flow.Baseline.LookbackWeeks < 1 {
-			notes = append(notes, fmt.Sprintf("flow %q has no baseline lookback — skipped", flowName))
+			notes = append(notes, fmt.Sprintf(
+				"flow %q declares no baseline — the counterfactual leg cannot be sized without one; add a baseline block to the registry (ADR-0020)",
+				flowName))
 			continue
 		}
 
@@ -98,6 +103,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			))
 		}
 
+		sized = true
 		entryStage := flow.Stages[0].Name
 
 		// Query observed over the aligned span [target[0], lastTarget+1h), not
@@ -167,9 +173,22 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			leg.HighMinor[currency] += int64(math.Round(high))
 		}
 
-		if r := clampFraction(flow.Recovery.RecoveredFraction); r > 0 {
+		switch r := clampFraction(flow.Recovery.RecoveredFraction); {
+		case r > 0:
 			notes = append(notes, fmt.Sprintf("flow %q: net of an assumed %.0f%% recovery of suppressed demand", flowName, r*100))
+		case flow.Recovery.Model == "":
+			// Absent block, not a declared zero: say that nothing was credited
+			// back, so the gross figure is never mistaken for a netted one.
+			notes = append(notes, fmt.Sprintf(
+				"flow %q declares no recovery model — nothing is credited back; this is gross suppressed demand (ADR-0020)",
+				flowName))
 		}
+	}
+
+	// No requested flow could be sized: the leg is ungrounded, and the notes
+	// say why per flow. Empty ranges must not read as a measured zero.
+	if !sized {
+		leg.Unavailable = true
 	}
 
 	if thin {

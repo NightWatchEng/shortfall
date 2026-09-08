@@ -21,14 +21,16 @@ flows:
     money: { kind: gmv }
     stages:
       - { name: pay, signals: ["http:POST /pay"] }
-    baseline:  { seasonality: hour_of_week, lookback_weeks: 1 }
-    recovery:  { model: usage_loss_curve, recovered_fraction: 0 }
-    reconcile: { source: "stripe:charges" }
 ```
 
 This is the `minimal` acceptance vector, and it is validated on every CI
 run by the repository's doc-fence checker. Everything omitted here is
-optional; everything present is required.
+optional; everything present is required. The `baseline`, `recovery` and
+`reconcile` blocks are optional since
+[ADR-0020](../adr/0020-optional-registry-blocks.md): an absent block
+loads, and the leg that needs it reports itself unavailable rather than
+guessing (6.3); a present block — empty included — is validated in full
+under the classes of 4.3.
 
 ### 4.2 Validation rules that are easy to get wrong
 
@@ -116,7 +118,7 @@ rule it is named for.
 | `recovery_fraction` | `recovered_fraction` outside `[0, 1]`, or not a finite number |
 | `recovery_within_missing` | a positive recovered fraction with no window |
 | `recovery_within_without_fraction` | a window with a zero recovered fraction |
-| `reconcile_source_required` | a flow with no reconcile source |
+| `reconcile_source_required` | a present `reconcile` block that names no source (an absent block is accepted, ADR-0020) |
 | `reconcile_source_scheme` | a reconcile source outside the known schemes (`sql:`, `stripe:`) |
 | `reconcile_stage_unknown` | `reconcile.stage` naming a stage the flow does not declare |
 

@@ -533,3 +533,82 @@ func TestClampFractionNonFinite(t *testing.T) {
 		})
 	}
 }
+
+// optionalBlocksRegistry is a one-week-lookback registry with the baseline
+// and recovery blocks given (or omitted when empty), for ADR-0020's
+// absent-block behaviour.
+func optionalBlocksRegistry(t *testing.T, baseline, recovery string) *registry.Registry {
+	t.Helper()
+	reg, err := registry.Parse([]byte(`version: 1
+segments: [smb, enterprise]
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: auth,   signals: ["http:POST /pay"] }
+      - { name: settle, signals: ["queue:settle.q"] }
+    estimator: { default_minor: 5000 }
+` + baseline + recovery))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return &reg
+}
+
+// TestUnrealizedAbsentBlocks pins ADR-0020 on the unrealized leg: a flow with
+// no baseline block cannot be sized and the leg says so as Unavailable naming
+// the block; a flow with no recovery block is sized gross, and the note says
+// nothing was credited back — distinct from a declared fraction of zero,
+// which is a decision and gets no note.
+func TestUnrealizedAbsentBlocks(t *testing.T) {
+	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	const hour = 10 * time.Hour
+	incident := baseMon.Add(7*24*time.Hour + hour)
+	pts := []emit.MetricPoint{
+		txnPoint("auth", "success", baseMon.Add(hour), 100), // one week of history at the entry stage
+		txnPoint("auth", "success", incident, 40),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
+	}
+	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
+	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
+	const withBaseline = "    baseline: { seasonality: hour_of_week, lookback_weeks: 1 }\n"
+	cases := []struct {
+		name            string
+		baseline        string
+		recovery        string
+		wantUnavailable bool
+		wantNote        string
+		wantNoNote      string
+	}{
+		{"no baseline: unavailable, naming the block", "", "", true, "declares no baseline", ""},
+		{"no recovery: sized gross, and the note says so", withBaseline, "", false, "declares no recovery", ""},
+		{"declared zero recovery: sized gross, no note", withBaseline, "    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n", false, "", "recovery"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			leg, err := Unrealized(context.Background(), optionalBlocksRegistry(t, c.baseline, c.recovery), q, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if leg.Unavailable != c.wantUnavailable {
+				t.Fatalf("Unavailable = %v, want %v (notes %v)", leg.Unavailable, c.wantUnavailable, leg.Notes)
+			}
+
+			if c.wantNote != "" && !hasNoteContaining(leg.Notes, c.wantNote) {
+				t.Fatalf("notes %v must name %q", leg.Notes, c.wantNote)
+			}
+
+			if c.wantNoNote != "" && hasNoteContaining(leg.Notes, c.wantNoNote) {
+				t.Fatalf("notes %v must not mention %q", leg.Notes, c.wantNoNote)
+			}
+
+			if !c.wantUnavailable && leg.MidMinor["USD"] <= 0 {
+				t.Fatalf("a sized flow must carry a positive estimate, got %v", leg.MidMinor)
+			}
+		})
+	}
+}
