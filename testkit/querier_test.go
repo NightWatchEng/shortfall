@@ -298,3 +298,42 @@ func TestInFlightReplayZeroesADrainedCombo(t *testing.T) {
 		})
 	}
 }
+
+// TestInFlightReplayKeepsATransactionsOwnOrderAtOneInstant pins the replay
+// against an instant stage: a transaction authed and captured at the same
+// instant (the harness's InstantStage capture delay) must leave the capture
+// queue and enter the settle queue, never sit in both — its own Done cannot
+// be applied before its own Track.
+func TestInFlightReplayKeepsATransactionsOwnOrderAtOneInstant(t *testing.T) {
+	at := time.Date(2026, 8, 24, 1, 0, 0, 0, time.UTC)
+	res := checkout.Result{
+		Config: checkout.Config{End: at},
+		Ledger: checkout.Ledger{Txns: []checkout.Txn{{
+			ID: "t1", CustomerID: "h:c1", Segment: checkout.SegmentSMB, AmountMinor: 1000, Currency: "USD",
+			CreatedAt: at.Add(-10 * time.Minute), AuthedAt: at.Add(-10 * time.Minute),
+			CapturedAt: at.Add(-10 * time.Minute), // captured the instant it was authed
+			State:      checkout.StateCaptured,
+		}}},
+	}
+	sums := map[string]int64{}
+	for _, p := range InFlightPointsAt(res, at) {
+		if p.Name == "biz_inflight_value" {
+			sums[p.Labels["stage"]] += p.Value
+		}
+	}
+
+	cases := []struct {
+		stage string
+		want  int64
+	}{
+		{"capture", 0},
+		{"settle", 1000},
+	}
+	for _, c := range cases {
+		t.Run(c.stage, func(t *testing.T) {
+			if sums[c.stage] != c.want {
+				t.Fatalf("%s in-flight = %d, want %d (all: %v)", c.stage, sums[c.stage], c.want, sums)
+			}
+		})
+	}
+}

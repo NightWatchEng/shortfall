@@ -227,10 +227,14 @@ func InFlightPointsAt(res checkout.Result, at time.Time) []emit.MetricPoint {
 	return inFlightPointsAtInstants(res, at)
 }
 
-// queueEvent is one Track or Done the replay feeds the tracker.
+// queueEvent is one Track or Done the replay feeds the tracker. Events are
+// appended per transaction in lifecycle order (Track capture, Done capture,
+// Track settle, Done settle) and sorted STABLY by time alone, so a
+// transaction whose stages share an instant keeps its own order — its Done
+// never lands before its Track — while events of different transactions at
+// one instant, which touch different ids, may interleave freely.
 type queueEvent struct {
 	at    time.Time
-	order int // Done before Track at one instant: a queue is left before the next is entered
 	apply func(*emit.InFlightTracker)
 }
 
@@ -260,34 +264,28 @@ func inFlightPointsAtInstants(res checkout.Result, instants ...time.Time) []emit
 		txn := txn
 		money := biz.Money{Amount: txn.AmountMinor, Currency: txn.Currency, Exponent: 2}
 		if !txn.AuthedAt.IsZero() {
-			timeline = append(timeline, queueEvent{txn.AuthedAt, 1, func(t *emit.InFlightTracker) {
+			timeline = append(timeline, queueEvent{txn.AuthedAt, func(t *emit.InFlightTracker) {
 				t.Track("invoice.pay", "capture", txn.ID, money, txn.AuthedAt)
 			}})
 		}
 
 		if !txn.CapturedAt.IsZero() {
-			timeline = append(timeline, queueEvent{txn.CapturedAt, 0, func(t *emit.InFlightTracker) {
+			timeline = append(timeline, queueEvent{txn.CapturedAt, func(t *emit.InFlightTracker) {
 				t.Done("invoice.pay", "capture", txn.ID)
 			}})
-			timeline = append(timeline, queueEvent{txn.CapturedAt, 1, func(t *emit.InFlightTracker) {
+			timeline = append(timeline, queueEvent{txn.CapturedAt, func(t *emit.InFlightTracker) {
 				t.Track("invoice.pay", "settle", txn.ID, money, txn.CapturedAt)
 			}})
 		}
 
 		if !txn.SettledAt.IsZero() {
-			timeline = append(timeline, queueEvent{txn.SettledAt, 0, func(t *emit.InFlightTracker) {
+			timeline = append(timeline, queueEvent{txn.SettledAt, func(t *emit.InFlightTracker) {
 				t.Done("invoice.pay", "settle", txn.ID)
 			}})
 		}
 	}
 
-	sort.SliceStable(timeline, func(i, j int) bool {
-		if !timeline[i].at.Equal(timeline[j].at) {
-			return timeline[i].at.Before(timeline[j].at)
-		}
-
-		return timeline[i].order < timeline[j].order
-	})
+	sort.SliceStable(timeline, func(i, j int) bool { return timeline[i].at.Before(timeline[j].at) })
 
 	sorted := append([]time.Time(nil), instants...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Before(sorted[j]) })
