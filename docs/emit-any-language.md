@@ -35,6 +35,7 @@ produced:
 ```json
 {
   "event": "biz.outcome",
+  "time": "2026-08-28T14:05:00Z",
   "biz.flow": "invoice.pay",
   "biz.stage": "capture",
   "biz.outcome": "failed",
@@ -54,6 +55,7 @@ produced:
 | Key | Type | Rule |
 |---|---|---|
 | `event` | string | the literal `biz.outcome`; marks the record as this library's in a shared sink |
+| `time` | string | RFC 3339 event time — the store adopts it as the entry's timestamp; see below for the other stores' spelling |
 | `biz.flow` | string | a flow the registry declares; lowercase `[a-z0-9._-]`, ≤ 64 |
 | `biz.stage` | string | a stage of that flow; same charset, ≤ 32 |
 | `biz.outcome` | string | one of `success`, `failed`, `deferred`, `abandoned`, `unknown` |
@@ -83,11 +85,14 @@ Three things a JSON library will get wrong on your behalf:
   IBANs, and rejected. Hash the account id before it reaches the event;
   there is deliberately no hashing helper to import.
 
-The event carries no timestamp field. The store you land it in owns the
-time — a log store stamps the entry, the SQL table has an `at` column — so
-a late delivery is stamped with the moment you observed it, and a
-provider webhook replayed hours late should be written with the
-provider's event time, not receipt time.
+The event time is the store's timestamp, and you set it from the line:
+the Cloud Logging exporter writes a `time` key, which the logging agent
+adopts as the entry's timestamp; the CloudWatch exporter writes it as the
+EMF `_aws.Timestamp` (epoch milliseconds) alongside the same `biz.*`
+keys; the SQL table has an `at` column. Whichever store you use, write the
+*event's* time there, not the moment you observed it: a provider webhook
+replayed hours late must land in the incident it belongs to, and a store
+that stamps receipt time would move that money into the wrong window.
 
 ## Where to land it
 
@@ -138,18 +143,21 @@ runs in CI against a fixture your service's test suite writes. It is
 stricter than the stores' own readers where the contract is: the `event`
 marker must be present, because the log-store queriers select on it and a
 line without it is never read back; numbers must be JSON numbers; and the
-optional keys must be absent rather than empty. A file may carry an `at`
-field (RFC 3339) per line to stand in for the store's timestamp; nothing
+optional keys must be absent rather than empty. A file that holds no
+events fails too, so an empty fixture cannot read as green. The `time`
+key (or a file-only `at`) is parsed as RFC 3339 when present; nothing
 else outside the table above is allowed under the `biz.` prefix.
 
 A minimal producer, in Python, to show how little there is:
 
 ```python
 import json, sys
+from datetime import datetime, timezone
 
-def outcome(flow, stage, result, entity_id, customer_hash, amount_minor, currency, exponent, kind, **opt):
+def outcome(at, flow, stage, result, entity_id, customer_hash, amount_minor, currency, exponent, kind, **opt):
     ev = {
         "event": "biz.outcome",
+        "time": at.strftime("%Y-%m-%dT%H:%M:%SZ"),   # the event's own time, not now()
         "biz.flow": flow, "biz.stage": stage, "biz.outcome": result,
         "biz.entity.id": entity_id, "biz.customer.id": customer_hash,
         "biz.amount.minor": int(amount_minor),      # integer minor units, never float
@@ -161,8 +169,8 @@ def outcome(flow, stage, result, entity_id, customer_hash, amount_minor, currenc
             ev["biz.segment" if k == "segment" else k] = opt[k]
     sys.stdout.write(json.dumps(ev, separators=(",", ":")) + "\n")
 
-outcome("invoice.pay", "capture", "failed", "inv_000042", "h:c0ffee", 14900, "USD", 2, "fee",
-        segment="smb", source="billing-svc", error="card_declined")
+outcome(datetime.now(timezone.utc), "invoice.pay", "capture", "failed", "inv_000042", "h:c0ffee",
+        14900, "USD", 2, "fee", segment="smb", source="billing-svc", error="card_declined")
 ```
 
 ## Carrying the context across a hop

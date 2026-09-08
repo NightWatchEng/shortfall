@@ -16,12 +16,13 @@ import (
 	"github.com/NightWatchEng/shortfall/eventline"
 )
 
-// atKey is the one field a file of events carries that a log store would
-// own instead: the event time, RFC3339. A line without it is validated at
-// check time — time is not what this verb checks — but a line that has it
-// must have it well-formed, because a store that later reads it will not
-// guess either.
-const atKey = "at"
+// timeKeys are the fields that carry the event time on a line: "time" is
+// what the Cloud Logging exporter writes and the agent adopts as the
+// entry's timestamp, and "at" is the file-only stand-in this verb also
+// accepts. A line without either is validated at check time — time is not
+// what this verb checks — but one that has it must have it well-formed
+// (RFC3339), because a store that later reads it will not guess either.
+var timeKeys = []string{"time", "at"}
 
 // knownKeys is every top-level key an outcome line may carry: the biz.*
 // contract (biz/semconv.go), the diagnostic fields, the event marker, and
@@ -30,7 +31,7 @@ const atKey = "at"
 // contract test catches on the Go side, applied here to a line some other
 // language wrote.
 var knownKeys = map[string]bool{
-	biz.EventKey: true, atKey: true,
+	biz.EventKey: true, "time": true, "at": true,
 	biz.AttrFlow: true, biz.AttrStage: true, biz.AttrOutcome: true,
 	biz.AttrEntityID: true, biz.AttrCustomerID: true, biz.AttrSegment: true,
 	biz.AttrAmountMinor: true, biz.AttrCurrency: true, biz.AttrExponent: true,
@@ -39,6 +40,16 @@ var knownKeys = map[string]bool{
 	// source_system is the spelling since-removed exporters wrote; the
 	// decoder still accepts it, so the checker does too.
 	"source_system": true,
+}
+
+// requiredKeys must be present on every line: the attribute set the
+// contract vector's required_only case carries. The decoder fills an
+// absent one with its zero value — exponent 0, estimated false — which
+// reads as a different, valid fact, so presence has to be checked here
+// rather than left to validation.
+var requiredKeys = []string{
+	biz.AttrFlow, biz.AttrStage, biz.AttrOutcome, biz.AttrEntityID, biz.AttrCustomerID,
+	biz.AttrAmountMinor, biz.AttrCurrency, biz.AttrExponent, biz.AttrValueKind, biz.AttrAmountEst,
 }
 
 // numericKeys must be JSON numbers on the wire. The decoder happens to
@@ -58,10 +69,12 @@ var absentNotEmpty = []string{biz.AttrSegment, biz.AttrSLADeadline, biz.AttrSour
 // validated at the biz boundary — the same fences emit.Record applies —
 // so a service written in another language can prove its events would be
 // accepted before any land in a store. It is stricter than the decoders
-// where the contract is: the event marker must be present, numbers must be
-// numbers, and optional facts must be absent rather than empty. Exit 0
-// when every line passes, 1 when any is rejected (each named by line and
-// defect), 2 on usage.
+// where the contract is: the event marker and every required attribute
+// must be present, numbers must be numbers, and optional facts must be
+// absent rather than empty. Exit 0 when every line passes, 1 when any is
+// rejected (each named by line and defect) or when the file holds no
+// events at all — a gate that passes on nothing is not a gate — and 2 on
+// usage.
 func runCheckEvents(args []string, stdout, stderr io.Writer) int {
 	if len(args) != 1 {
 		wln(stderr, "usage: shortfall check-events <events.jsonl>")
@@ -100,6 +113,11 @@ func runCheckEvents(args []string, stdout, stderr io.Writer) int {
 	}
 
 	wf(stdout, "%s: %d event(s) ok, %d rejected\n", args[0], ok, rejected)
+	if ok+rejected == 0 {
+		wf(stderr, "check-events: %s holds no events — nothing was checked\n", args[0])
+		return 1
+	}
+
 	if rejected > 0 {
 		return 1
 	}
@@ -108,10 +126,10 @@ func runCheckEvents(args []string, stdout, stderr io.Writer) int {
 }
 
 // checkEventLine holds one line to the contract: the event marker must
-// name this library's record, unknown biz.* keys are rejected, numbers
-// must be JSON numbers, optional facts must be absent rather than empty,
-// at (if present) must parse, and the decoded outcome must pass
-// biz.Outcome.Validate.
+// name this library's record, unknown biz.* keys are rejected, every
+// required attribute is present, numbers are JSON numbers, optional facts
+// are absent rather than empty, the time field (if present) parses, and
+// the decoded outcome passes biz.Outcome.Validate.
 func checkEventLine(raw []byte) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
@@ -131,6 +149,12 @@ func checkEventLine(raw []byte) error {
 		return fmt.Errorf("%s must be the string %q — the log-store queriers select on it", biz.EventKey, biz.EventOutcome)
 	}
 
+	for _, k := range requiredKeys {
+		if _, ok := fields[k]; !ok {
+			return fmt.Errorf("%s is missing — the contract requires it on every event", k)
+		}
+	}
+
 	for _, k := range numericKeys {
 		if raw, ok := fields[k]; ok && !isNumberToken(raw) {
 			return fmt.Errorf("%s must be a JSON number, not %s", k, raw)
@@ -144,15 +168,20 @@ func checkEventLine(raw []byte) error {
 	}
 
 	at := time.Now().UTC()
-	if rawAt, present := fields[atKey]; present {
+	for _, k := range timeKeys {
+		rawAt, present := fields[k]
+		if !present {
+			continue
+		}
+
 		var s string
 		if err := json.Unmarshal(rawAt, &s); err != nil {
-			return fmt.Errorf("%s must be an RFC3339 string: %w", atKey, err)
+			return fmt.Errorf("%s must be an RFC3339 string: %w", k, err)
 		}
 
 		parsed, err := time.Parse(time.RFC3339, s)
 		if err != nil {
-			return fmt.Errorf("%s: %w", atKey, err)
+			return fmt.Errorf("%s: %w", k, err)
 		}
 
 		at = parsed

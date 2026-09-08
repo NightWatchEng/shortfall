@@ -36,6 +36,9 @@ func TestCheckEventsAcceptsConformantFiles(t *testing.T) {
 		// `at` stands in for the store's timestamp when the events come
 		// from a file; a well-formed one is accepted alongside the rest.
 		{"with an at field", []string{strings.Replace(okEvent, `"source"`, `"at":"2026-08-28T14:05:00Z","source"`, 1), okEvent}},
+		// `time` is what the Cloud Logging exporter writes; a producer can
+		// check the exact bytes it ships.
+		{"with a time field", []string{strings.Replace(okEvent, `"source"`, `"time":"2026-08-28T14:05:00.123456789Z","source"`, 1), okEvent}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -71,7 +74,11 @@ func TestCheckEventsNamesEachRejectionByLine(t *testing.T) {
 		{"undeclared kind", strings.Replace(okEvent, `"fee"`, `"revenue"`, 1), "kind"},
 		{"bad exponent", strings.Replace(okEvent, `"biz.amount.exponent":2`, `"biz.amount.exponent":7`, 1), "exponent"},
 		{"unknown biz attribute", strings.Replace(okEvent, `"biz.segment":"smb"`, `"biz.segment":"smb","biz.region":"eu"`, 1), "biz.region"},
+		{"missing exponent", strings.Replace(okEvent, `"biz.amount.exponent":2,`, ``, 1), "biz.amount.exponent is missing"},
+		{"missing estimated", strings.Replace(okEvent, `"biz.amount.estimated":false,`, ``, 1), "biz.amount.estimated is missing"},
+		{"missing flow", strings.Replace(okEvent, `"biz.flow":"invoice.pay",`, ``, 1), "biz.flow is missing"},
 		{"malformed at", strings.Replace(okEvent, `"source"`, `"at":"yesterday","source"`, 1), "at:"},
+		{"malformed time", strings.Replace(okEvent, `"source"`, `"time":"yesterday","source"`, 1), "time:"},
 		{"non-string at", strings.Replace(okEvent, `"source"`, `"at":1756389900,"source"`, 1), "at must be an RFC3339 string"},
 	}
 	for _, c := range cases {
@@ -88,6 +95,30 @@ func TestCheckEventsNamesEachRejectionByLine(t *testing.T) {
 
 			if !strings.Contains(stdout.String(), "0 event(s) ok, 1 rejected") {
 				t.Fatalf("summary missing: %q", stdout.String())
+			}
+		})
+	}
+}
+
+func TestCheckEventsRefusesAFileWithNoEvents(t *testing.T) {
+	// A gate that passes on nothing is not a gate: an empty fixture is the
+	// #55 vacuous shape, and it fails loudly rather than reading as green.
+	cases := []struct {
+		name  string
+		lines []string
+	}{
+		{"zero bytes", nil},
+		{"blank lines only", []string{"", "   ", ""}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := runCheckEvents([]string{writeEvents(t, c.lines...)}, &stdout, &stderr); code != 1 {
+				t.Fatalf("exit %d, want 1", code)
+			}
+
+			if !strings.Contains(stderr.String(), "holds no events") {
+				t.Fatalf("stderr %q must say nothing was checked", stderr.String())
 			}
 		})
 	}
