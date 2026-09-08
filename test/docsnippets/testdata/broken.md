@@ -25,4 +25,5 @@ flows:
       model: usage_loss_curve
       recovered_fraction: 0.6
       within: PT2H
+    reconcile: {}
 ```

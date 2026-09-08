@@ -223,9 +223,10 @@ shortfall impact --registry registry.yaml \
   --prometheus http://prometheus:9090 --sql "file:outcomes.db"
 ```
 
-Metrics ground the unrealized leg and, through the in-flight gauge, the
-deferred leg; events ground realized de-duplication, customer impact, and
-the deferred leg when no gauge was published. Wiring both signal kinds is what
+Metrics ground the unrealized leg — for a flow whose registry declares a
+`baseline` — and, through the in-flight gauge, the deferred leg; events
+ground realized de-duplication, customer impact, and the deferred leg when
+no gauge was published. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. The coverage ratio comes from a second command, which needs the
 provider's ledger rows — and renders in the same formats, so the trust
@@ -267,6 +268,9 @@ disagree with the library.
   why, because a zero is a claim (ADR-0017); the deferred leg carries a
   caveat whenever it stood on events rather than the gauge (ADR-0019).
 - **No severity ladder in the registry means no severity suggestion.**
+  Likewise no baseline means no counterfactual estimate, and no recovery
+  model means nothing credited back — each said in the report, never
+  defaulted (ADR-0020).
 - **PII is fenced in code.** Raw emails, PANs and IBANs are rejected at
   the `biz.*` boundary, not discouraged in a style guide.
 

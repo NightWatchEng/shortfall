@@ -28,15 +28,16 @@ A backend may serve one, the other, or both (`query.Caps{Metrics, Events}`).
 | **Realized loss** | Events (preferred) or Metrics | Events give exact per-entity de-dup (ADR-0009); metrics-only is an upper bound, not de-duped |
 | **Deferred value** | Metrics (preferred) or Events | `biz_inflight_value`, plus `biz_inflight_count` for exact txn and breach counts (ADR-0012); with no gauge series, derived from `deferred` outcome events whose entity reached no terminal outcome at that or a later stage, aged at bucket granularity (ADR-0019) |
 | **Customer impact** | Events | distinct accounts, per-segment counts, top accounts by failed value — a time series cannot break these out |
-| **Unrealized loss** | Metrics | hour-of-week baseline from `biz_txn_total` history (needs `MetricHistoryWeeks` ≥ the flow's lookback) |
+| **Unrealized loss** | Metrics, **plus a `baseline` block in the registry** | hour-of-week baseline from `biz_txn_total` history (needs `MetricHistoryWeeks` ≥ the flow's lookback); a flow with no baseline block reports the leg unavailable and names it (ADR-0020) |
 | **Coverage** | Metrics or Events, **plus a ledger** | telemetry captured value vs the reconciled ledger |
 | **Suggested severity** | (derived) | from realized + deferred; no extra signal |
 
 So an **events-only** backend grounds realized, customers and — from the
 `deferred` outcomes an emitter records at enqueue — deferred, with a caveat
-naming that source; a **metrics-only** backend grounds deferred, unrealized
-and a realized upper bound; **both** grounds everything, and the gauge is
-the deferred leg's source of record whenever it exists.
+naming that source; a **metrics-only** backend grounds deferred, a
+realized upper bound and — for a flow whose registry declares a
+`baseline` — unrealized; **both** grounds everything, and the gauge is the
+deferred leg's source of record whenever it exists.
 
 ## Query adapters — the read boundary
 
@@ -92,9 +93,9 @@ both signals, so the engine gets one adapter per signal kind — paired with
 owns its signal and takes each `Capabilities()` field from that side — and
 each declares the other unsupported: `cwinsights` or `gcplogging` grounds the
 realized, customer and (from `deferred` outcomes) deferred legs from
-events, and `promql` grounds the unrealized and baseline legs — and the
-deferred leg from the gauge, which takes precedence — against a
-Prometheus-compatible metrics store (on GCP, Managed Service for Prometheus, fed by
+events, and `promql` grounds the unrealized leg — for a flow whose
+registry declares a `baseline` — and the deferred leg from the gauge,
+which takes precedence, against a Prometheus-compatible metrics store (on GCP, Managed Service for Prometheus, fed by
 `adapters/export/otlp`). That is why `query.Caps` carries `Metrics` and
 `Events` independently: an events-only querier returns
 `query.ErrUnsupported` from `QueryMetric`, and the engine turns that into

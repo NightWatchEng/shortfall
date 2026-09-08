@@ -387,7 +387,9 @@ func TestCheckerCatchesBroken(t *testing.T) {
 			"declared and not used",
 		},
 		{
-			"registry missing reconcile", 13,
+			// An absent reconcile block loads since ADR-0020; a present one
+			// that names no source is the typo the validator still rejects.
+			"registry empty reconcile block", 13,
 			func(f fence) error {
 				if !registryFence(f) {
 					t.Fatal("fixture registry fence not recognized")
@@ -401,7 +403,7 @@ func TestCheckerCatchesBroken(t *testing.T) {
 				_, err := registry.Load(p)
 				return err
 			},
-			"reconcile source is required",
+			"reconcile block names no source",
 		},
 	}
 	for _, c := range cases {

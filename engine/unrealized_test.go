@@ -533,3 +533,165 @@ func TestClampFractionNonFinite(t *testing.T) {
 		})
 	}
 }
+
+// optionalBlocksRegistry is a one-week-lookback registry with the baseline
+// and recovery blocks given (or omitted when empty), for ADR-0020's
+// absent-block behaviour.
+func optionalBlocksRegistry(t *testing.T, baseline, recovery string, estimator bool) *registry.Registry {
+	t.Helper()
+	est := ""
+	if estimator {
+		est = "    estimator: { default_minor: 5000 }\n"
+	}
+
+	reg, err := registry.Parse([]byte(`version: 1
+segments: [smb, enterprise]
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: auth,   signals: ["http:POST /pay"] }
+      - { name: settle, signals: ["queue:settle.q"] }
+` + est + baseline + recovery))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return &reg
+}
+
+// TestUnrealizedAbsentBlocks pins ADR-0020 on the unrealized leg: a flow with
+// no baseline block cannot be sized and the leg says so as Unavailable naming
+// the block; a flow with no recovery block is sized gross, and the note says
+// nothing was credited back — distinct from a declared fraction of zero,
+// which is a decision and gets no note.
+func TestUnrealizedAbsentBlocks(t *testing.T) {
+	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	const hour = 10 * time.Hour
+	incident := baseMon.Add(7*24*time.Hour + hour)
+	pts := []emit.MetricPoint{
+		txnPoint("auth", "success", baseMon.Add(hour), 100), // one week of history at the entry stage
+		txnPoint("auth", "success", incident, 40),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
+	}
+	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
+	const withBaseline = "    baseline: { seasonality: hour_of_week, lookback_weeks: 1 }\n"
+	cases := []struct {
+		name            string
+		baseline        string
+		recovery        string
+		points          func() []emit.MetricPoint
+		estimator       bool
+		wantUnavailable bool
+		wantNote        string
+		wantNoNote      string
+	}{
+		{"no baseline: unavailable, naming the block", "", "", func() []emit.MetricPoint { return pts }, true, true, "declares no baseline", ""},
+		{"baseline but no history in the lookback: unavailable, not sized", withBaseline, "",
+			func() []emit.MetricPoint { return pts[1:] }, true, true, "nothing to fit a baseline against", ""},
+		// History exists, but only for another hour of the week: every
+		// incident hour is thin, nothing is valued, and the leg must not
+		// return a measured zero.
+		{"baseline with history at another hour only: unavailable, not a zero", withBaseline, "",
+			func() []emit.MetricPoint {
+				return append([]emit.MetricPoint{txnPoint("auth", "success", baseMon.Add(hour+time.Hour), 100)}, pts[1:]...)
+			},
+			true, true, "no baseline history", ""},
+		// A fitted baseline with no way to value it — no success value in
+		// the window, no events, no estimator — is not sized either.
+		{"baseline fitted but no AOV from any source: unavailable", withBaseline, "",
+			func() []emit.MetricPoint { return pts[:2] }, false, true, "not valued", ""},
+		{"no recovery: sized gross, and the note says so", withBaseline, "", func() []emit.MetricPoint { return pts }, true, false, "declares no recovery", ""},
+		{"declared zero recovery: sized gross, no note", withBaseline, "    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n",
+			func() []emit.MetricPoint { return pts }, true, false, "", "recovery"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			q := memq.New(memq.WithMetrics(c.points()), memq.WithCaps(query.Caps{Metrics: true}))
+			leg, err := Unrealized(context.Background(), optionalBlocksRegistry(t, c.baseline, c.recovery, c.estimator), q, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if leg.Unavailable != c.wantUnavailable {
+				t.Fatalf("Unavailable = %v, want %v (notes %v)", leg.Unavailable, c.wantUnavailable, leg.Notes)
+			}
+
+			if c.wantNote != "" && !hasNoteContaining(leg.Notes, c.wantNote) {
+				t.Fatalf("notes %v must name %q", leg.Notes, c.wantNote)
+			}
+
+			if c.wantNoNote != "" && hasNoteContaining(leg.Notes, c.wantNoNote) {
+				t.Fatalf("notes %v must not mention %q", leg.Notes, c.wantNoNote)
+			}
+
+			if !c.wantUnavailable && leg.MidMinor["USD"] <= 0 {
+				t.Fatalf("a sized flow must carry a positive estimate, got %v", leg.MidMinor)
+			}
+
+			if c.wantUnavailable && (len(leg.LowMinor)+len(leg.MidMinor)+len(leg.HighMinor)) != 0 {
+				t.Fatalf("an unavailable leg must carry no ranges, got low=%v mid=%v high=%v", leg.LowMinor, leg.MidMinor, leg.HighMinor)
+			}
+		})
+	}
+}
+
+// TestUnrealizedThinCurrencyGetsNoEntry pins the per-currency half of the
+// ADR-0020 marker: when one currency is sized and another has baseline
+// history only at other hours, the second gets no entry in the ranges — an
+// entry of zero beside a sized currency would render as a measured zero.
+func TestUnrealizedThinCurrencyGetsNoEntry(t *testing.T) {
+	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	const hour = 10 * time.Hour
+	incident := baseMon.Add(7*24*time.Hour + hour)
+	eur := func(name, stage string, at time.Time, v int64) emit.MetricPoint {
+		labels := map[string]string{"flow": "invoice.pay", "stage": stage, "outcome": "success", "currency": "EUR", "segment": "smb"}
+		if name == "biz_value_total" {
+			labels["kind"] = "fee"
+		}
+
+		return emit.MetricPoint{Name: name, Value: v, At: at, Labels: labels}
+	}
+	pts := []emit.MetricPoint{
+		txnPoint("auth", "success", baseMon.Add(hour), 100), // USD: history at the incident hour
+		txnPoint("auth", "success", incident, 40),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
+		eur("biz_txn_total", "auth", baseMon.Add(hour+time.Hour), 100), // EUR: history at another hour only
+		eur("biz_txn_total", "auth", incident, 10),
+		eur("biz_txn_total", "settle", incident, 10),
+		eur("biz_value_total", "settle", incident, 50000),
+	}
+	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
+	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
+	reg := optionalBlocksRegistry(t, "    baseline: { seasonality: hour_of_week, lookback_weeks: 1 }\n", "", true)
+	leg, err := Unrealized(context.Background(), reg, q, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name     string
+		currency string
+		wantSet  bool
+	}{
+		{"USD is sized and carries an estimate", "USD", true},
+		{"EUR is thin at every incident hour and carries no entry", "EUR", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, low := leg.LowMinor[c.currency]
+			_, mid := leg.MidMinor[c.currency]
+			_, high := leg.HighMinor[c.currency]
+			if low != c.wantSet || mid != c.wantSet || high != c.wantSet {
+				t.Fatalf("%s present in (low, mid, high) = (%v, %v, %v), want %v; maps %v %v %v", c.currency, low, mid, high, c.wantSet, leg.LowMinor, leg.MidMinor, leg.HighMinor)
+			}
+		})
+	}
+
+	if leg.Unavailable || leg.MidMinor["USD"] <= 0 || !hasNoteContaining(leg.Notes, "currency EUR") {
+		t.Fatalf("leg must be sized by USD and note EUR: unavailable=%v mid=%v notes=%v", leg.Unavailable, leg.MidMinor, leg.Notes)
+	}
+}

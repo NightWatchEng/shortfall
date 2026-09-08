@@ -341,8 +341,9 @@ const baseYAML = baseHeaderYAML + `flows:
 
 // minimalYAML is the smallest document that validates: no severity
 // ladder, no estimator, no declared currencies, no SLA, no propagation
-// block (an absent allowlist denies every host), and a value stage
-// derived from the last declared stage.
+// block (an absent allowlist denies every host), no baseline, recovery or
+// reconcile block (ADR-0020), and a value stage derived from the last
+// declared stage.
 const minimalYAML = `version: 1
 segments: [default]
 flows:
@@ -350,9 +351,6 @@ flows:
     money: { kind: gmv }
     stages:
       - { name: pay, signals: ["http:POST /pay"] }
-    baseline:  { seasonality: hour_of_week, lookback_weeks: 1 }
-    recovery:  { model: usage_loss_curve, recovered_fraction: 0 }
-    reconcile: { source: "stripe:charges" }
 `
 
 // noFlowsYAML is baseYAML with its flows block — and nothing else —
@@ -390,6 +388,7 @@ func buildRegistryVectors() testkit.RegistryVectors {
 	}{
 		{"reference", "the shape docs/registry.md documents", baseYAML},
 		{"minimal", "every optional block omitted; value_stage falls back to the last stage (ADR-0016)", minimalYAML},
+		{"null_blocks", "baseline, recovery and reconcile keys present with null values are absent blocks, the same as omission (ADR-0020)", minimalYAML + "    baseline:\n    recovery: ~\n    reconcile: null\n"},
 		{
 			"zero_exponent_estimator",
 			"a JPY flow's estimator declares exponent 0, so an estimate cannot inherit a 100x error",
@@ -447,12 +446,15 @@ func buildRegistryVectors() testkit.RegistryVectors {
 		{"estimator_exponent_range", "", "estimator_exponent_range", sub("exponent: 2", "exponent: 9")},
 		{"baseline_seasonality", "", "baseline_seasonality", sub("seasonality: hour_of_week", "seasonality: day_of_week")},
 		{"baseline_lookback", "", "baseline_lookback", sub("lookback_weeks: 8", "lookback_weeks: 0")},
+		{"baseline_empty_block", "a present, empty block is validated in full and fails its first rule — it is not the absent block (ADR-0020)", "baseline_seasonality", sub("baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }", "baseline: {}")},
+		{"recovery_empty_block", "a present, empty block is validated in full and fails its first rule — it is not the absent block (ADR-0020)", "recovery_model", sub("recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }", "recovery: {}")},
+		{"reconcile_empty_block", "a present, empty block names no source — it is not the absent block (ADR-0020)", "reconcile_source_required", sub(`reconcile: { source: "sql:ledger.payments", stage: capture }`, "reconcile: {}")},
 		{"recovery_model", "", "recovery_model", sub("model: usage_loss_curve", "model: linear")},
 		{"recovery_fraction", "", "recovery_fraction", sub("recovered_fraction: 0.6", "recovered_fraction: 1.5")},
 		{"recovery_fraction_nan", "NaN fails both halves of a `< 0 || > 1` bound, so a range written as a pair of comparisons admits it", "recovery_fraction", sub("recovered_fraction: 0.6, within: PT2H", "recovered_fraction: .nan")},
 		{"recovery_within_missing", "", "recovery_within_missing", sub(", within: PT2H }", " }")},
 		{"recovery_within_without_fraction", "the iff holds in both directions", "recovery_within_without_fraction", sub("recovered_fraction: 0.6,", "recovered_fraction: 0,")},
-		{"reconcile_source_required", "coverage is how Finance comes to trust the numbers", "reconcile_source_required", sub(`source: "sql:ledger.payments"`, `source: ""`)},
+		{"reconcile_source_required", "a present reconcile block must name its ledger; the way to declare none is to omit the block (ADR-0020)", "reconcile_source_required", sub(`source: "sql:ledger.payments"`, `source: ""`)},
 		{"reconcile_source_scheme", "", "reconcile_source_scheme", sub(`source: "sql:ledger.payments"`, `source: "mongo:ledger.payments"`)},
 		{"reconcile_stage_unknown", "", "reconcile_stage_unknown", sub("stage: capture }", "stage: settle }")},
 	}

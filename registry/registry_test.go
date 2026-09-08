@@ -471,3 +471,61 @@ func TestEstimatorExponent(t *testing.T) {
 		}
 	})
 }
+
+// TestOptionalFlowBlocks pins ADR-0020: baseline, recovery and reconcile
+// may be absent — the legs that need them say so instead of guessing — while
+// a block that IS present is validated as before, and a present-but-empty
+// block is the typo it looks like.
+func TestOptionalFlowBlocks(t *testing.T) {
+	const minimal = `version: 1
+segments: [smb]
+flows:
+  invoice.pay:
+    money: { kind: fee }
+    stages:
+      - { name: auth,    signals: ["http:POST /pay"] }
+      - { name: capture, signals: ["queue:capture.q"] }
+`
+	t.Run("a flow with none of the three loads with zero-valued blocks", func(t *testing.T) {
+		reg, err := Parse([]byte(minimal))
+		if err != nil {
+			t.Fatalf("minimal flow rejected: %v", err)
+		}
+
+		f, ok := reg.Flow("invoice.pay")
+		if !ok {
+			t.Fatal("flow missing")
+		}
+
+		if f.Baseline != (Baseline{}) || f.Recovery != (Recovery{}) || f.Reconcile != (Reconcile{}) {
+			t.Fatalf("absent blocks must be zero-valued: baseline=%+v recovery=%+v reconcile=%+v", f.Baseline, f.Recovery, f.Reconcile)
+		}
+
+		if f.ValueStage() != "capture" {
+			t.Fatalf("value stage without a reconcile block must still be the last stage, got %q", f.ValueStage())
+		}
+	})
+
+	cases := []struct {
+		name    string
+		block   string
+		wantMsg string
+	}{
+		{"empty baseline block", "    baseline: {}\n", "seasonality"},
+		{"empty recovery block", "    recovery: {}\n", "recovery model"},
+		{"empty reconcile block", "    reconcile: {}\n", "reconcile"},
+		{"reconcile stage without a source", "    reconcile: { stage: capture }\n", "reconcile"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse([]byte(minimal + c.block))
+			if err == nil {
+				t.Fatal("a present-but-empty block must be rejected")
+			}
+
+			if !strings.Contains(strings.ToLower(err.Error()), c.wantMsg) {
+				t.Fatalf("error %q does not name %q", err, c.wantMsg)
+			}
+		})
+	}
+}

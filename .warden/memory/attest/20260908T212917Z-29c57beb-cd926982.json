@@ -1,0 +1,334 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+  "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-08T21:29:17+00:00",
+  "range_patch_ids": [
+    "1d5c9be37e3e415500a7c0a20ff853c7b1f961bf",
+    "55e7ee637dba7b7f4350e94d04661486d21992f4",
+    "5ea2065e484a8a642cd9e47cef4904983edfcc5b",
+    "8f62fadb3ec8209a0572f27c220dd61a14480a42",
+    "ded95f1aac356a4d945bd44abeab5729943da270"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 1 on head 018dbd6; raw output round-5bNiuZ/reviewers/code-reviewer.json (4 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 1 on head 018dbd6; raw output round-5bNiuZ/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 2 on head 6348fde; raw output round-LF2hdP/reviewers/code-reviewer.json (6 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 2 on head 6348fde; raw output round-LF2hdP/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 3 of 3 on head 8334da5; raw output round-hdk5v1/reviewers/code-reviewer.json (4 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 3 of 3 on head 8334da5; raw output round-hdk5v1/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 round 4, scoped to the round-3 repair commit 29c57be only (8334da5..29c57be); all four repairs verdicted addressed, no new findings; raw output round-DYat48/reviewers/scoped-re-reviewer.json"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:ungrounded-leg-not-marked-unavailable",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized.go",
+      "line": 106,
+      "severity": "HIGH",
+      "finding": "`sized = true` is set before the history and observed queries run, so a flow WITH a baseline whose lookback window holds no entry-stage history (hist is empty, the currency loop runs zero times) leaves the leg Unavailable=false with empty Low/Mid/High maps and no note explaining them; Summary then prints `unrealized [estimate] none` (engine/report/summary.go:68) beside the new note `nothing is credited back; this is gross suppressed demand`. That contradicts ADR-0020 line 32-33 and the decision shard (`marked Unavailable whenever no requested flow could be sized`) and portability invariant 6.3 (ungrounded MUST be a structural marker, never a plausible zero). Setting sized only after a currency actually contributed a range (or marking Unavailable when hist is empty, with a note) closes it.",
+      "evidence": "engine/unrealized.go:106 `sized = true` precedes `hist, err := hourlyEntriesByCurrency(...)`; probe run over engine.Unrealized with `baseline: { seasonality: hour_of_week, lookback_weeks: 1 }` and zero metric points: `Unavailable=false low=map[] mid=map[] high=map[] notes=[\"flow \\\"invoice.pay\\\" declares no recovery model \u2014 nothing is credited back; this is gross suppressed demand (ADR-0020)\"]`; ADR-0020:32 `The leg is now marked `Unavailable` whenever no requested flow could be sized`",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 1: Reproduced at HEAD (round probe, three zero-history variants): Unavailable=false, Low/Mid/High all empty, the only note the new 'declares no recovery model' line. The same probe against a git-archive copy of base 1a6da9d (with the then-required recovery/reconcile blocks added) gives Unavailable=false, empty maps and NO notes \u2014 so the raw behaviour (baseline present, zero history -> empty maps, Unavailable=false) is PRE-EXISTING, not introduced here. It is nevertheless this range's defect: the ADR (docs/adr/0020 lines 31-33) and the shard's `decided` text assert 'the leg is now marked Unavailable whenever no requested flow could be sized, which it was not before (it returned empty maps a renderer could print as zero)', and the mechanism the range adds to deliver that sentence \u2014 the `sized` flag \u2014 is set at line 106 before either query, so it records 'reached the query step', not 'was sized'. A flow whose lookback window is empty returns exactly the empty maps the ADR parenthetical names as the closed defect. The renderer consequence holds: Summary prints `unrealized [estimate] none`, and `money()`/`moneyRange()` render 'none' for an empty realized map too, where it means a measured zero \u2014 so 'none' on the unrealized line reads as a measured zero with no structural marker and no note naming why, which is what invariant 6.3 forbids. The scenario is realistic (a service younger than its lookback, e.g. the quickstart adopter adding a baseline on day one; a querier with undeclared MetricHistoryWeeks takes the non-gap path). The code comment's own definition ('reached the estimate') does not rescue the ADR's stronger, verbatim claim. Severity stands as filed. \u2014 fixed in 6348fde (round-1 repair).",
+      "id": "4208bfe85465ebb8"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/quickstart.md",
+      "line": 212,
+      "severity": "MEDIUM",
+      "finding": "The quickstart registry no longer declares a baseline, and line 48 of the same doc says a report for it marks the unrealized leg unavailable \u2014 yet sections 5 and Next still tell the reader that the metrics they just produced are enough to ground the unrealized leg, and the `shortfall impact --registry registry.yaml` example at lines 232-236 would print `unrealized n/a` for that file. Two statements of one doc disagree after this diff; lines 212 and 237 describe the pre-ADR-0020 registry.",
+      "evidence": "docs/quickstart.md:212 `That is enough for the deferred and unrealized legs and a realized upper bound`; :237 `Metrics alone ground the deferred and unrealized legs and a realized upper bound`; vs :48 `a report for this flow marks the unrealized leg unavailable and names the missing baseline (ADR-0020)`",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 1: Lines 212-213 and 237-238 are byte-identical to base (base lines 213 and 238), where the doc's own registry.yaml carried `baseline: { seasonality: hour_of_week, lookback_weeks: 1 }` and the sentences were true of that file. This range deletes the baseline from the fence at lines 32-41 and adds lines 47-49 ('a report for this flow marks the unrealized leg unavailable and names the missing baseline'), so the same document now says the unrealized leg is unavailable for this registry (48) and, two sections later, that the metrics just produced are 'enough for the ... unrealized leg' (212) and that 'metrics alone ground the ... unrealized leg' (237) directly under the `shortfall impact --registry registry.yaml` example (231-234). Running that command on the doc's registry yields an Unavailable unrealized leg (engine/unrealized.go:81-86, 190-192); the default `--format text` prints `UNREALIZED [estimate] none \u2026 none (mid none)` with the 'declares no baseline' note rather than the literal `unrealized n/a` (that is the Summary line), a wording detail that does not change the substance. Unlike the earlier docs-accuracy refutation ('nothing became old'), here the sentences did become stale in this range: they were consistent with the doc's registry at base and are not after this diff. Severity stands as filed. \u2014 fixed in 6348fde (round-1 repair).",
+      "id": "d31b178cc243118d"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/portability",
+      "file": "docs/portability/registry.md",
+      "line": 32,
+      "severity": "MEDIUM",
+      "finding": "The contract (and ADR-0020:29, registry/registry.go:325) says a present block, empty included, is validated in full and only an absent block is accepted \u2014 but a present key with a null value (`baseline:` with no body, `baseline: ~`, `baseline: null`) decodes to a nil pointer in the reference implementation and loads as absent (`shortfall validate` exits 0 for all three). The contract says nothing about the null form and no vector pins it, so a port whose YAML library yields an empty mapping for null rejects under `baseline_seasonality` what the reference accepts, breaking the section's own `MUST validate it identically`; it is also the shape a commented-out block body leaves behind, silently turning a typo into `no baseline`.",
+      "evidence": "docs/portability/registry.md:32 `a present block \u2014 empty included \u2014 is validated in full under the classes of 4.3`; fixture `    baseline:` (null) -> `ok \u2014 1 flow(s), 1 segment(s)`; registry/registry.go:332 `Baseline  *baselineDoc  `yaml:\"baseline,omitempty\"`` with no null check before `if fd.Baseline != nil`",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "REFUTED by the cross-examiner in round 1: The observation is accurate but the accuracy claim is not. Verified at HEAD with `go run ./cmd/shortfall validate`: `baseline:` (bare), `baseline: ~`, `baseline: null` and `reconcile:` all load (exit 0); `baseline: {}`, `recovery: {}` and `reconcile: { source: \"   \" }` are rejected. yaml.v3 decodes a null scalar into a pointer field by setting the pointer to nil (decoder.null: Interface/Ptr/Map/Slice get their zero value), so a null-valued key is indistinguishable from an omitted key at the doc level \u2014 the reference treats it as absent by construction, not by oversight. The contract sentence as written is not false for that form: 'a present block \u2014 empty included' names a mapping (`{}` is the empty one, and the ADR's own words are 'an empty block is a typo'); a null value is no mapping at all, so the sentence is silent on null rather than wrong about it. The failure scenario requires 'a port whose YAML library yields an empty mapping for null'; no mainstream decoder does (PyYAML -> None, js-yaml/SnakeYAML -> null, serde_yaml Option -> None, yaml.v3 pointer -> nil), and a port decoding into a value-typed struct cannot distinguish absent from present at all, so it cannot implement the contract's absent/present split in the first place \u2014 the divergent port is hypothetical. The identical unpinned pattern pre-exists in this same section for `estimator`, an omitempty pointer since base: at HEAD `estimator:` (null) loads and `estimator: {}` is rejected under estimator_default_minor, and the contract has never mentioned the null form for it. The commented-out-body case (`baseline:` followed only by `#` lines) does load as absent \u2014 verified \u2014 but whether YAML's own null idiom should count as 'present' is a design question ADR-0020 answered ('the way to declare no block is to omit it'; `{}` is the typo marker), not a false statement in the contract; pinning a `null_block` accept vector would be a non-blocking follow-up. Note that at base the null form WAS rejected (value-typed struct left zero-valued -> baseline_seasonality), so the range does newly admit it \u2014 the same way it newly admits omission, which is the decision.",
+      "id": "5b1a87ac2aca677f"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:contract-facts-ambiguity",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "testkit/vectors",
+      "file": "testkit/vectors/registry.json",
+      "line": 105,
+      "severity": "LOW",
+      "finding": "The regenerated `minimal` facts encode an absent block as a zero-valued sub-object (`seasonality: \"\"`, `lookback_weeks: 0`, `model: \"\"`, `source: \"\"`) \u2014 values the `baseline_lookback`/`recovery_model`/`reconcile_source_required` classes reject when declared \u2014 and no contract text says an absent block yields zero-valued facts rather than an omitted or null block. Before this diff every accepted vector carried all three, so the facts shape for absence is newly unspecified; a port serializing absence as null fails the checklist's `yields the committed facts` step without the contract saying who is wrong.",
+      "evidence": "testkit/vectors/registry.json:104-107 `\"baseline\": { \"seasonality\": \"\", \"lookback_weeks\": 0 }`; docs/portability/checklist.md:38 `every `accept` vector loads and yields the committed facts`; testkit/vectors.go:349-359 copies flow.Baseline/Recovery/Reconcile unconditionally",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "REFUTED by the cross-examiner in round 1: The committed vector is itself the contract's answer to 'who is wrong'. testkit/vectors.go (untouched in this range \u2014 not in the stat) defines the facts JSON schema as 'the observable output of validation', states that every expected value 'is produced by running the reference implementation', and documents in the `Equal` comment exactly how each field renders: non-omitempty fields (which BaselineFact/RecoveryFact/ReconcileFact are, as value-typed `json:\"baseline\"` etc.) render in full, while only the omitempty pointer `estimator` is dropped when absent, pinned by TestRegistryFactsEqualNilVersusEmpty. Equal compares over that JSON rendering, so the `minimal` vector's `\"baseline\": {\"seasonality\": \"\", \"lookback_weeks\": 0}` is a fully determined pin, and a port emitting `null` or omitting the key is wrong by the checklist's own step ('yields the committed facts') \u2014 that is the contract saying who is wrong, in its executable half. The zero-valued form is also unambiguous: no valid document can produce a present baseline with `seasonality: \"\"` or a present recovery with `model: \"\"` or a present reconcile with `source: \"\"` (each is rejected \u2014 verified by the empty-block fixtures and the reject vectors), so 'absent' is the only document that yields those facts and nothing collapses into it; the estimator comment's 'no estimator vs estimator of zero must not collapse' concern does not arise here. That the three blocks use value-typed facts while estimator uses a pointer is a pre-existing schema choice (FlowFact shape unchanged since base); changing it would be a VectorsVersion bump and is a design follow-up at most, not a defect of this range. The 'newly unspecified' claim fails: the shape was specified by the same code and comments before the diff, and the regenerated vector merely exercises it.",
+      "id": "7638c253252f08fb"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:ungrounded-leg-not-marked-unavailable",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized.go",
+      "line": 143,
+      "severity": "HIGH",
+      "finding": "A distinct path from the round-1 repair: `sized = true` is set as soon as HourOfWeek.Expected returns without error, but Expected returns N==0 zero-valued entries for every target hour that has no sample in its hour-of-week (engine/baseline TestExpectedIntervalAndEmptyBucket documents this). When lookback history exists but none of it falls in the incident's hour-of-week, every hour is `thin`, the loop writes `+= 0` into all three maps, and the leg returns {USD:0} with Unavailable=false \u2014 Summary() prints `unrealized [estimate] USD 0 \u2026 USD 0`, a measured zero for a leg no hour of which was grounded (contract 6.3, ADR-0017, and this diff's own decision text: 'the leg is marked Unavailable whenever no requested flow could be sized'). The accompanying note also misstates the case ('some incident hours \u2026 were excluded' when all were). Reproduced in the round's probe: one history point at Monday 11:00, incident Monday 10:00, lookback 1 \u2192 unavailable=false low=map[USD:0] mid=map[USD:0] high=map[USD:0]. No test in the diff covers the all-hours-thin shape; a named regression case belongs in TestUnrealizedAbsentBlocks.",
+      "evidence": "sized = true // a baseline was fitted for this currency \u2026 for i, e := range exp { if e.N == 0 { thin = true; continue } \u2026 } leg.LowMinor[currency] += int64(math.Round(low)) \u2014 with notes [\"\u2026 declares no recovery model \u2026\", \"some incident hours had no baseline history (retention gap) and were excluded \u2014 see the coverage/retention note\"] and Unavailable=false",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Reproduced at head with a probe under the round directory (memq, Metrics-only caps, lookback 1, one history point at Monday 11:00, incident hour Monday 10:00, estimator present): unavailable=false low=map[USD:0] mid=map[USD:0] high=map[USD:0], Summary() line `unrealized [estimate] USD 0\u20130`, plus the note `some incident hours had no baseline history ... were excluded` although every hour was. Mechanism verified against the full function: engine/baseline/baseline.go Expected returns N==0 zero-valued entries for a target hour whose hour-of-week bucket is empty (it never errors on that), so the `sized = true` at engine/unrealized.go:143 fires before the per-hour `e.N == 0 { thin = true; continue }` loop at 170-174, and lines 182-184 then write `+= 0` into all three maps for the currency; `!sized` at 201 is never reached. The shape is PRE-EXISTING at base: the same probe run against a `git archive` of 1a6da9d2 yields the identical output (the base loop has no `sized` at all). It is nonetheless this range's claim: the range's ADR-0020 Decision (`The leg is now marked Unavailable whenever no requested flow could be sized`), the 20:26 decision shard (same sentence, `which it was not before`) and the head commit's own subject (`sized only once a baseline is fitted`) assert the property, and the code comment at 143 (`a baseline was fitted for this currency`) is contradicted by this input \u2014 no target hour had a fitted baseline. Realistic trigger: a querier that leaves MetricHistoryWeeks undeclared (0 => no retention-gap check, line 91) but retains fewer days than the lookback, so the lookback query returns points that never land on the incident's hour-of-week. Contract 6.3 forbids exactly this rendering (`measured zero` vs `never measured`). The diff's TestUnrealizedAbsentBlocks covers no-baseline, len(hist)==0, no-recovery and declared-zero recovery \u2014 not the all-hours-thin shape. Severity as filed. \u2014 fixed in the round-2 repair commit.",
+      "id": "93e49611b2a18ad2"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:ungrounded-leg-not-marked-unavailable",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized.go",
+      "line": 150,
+      "severity": "MEDIUM",
+      "finding": "When a baseline is fitted but no AOV source exists for any currency (no value counter, no events, no applicable estimator), `sized` is already true and the `!ok` branch `continue`s before any map write, so the leg returns three empty maps with Unavailable=false; Summary() renders `unrealized [estimate] none` \u2014 a string a renderer has to sniff, which is exactly what contract 6.3 forbids and what ADR-0020 says the new marker exists to stop ('it returned empty maps a renderer could print as zero'). This matches the round-1 repair's narrow definition of sized (a baseline fitted) but not the decision's purpose; the charter names this path explicitly. Reproduced in the round's probe: no estimator, no value points \u2192 unavailable=false low=map[] mid=map[] high=map[].",
+      "evidence": "if !ok {\n\tnotes = append(notes, fmt.Sprintf(\"flow %q currency %s: no observed AOV and no applicable registry estimator \u2014 not valued\", \u2026))\n\tcontinue\n}  // reached after `sized = true`; the leg is later left with Unavailable=false and empty ranges",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Reproduced at head with the same probe (baseline fitted from a Monday 10:00 history point, no biz_value_total points, no events capability, no estimator): unavailable=false low=map[] mid=map[] high=map[], Summary() renders `unrealized [estimate] none` \u2014 the literal string ADR-0017's Context names as the defect the marker exists to remove, and the string a renderer would have to sniff, which contract 6.3 forbids. Path verified in full: aovMinor (engine/unrealized.go:271-315) returns ok=false when events are not served, the metric ratio has count==0 or value==0, and EstimateMoney fails (no estimator); the `!ok` branch at 150-157 `continue`s after `sized = true` (143) and before any map write, so the leg leaves the loop with three empty maps and `!sized` at 201 does not fire. The shape is PRE-EXISTING at base (identical probe output against the base archive) but the range's ADR-0020 Decision text claims it is gone: `marked Unavailable whenever no requested flow could be sized, which it was not before (it returned empty maps a renderer could print as zero)` \u2014 this is precisely a requested flow that returned empty maps. A total outage in the window (zero successes => no observed AOV) on a metrics-only backend without a registry estimator is the realistic trigger, and it is the incident where this leg matters most. No test in the diff exercises the `!ok` path. Severity as filed. \u2014 fixed in the round-2 repair commit.",
+      "id": "35b1806b1a4264ab"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/adapters.md",
+      "line": 31,
+      "severity": "MEDIUM",
+      "finding": "The leg matrix still describes the pre-ADR-0020 behaviour: the unrealized row's Needs column is 'Metrics' and line 37 says 'a metrics-only backend grounds deferred, unrealized and a realized upper bound', with no mention that the flow must also declare a `baseline` block \u2014 the same stale claim the round-1 repair removed from the quickstart, whose new text in this diff ('The unrealized leg needs metrics *and* a `baseline` block \u2026 Which backend grounds which leg is in backends & adapters') delegates to this table. The Coverage row already shows the precedent for naming a non-backend prerequisite ('plus a ledger'). Two statements of one standard now disagree.",
+      "evidence": "| **Unrealized loss** | Metrics | hour-of-week baseline from `biz_txn_total` history (needs `MetricHistoryWeeks` \u2265 the flow's lookback) |  \u2026  a **metrics-only** backend grounds deferred, unrealized and a realized upper bound",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Quoted at head (docs/adapters.md unchanged in this range, verified with git diff --stat): line 31 `| **Unrealized loss** | Metrics | hour-of-week baseline from biz_txn_total history (needs MetricHistoryWeeks \u2265 the flow's lookback) |` and line 37 `a **metrics-only** backend grounds deferred, unrealized and a realized upper bound`. After this diff these are false as stated, not merely incomplete: before the range every loaded registry carried a baseline (validator-enforced), so a metrics backend unconditionally grounded the leg; the range removes that precondition, and with the quickstart registry this diff ships (money + stages) a metrics-only backend leaves the leg Unavailable (engine/unrealized.go:81-86) \u2014 the row's `the flow's lookback` no longer necessarily exists. The range itself applied that standard to the identical wording in docs/quickstart.md: `Metrics alone ground the deferred and unrealized legs and a realized upper bound` became `Metrics alone ground the deferred leg and a realized upper bound. The unrealized leg needs metrics *and* a baseline block` and then points to adapters.md (`Which backend grounds which leg is in [backends & adapters]`), whose line 37 says the opposite enumeration. That is the docs-accuracy rule's own text twice over (`a behavior or contract change in this diff leaves a ... usage doc describing the OLD behavior`; `two statements of one standard disagree after this diff`), and the Coverage row (`plus a ledger`) shows the table already names non-backend prerequisites. Severity as filed. \u2014 fixed in the round-2 repair commit.",
+      "id": "37989f9353c1c2ff"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 226,
+      "severity": "MEDIUM",
+      "finding": "The README's CLI section still says metrics ground the unrealized leg unconditionally, while this diff's own README addition forty lines later says 'no baseline means no counterfactual estimate \u2026 each said in the report, never defaulted (ADR-0020)'. A reader of the first sentence with the quickstart's baseline-less registry gets an unavailable line; the sentence describes the old behaviour where the registry could not lack a baseline.",
+      "evidence": "Metrics ground the unrealized leg and, through the in-flight gauge, the\ndeferred leg; events ground realized de-duplication, customer impact, and\nthe deferred leg when no gauge was published.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Quoted at head, README.md:226-228: `Metrics ground the unrealized leg and, through the in-flight gauge, the deferred leg; events ground realized de-duplication, customer impact, and the deferred leg when no gauge was published.` False after this diff rather than merely incomplete, by the same test as candidate 3: the sentence was unconditionally true only because the validator forced a baseline into every registry, and this range removes that; the README's own Quickstart link now hands the reader a baseline-less registry.yaml, and the `shortfall impact --registry registry.yaml` invocation six lines above the sentence renders the unrealized line unavailable with that file. The range edited this README (the ADR-0020 design-rule bullet at 270-272, `no baseline means no counterfactual estimate`) and rewrote the identical claim in docs/quickstart.md to `The unrealized leg needs metrics *and* a baseline block`, leaving 226 as the old-behaviour statement of the same standard. Distinct sentence and file from candidate 3, so not a duplicate. Severity as filed. \u2014 fixed in the round-2 repair commit.",
+      "id": "4110855ceac2a15d"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:absent-block-sentinel-undocumented",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "registry",
+      "file": "registry/registry.go",
+      "line": 75,
+      "severity": "LOW",
+      "finding": "The public `Flow` type keeps Baseline, Recovery and Reconcile as value fields whose zero value now means 'block absent', and consumers must know which field is the sentinel \u2014 the engine sniffs `Baseline.LookbackWeeks < 1` and `Recovery.Model == \"\"`. Neither the `Flow` field list nor the `Baseline`/`Recovery`/`Reconcile` type comments say the zero value means absent (compare `Currencies`, whose empty meaning is documented in place, and `Estimator`, which is a nil pointer). Only the unexported flowDoc comment carries the rule; an adopter reading the exported API cannot tell an undeclared recovery from a declared model of \"\".",
+      "evidence": "\tEstimator  *Estimator\n\tBaseline   Baseline\n\tRecovery   Recovery\n\tReconcile  Reconcile   // no comment; vs. engine: `case flow.Recovery.Model == \"\": // Absent block, not a declared zero`",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Verified at head: registry/registry.go:63-80 exports Flow with `Baseline Baseline`, `Recovery Recovery`, `Reconcile Reconcile` and no comment, while `Currencies` (66-70) documents its empty meaning in place and `Estimator` is a nil-able pointer. The type comments at 117 (`Baseline configures the counterfactual expectation`), 124 (`Recovery configures the usage-loss curve`) and 131 (`Reconcile names the ledger source`) say nothing about a zero value; grep for ADR-0020/absent finds the rule only on the unexported flowDoc (323-325) and inside buildFlow (616-620), neither of which surfaces in `go doc`. This range is what gave the zero value a meaning: at base a loaded Flow could not carry a zero-valued block (all three validator-enforced), so the exported sentinel semantics \u2014 which the engine now relies on at engine/unrealized.go:81 (`LookbackWeeks < 1`) and :190 (`Recovery.Model == \"\"`), the second with its own comment `Absent block, not a declared zero` \u2014 are new exported behaviour with no exported doc. The scenario holds: a Flow consumer reading the API cannot learn that Recovery.Model==\"\" means undeclared (it happens to be unambiguous only because validateRecovery rejects an empty model, a fact stated nowhere on the type). One-line doc comments on the three types or the Flow fields fix it. Severity as filed (LOW). \u2014 fixed in the round-2 repair commit.",
+      "id": "20db431cf7209e3c"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:unvalued-currency-rendered-as-zero",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized.go",
+      "line": 185,
+      "severity": "MEDIUM",
+      "finding": "The round-2 fix stops the leg-level zero, but the per-currency residue remains: a currency whose every incident hour is thin (e.N == 0 for all target hours) never sets `sized` for itself, yet the three `+= int64(math.Round(low))` writes run unconditionally after the hour loop and create a 0 entry for it. In a leg that IS sized by another currency (or another flow) that entry survives the `!sized` clearing and renders as a measured zero \u2014 probe with USD history at the incident hour and EUR history only at another hour-of-week gave Unavailable=false, low=map[EUR:0 USD:300000], the exact 'never measured presented as measured zero' shape invariant 6.3 forbids; the only signal is the generic 'some incident hours had no baseline history' note, which does not name the currency.",
+      "evidence": "leg.LowMinor[currency] += int64(math.Round(low))\n\t\tleg.MidMinor[currency] += int64(math.Round(mid))\n\t\tleg.HighMinor[currency] += int64(math.Round(high))  \u2014 reached after `for i, e := range exp { if e.N == 0 { thin = true; continue } ... }` skipped every hour; comment at line 174 says a flow 'whose every incident hour is thin ... contributes nothing and must not turn empty ranges into a measured zero', but the write still lands.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 3: Reproduced at head with a throwaway probe (round-hdk5v1/probe/main.go, run from the repo root): one flow, USD history at the incident hour-of-week (100), EUR history only at another hour-of-week, USD observed 40 with AOV 5000 -> Unavailable=false, low=mid=high=map[EUR:0 USD:300000]. engine/unrealized.go:185-187 write `leg.LowMinor[currency] += int64(math.Round(low))` unconditionally after the hour loop, so a currency whose every target hour has e.N==0 (loop body skipped at :169-172, `sized` never set for it) still lands a 0 entry; the :205-208 clearing only fires when no currency of no flow was sized, so the entry survives. Rendering: report.money() (engine/report/render.go:29-47) prints every key, so text/markdown show `UNREALIZED [estimate] EUR 0, USD 300000 ... (mid EUR 0, USD 300000)` and Summary()'s moneyRange prints `EUR 0-0, USD 300000-300000`; the only signal is the un-named `some incident hours had no baseline history` note (:211). That is invariants.md 6.3's forbidden shape (never measured presented as a measured zero) at currency granularity. Provenance: the same probe against a git-archive of base 1a6da9d (probe-base/, with the then-required recovery/reconcile blocks) gives the identical maps, so the code path is PRE-EXISTING at base, not introduced here. It is nonetheless this range's claim: commit 8334da5 is titled 'sized only when an incident hour was valued', the new comment at :174-177 asserts a flow whose every incident hour is thin 'contributes nothing and must not turn empty ranges into a measured zero' (contradicted by the write three lines below in the multi-currency/multi-flow case -- the docs-accuracy misleading-comment shape), ADR-0020's Decision says the leg no longer returns 'empty maps a renderer could print as zero', and the range's own TestUnrealizedAbsentBlocks case 'baseline with history at another hour only: unavailable, not a zero' treats this exact single-currency shape as the bug being fixed. The fix stops at leg level; the per-currency residue remains. Severity stands as filed (MEDIUM, unmapped). \u2014 fixed in the round-3 repair commit, at the cap; scoped re-review in round 4.",
+      "id": "c800ed97320b67e1"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/adapters.md",
+      "line": 96,
+      "severity": "MEDIUM",
+      "finding": "After this diff lines 31 and 37-39 of the same file condition the unrealized leg on a registry `baseline` block, but the pairing paragraph still states unconditionally that promql grounds the unrealized leg (and names a 'baseline leg' that does not exist in the report). Two statements of one standard now disagree inside one doc, and the older one describes the pre-ADR-0020 behaviour that the prior review round flagged in the table above it.",
+      "evidence": "docs/adapters.md:96: \"`promql` grounds the unrealized and baseline legs \u2014 and the deferred leg from the gauge\" vs docs/adapters.md:31: \"| **Unrealized loss** | Metrics, **plus a `baseline` block in the registry** |\" and :37-39: \"a **metrics-only** backend grounds deferred, a realized upper bound and \u2014 for a flow whose registry declares a `baseline` \u2014 unrealized\".",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 3: docs/adapters.md at head: line 31 now reads `| **Unrealized loss** | Metrics, **plus a baseline block in the registry** | ... a flow with no baseline block reports the leg unavailable and names it (ADR-0020) |` and lines 37-39 `a metrics-only backend grounds deferred, a realized upper bound and -- for a flow whose registry declares a baseline -- unrealized`; line 96, in the same document, still reads `promql grounds the unrealized and baseline legs -- and the deferred leg from the gauge` with no registry condition. That is the identical 'X grounds the unrealized leg' sufficiency wording the round-LF2hdP cross-examiner confirmed against line 37 (and which this range then qualified at 31 and 37-39 but not at 96): with the quickstart registry this range ships (money + stages), a promql-only pairing leaves the leg Unavailable at engine/unrealized.go:81-86, so the unconditional form now describes the pre-ADR-0020 behaviour. The docs-accuracy rule (.warden/rules/docs-accuracy.md) names both shapes: a behavior change leaving a usage doc describing the OLD behavior, and two statements of one standard disagreeing after this diff -- here inside one file. Line 96 was last touched at base commit 1a6da9d (git log -L), so the sentence itself is pre-existing; what is new in this range is the contradiction with the qualified statements 60 lines above. The 'baseline leg' term (no such leg exists in engine.Report; baseline is an input to the unrealized leg) is likewise pre-existing and not this range's doing, but it sits in the sentence that needs rewording anyway. Severity stands as filed. \u2014 fixed in the round-3 repair commit, at the cap; scoped re-review in round 4.",
+      "id": "56322e34c8086183"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:stale-note-text",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/unrealized.go",
+      "line": 42,
+      "severity": "LOW",
+      "finding": "The nil-registry note the report carries to Finance still lists recovery as something the counterfactual leg needs; after ADR-0020 (and this diff's own line 193-198 path) a flow with no recovery block is sized gross, so the string names a requirement the leg no longer has.",
+      "evidence": "leg.Notes = []string{\"unavailable: the counterfactual leg needs a registry (baseline lookback, stages, recovery)\"}  \u2014 contrast docs/adr/0020-optional-registry-blocks.md: \"No recovery: the estimate is gross, and the note says so.\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 3: engine/unrealized.go:42 at head: `leg.Notes = []string{\"unavailable: the counterfactual leg needs a registry (baseline lookback, stages, recovery)\"}` -- unchanged by the diff (present verbatim at base). Its truth changed in this range: at base the registry validator required a recovery block on every flow, so recovery was in fact a precondition of the leg; head's registry.go:646 validates recovery only when present, ADR-0020 Decision says 'No recovery: the estimate is gross, and the note says so', and this range's own :190-199 path sizes the leg without one and emits the gross-demand note (TestUnrealizedAbsentBlocks 'no recovery: sized gross' passes at head). So the user-facing note now names a requirement the leg no longer has, while the sibling absent-baseline note at :81-86 was rewritten to ADR-0020 wording in the same range. Baseline lookback and stages remain genuine requirements; only 'recovery' is stale. A LOW wording drift, severity as filed (unmapped). \u2014 fixed in the round-3 repair commit, at the cap; scoped re-review in round 4.",
+      "id": "87b6d206d11e20e7"
+    },
+    {
+      "ts": "2026-09-08T21:29:17+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "29c57beb11a74d6f9ba2ab72b27ffcf87f3a1402",
+      "base_sha": "1a6da9d2548a541839d8b5495afeae5176286323",
+      "rule_id": "unmapped:contract-vector-gap",
+      "tags": [
+        "untested-surface"
+      ],
+      "dir_prefix": "testkit/cmd",
+      "file": "testkit/cmd/genvectors/main.go",
+      "line": 454,
+      "severity": "LOW",
+      "finding": "ADR-0020 says ports 'MUST still reject a present, empty block under the existing classes' and the portability doc says the empty `{}` mapping is validated in full, but the accept side gained two vectors (`minimal`, `null_blocks`) while no rejection vector carries `baseline: {}`, `recovery: {}` or `reconcile: {}`. The nearest, `reconcile_source_required`, mutates `source: \"\"` inside a non-empty mapping, so a port that treats an empty mapping as an absent block \u2014 the very confusion the ADR warns about \u2014 passes every vector; only registry_test.go (Go-only) pins it.",
+      "evidence": "{\"reconcile_source_required\", \"a present reconcile block must name its ledger; the way to declare none is to omit the block (ADR-0020)\", \"reconcile_source_required\", sub(`source: \"sql:ledger.payments\"`, `source: \"\"`)}  \u2014 vs ADR-0020 Consequences: \"Ports MUST accept the minimal document and MUST still reject a present, empty block under the existing classes.\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.3",
+      "reason": "CONFIRMED by the cross-examiner in round 3: Judged against both texts. (a) Class or instance: a present-empty block is NOT a new rejection class. Probe (round-hdk5v1/probe2/main.go) at head: `baseline: {}` -> 'baseline seasonality \"\" is not supported' (class baseline_seasonality), `recovery: {}` -> 'recovery model \"\" is not supported' (recovery_model), `reconcile: {}` -> 'reconcile block names no source' (reconcile_source_required); ADR-0020 says exactly this ('under the existing classes'). So 4.3's letter -- 'every class has at least one vector ... differing from the reference document by exactly one edit' -- is satisfied; the candidate does not show a class without a vector. (b) The gap is nonetheless real and new in this range: testkit/vectors/registry.json at head contains no `{}` for any of the three blocks (grep finds only the pre-existing `flows: {}` in no_flows); every baseline_*/recovery_*/reconcile_* vector mutates a field inside a non-empty mapping, so a port that collapses an empty mapping to an absent block -- the empty-vs-absent distinction this range creates; at base both were rejected, so no port could confuse them -- passes all 79 vectors and the checklist.md 38-40 conformance steps while violating ADR-0020's new Consequences MUST ('MUST still reject a present, empty block') and the new 4.1 sentence ('A present mapping -- the empty {} included -- is validated in full'). Only registry_test.go TestOptionalFlowBlocks (Go-only, added in this range) pins it. The repo's own convention pins such shapes under an existing class: recovery_fraction_nan is a second vector for class recovery_fraction, and 4.3 says 'The recovery_fraction_nan vector pins this'; a `baseline: {}` (or `reconcile: {}`) vector is a one-edit mutation of the reference and fits that pattern. The accept half of the same ADR sentence got minimal and null_blocks; the reject half got nothing. Confirmed as the LOW gap filed, with the clarification that the remedy is an additional vector under an existing class, not a new class in the 4.3 table. \u2014 fixed in the round-3 repair commit, at the cap; scoped re-review in round 4.",
+      "id": "85fd80d430138980"
+    }
+  ]
+}

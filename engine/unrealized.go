@@ -39,7 +39,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 		Evidence:  EvidenceEstimate,
 	}
 	if reg == nil {
-		leg.Notes = []string{"unavailable: the counterfactual leg needs a registry (baseline lookback, stages, recovery)"}
+		leg.Notes = []string{"unavailable: the counterfactual leg needs a registry (the flow's stages and baseline lookback)"}
 		leg.Unavailable = true
 		return leg, nil
 	}
@@ -68,6 +68,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 
 	var notes []string
 	thin := false
+	sized := false // at least one requested flow reached the estimate
 	for _, flowName := range flows {
 		flow, ok := reg.Flow(flowName)
 		if !ok || len(flow.Stages) == 0 {
@@ -75,8 +76,12 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			continue
 		}
 
+		// An absent baseline block leaves LookbackWeeks at zero (ADR-0020); a
+		// present one cannot, the validator requires >= 1.
 		if flow.Baseline.LookbackWeeks < 1 {
-			notes = append(notes, fmt.Sprintf("flow %q has no baseline lookback — skipped", flowName))
+			notes = append(notes, fmt.Sprintf(
+				"flow %q declares no baseline — the counterfactual leg cannot be sized without one; add a baseline block to the registry (ADR-0020)",
+				flowName))
 			continue
 		}
 
@@ -115,6 +120,16 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			return EstLeg{}, fmt.Errorf("engine: unrealized observed query: %w", err)
 		}
 
+		// No entry-stage history in the lookback means nothing to fit a
+		// baseline against: the flow is not sized, and the leg says so
+		// rather than returning empty ranges that render as zero.
+		if len(hist) == 0 {
+			notes = append(notes, fmt.Sprintf(
+				"flow %q: no entry-stage history in the %d-week lookback — nothing to fit a baseline against; not sized",
+				flowName, flow.Baseline.LookbackWeeks))
+			continue
+		}
+
 		for currency, histSamples := range hist {
 			exp, err := (baseline.HourOfWeek{}).Expected(
 				histSamples,
@@ -150,16 +165,29 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			recovery := clampFraction(flow.Recovery.RecoveredFraction)
 			observedAt := hourMap(obs[currency])
 			var low, mid, high float64
+			valued := false
 			for i, e := range exp {
 				if e.N == 0 {
 					thin = true
 					continue // no history for this hour-of-week; the gap is noted below
 				}
 
+				// An hour with history and a valued AOV is an estimate; only
+				// then is this currency valued and the leg sized. A currency
+				// whose every incident hour is thin gets no entry at all — an
+				// entry of zero would render as a measured zero beside the
+				// currencies that were sized.
+				valued, sized = true, true
 				o := observedAt[hourKey(target[i])]
 				low += shortfallValue(e.Lower, o, aov, recovery)
 				mid += shortfallValue(e.Expected, o, aov, recovery)
 				high += shortfallValue(e.Upper, o, aov, recovery)
+			}
+
+			if !valued {
+				notes = append(notes, fmt.Sprintf(
+					"flow %q currency %s: no baseline history for any incident hour — not valued", flowName, currency))
+				continue
 			}
 
 			leg.LowMinor[currency] += int64(math.Round(low))
@@ -167,9 +195,24 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			leg.HighMinor[currency] += int64(math.Round(high))
 		}
 
-		if r := clampFraction(flow.Recovery.RecoveredFraction); r > 0 {
+		switch r := clampFraction(flow.Recovery.RecoveredFraction); {
+		case r > 0:
 			notes = append(notes, fmt.Sprintf("flow %q: net of an assumed %.0f%% recovery of suppressed demand", flowName, r*100))
+		case flow.Recovery.Model == "":
+			// Absent block, not a declared zero: say that nothing was credited
+			// back, so the gross figure is never mistaken for a netted one.
+			notes = append(notes, fmt.Sprintf(
+				"flow %q declares no recovery model — nothing is credited back; this is gross suppressed demand (ADR-0020)",
+				flowName))
 		}
+	}
+
+	// No requested flow valued a single incident hour: the leg is
+	// ungrounded, and the notes say why per flow. Empty or zero ranges must
+	// not read as a measured zero, so the maps are cleared with the marker.
+	if !sized {
+		leg.Unavailable = true
+		leg.LowMinor, leg.MidMinor, leg.HighMinor = map[string]int64{}, map[string]int64{}, map[string]int64{}
 	}
 
 	if thin {
