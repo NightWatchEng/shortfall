@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "14b989e1286e8f7dabf6596323b035797fab0b64",
+  "base_sha": "351737c4fce1904f2c05babad4eae07ba6529007",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-08T21:53:18+00:00",
+  "range_patch_ids": [
+    "9f5e0d959f20f27324fd8eb321a4bf1a1b46ecca"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 combined reviewer + cross-examiner pass for a trivial diff (twenty version pins, no code), round 1 on head 14b989e; verified the pin set, the seventeen-module scope, the go.sum non-change, modgraph, CONTRIBUTING agreement; raw output round-QFFwNx/reviewers/code-reviewer.json (0 findings)"
+    }
+  ],
+  "records": []
+}
