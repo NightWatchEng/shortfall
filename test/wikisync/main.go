@@ -182,6 +182,7 @@ var sections = []section{
 		{"quickstart", "Quickstart"},
 		{"integration", "Integration guide"},
 		{"example-webhooks", "Worked example: webhook Lambdas"},
+		{"emit-any-language", "Emit from any language"},
 	}},
 	{"Reference", []navEntry{
 		{"adapters", "Backends & adapters"},

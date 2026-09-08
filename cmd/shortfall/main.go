@@ -3,8 +3,8 @@
 
 // Command shortfall is the CLI: validate a flow registry, compute an
 // impact report for an incident window, reconcile telemetry against a
-// ledger. The arg surface stays hand-rolled
-// until the verb set outgrows it.
+// ledger, check a file of outcome events against the wire contract. The
+// arg surface stays hand-rolled until the verb set outgrows it.
 package main
 
 import (
@@ -54,6 +54,8 @@ func run(args []string) int {
 		return runImpact(args[1:], os.Stdout, os.Stderr)
 	case "reconcile":
 		return runReconcile(args[1:], os.Stdout, os.Stderr)
+	case "check-events":
+		return runCheckEvents(args[1:], os.Stdout, os.Stderr)
 	default:
 		usage()
 		return 2
@@ -73,6 +75,10 @@ usage:
   shortfall reconcile --registry r.yaml --from <RFC3339> --to <RFC3339> --ledger rows.json [--flow f]...
                    [--prometheus URL] [--sql DSN] [--source label] [--format %[1]s]
                                        publish the coverage ratio (telemetry vs a ledger)
+  shortfall check-events <events.jsonl>
+                                       hold a file of outcome events (one JSON object per
+                                       line) to the wire contract — for events another
+                                       language wrote; see docs/emit-any-language.md
   shortfall version                    print build provenance
 `, formatUsage())
 }

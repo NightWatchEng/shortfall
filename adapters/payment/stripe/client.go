@@ -42,7 +42,13 @@ type Backend struct {
 	onCall         func(ProviderCall)
 	onAuth         func(biz.Outcome)
 	now            func() time.Time
+	authStage      string // the stage name synchronous auth outcomes carry; authStage unless remapped
 }
+
+// authStage is the default stage name of the synchronous auth-failure
+// outcomes this backend emits — the same "auth" the webhook path uses for
+// payment_intent.requires_action.
+const authStage = "auth"
 
 // BackendOption configures WrapBackend.
 type BackendOption func(*Backend)
@@ -66,6 +72,21 @@ func WithAuthOutcome(f func(biz.Outcome)) BackendOption {
 	return func(b *Backend) { b.onAuth = f }
 }
 
+// WithBackendStageMap applies the same renaming WithStageMap gives the
+// webhook path to the synchronous auth outcomes this backend emits. Pass the
+// one map to both, so a remapped "auth" is one stage in the registry rather
+// than one registered name and one "unregistered" fallback. It takes the
+// full map and validates it the same way; only the "auth" entry applies here.
+func WithBackendStageMap(stages map[string]string) BackendOption {
+	validateStageMap(stages)
+
+	return func(b *Backend) {
+		if to, ok := stages[authStage]; ok {
+			b.authStage = to
+		}
+	}
+}
+
 func withClock(now func() time.Time) BackendOption {
 	return func(b *Backend) { b.now = now }
 }
@@ -73,7 +94,7 @@ func withClock(now func() time.Time) BackendOption {
 // WrapBackend wraps inner. Set it as Stripe's backend
 // (stripe.SetBackend(stripe.APIBackend, wrapped)) so every API call is observed.
 func WrapBackend(inner stripe.Backend, opts ...BackendOption) *Backend {
-	b := &Backend{Backend: inner, now: time.Now}
+	b := &Backend{Backend: inner, now: time.Now, authStage: authStage}
 	for _, o := range opts {
 		o(b)
 	}
@@ -98,7 +119,7 @@ func (b *Backend) Call(method, path, key string, params stripe.ParamsContainer, 
 	if b.onAuth != nil && outcome == "failed" && isAuthOp(op) {
 		if vc, ok := authVC(params); ok {
 			b.onAuth(biz.Outcome{
-				At: start, Stage: "auth", Result: biz.ResultFailed,
+				At: start, Stage: b.authStage, Result: biz.ResultFailed,
 				Source: ClientSource, Err: truncErr(err), VC: vc,
 			})
 		}
