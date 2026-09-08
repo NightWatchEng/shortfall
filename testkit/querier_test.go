@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NightWatchEng/shortfall/biz"
+	"github.com/NightWatchEng/shortfall/emit"
 	"github.com/NightWatchEng/shortfall/examples/checkout"
 	"github.com/NightWatchEng/shortfall/query"
 	"github.com/NightWatchEng/shortfall/query/memq"
@@ -241,6 +242,58 @@ func TestInFlightGaugeSnapshotVisibleWithinWindow(t *testing.T) {
 
 			if seen := len(series) > 0; seen != c.wantSeen {
 				t.Fatalf("gauge series seen = %v (%d series), want %v", seen, len(series), c.wantSeen)
+			}
+		})
+	}
+}
+
+// TestInFlightReplayZeroesADrainedCombo pins that MetricsFromResult's two
+// gauge samples come from ONE tracker: a queue that drains between the
+// samples is published as an explicit zero at the later one — the tracker's
+// retire pass — so a last-level read over both samples sees 0, not the
+// earlier level carried forward as stale.
+func TestInFlightReplayZeroesADrainedCombo(t *testing.T) {
+	end := time.Date(2026, 8, 24, 1, 0, 0, 0, time.UTC)
+	res := checkout.Result{
+		Config: checkout.Config{End: end},
+		Ledger: checkout.Ledger{Txns: []checkout.Txn{{
+			ID: "t1", CustomerID: "h:c1", Segment: checkout.SegmentSMB, AmountMinor: 1000, Currency: "USD",
+			CreatedAt: end.Add(-40 * time.Minute), AuthedAt: end.Add(-40 * time.Minute),
+			CapturedAt: end.Add(-5 * time.Second), // leaves the capture queue between the two samples
+			State:      checkout.StateCaptured,
+		}}},
+	}
+
+	level := func(points []emit.MetricPoint, stage string, at time.Time) (int64, bool) {
+		var sum int64
+		seen := false
+		for _, p := range points {
+			if p.Name == "biz_inflight_value" && p.Labels["stage"] == stage && p.At.Equal(at) {
+				sum += p.Value
+				seen = true
+			}
+		}
+
+		return sum, seen
+	}
+	points := MetricsFromResult(res)
+	cases := []struct {
+		name     string
+		stage    string
+		at       time.Time
+		wantSeen bool
+		wantSum  int64
+	}{
+		{"capture holds the value at the earlier sample", "capture", end.Add(-TrackerCadence), true, 1000},
+		{"capture is published as an explicit zero once drained", "capture", end, true, 0},
+		{"settle is absent before the transaction reached it", "settle", end.Add(-TrackerCadence), false, 0},
+		{"settle holds the value at the later sample", "settle", end, true, 1000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sum, seen := level(points, c.stage, c.at)
+			if seen != c.wantSeen || sum != c.wantSum {
+				t.Fatalf("stage %s at %s: seen=%v sum=%d, want seen=%v sum=%d", c.stage, c.at.Format(time.TimeOnly), seen, sum, c.wantSeen, c.wantSum)
 			}
 		})
 	}

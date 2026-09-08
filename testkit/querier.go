@@ -6,6 +6,7 @@ package testkit
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/NightWatchEng/shortfall/biz"
@@ -118,8 +119,9 @@ const TrackerCadence = 15 * time.Second
 // has. The golden harness feeds these to both memq and a real Prometheus,
 // which must return identical Series.
 func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
-	metrics := MetricsFromResultAt(res, res.Config.End)
-	return append(metrics, InFlightPointsAt(res, res.Config.End.Add(-TrackerCadence))...)
+	end := res.Config.End
+	metrics := metricsFromResultWithoutGauge(res)
+	return append(metrics, inFlightPointsAtInstants(res, end.Add(-TrackerCadence), end)...)
 }
 
 // MetricsFromResultAt is MetricsFromResult with a caller-chosen instant for the
@@ -150,6 +152,12 @@ func MetricsFromResult(res checkout.Result) []emit.MetricPoint {
 // sides (memq drops At >= To; the promql adapter reads last_over_time at
 // To-1ms), which would make a gauge parity assertion vacuous (empty == empty).
 func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPoint {
+	return append(metricsFromResultWithoutGauge(res), InFlightPointsAt(res, gaugeAt)...)
+}
+
+// metricsFromResultWithoutGauge is the counter half of MetricsFromResultAt:
+// every biz_txn_total and biz_value_total point, no in-flight gauge.
+func metricsFromResultWithoutGauge(res checkout.Result) []emit.MetricPoint {
 	var metrics []emit.MetricPoint
 	for _, txn := range res.Ledger.Txns {
 		for _, entry := range queueEntries(txn) {
@@ -199,9 +207,6 @@ func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPo
 		})
 	}
 
-	// In-flight (deferred) value snapshot — the level the deferred leg reads.
-	// Appended as biz_inflight_value gauge points stamped at gaugeAt.
-	metrics = append(metrics, InFlightPointsAt(res, gaugeAt)...)
 	return metrics
 }
 
@@ -219,35 +224,88 @@ func MetricsFromResultAt(res checkout.Result, gaugeAt time.Time) []emit.MetricPo
 // A replay failure panics: the harness registry and emitter are constants,
 // so a failure here is a bug in this file, not a scenario.
 func InFlightPointsAt(res checkout.Result, at time.Time) []emit.MetricPoint {
+	return inFlightPointsAtInstants(res, at)
+}
+
+// queueEvent is one Track or Done the replay feeds the tracker.
+type queueEvent struct {
+	at    time.Time
+	order int // Done before Track at one instant: a queue is left before the next is entered
+	apply func(*emit.InFlightTracker)
+}
+
+// inFlightPointsAtInstants replays the ledger through ONE tracker and
+// publishes at each instant in ascending order, so a combo that drains
+// between two instants is zeroed by the tracker's own retire pass at the
+// later one — the sample a live tracker would have published — rather than
+// silently absent, which a last-level read would carry forward as stale.
+func inFlightPointsAtInstants(res checkout.Result, instants ...time.Time) []emit.MetricPoint {
 	reg, err := registry.Parse([]byte(harnessRegistry))
 	if err != nil {
 		panic(fmt.Sprintf("testkit: harness registry: %v", err))
 	}
 
+	now := instants[0]
+	clock := func() time.Time { return now }
 	exp := &capturingExporter{}
-	em, err := emit.New(&reg, exp, emit.WithFlushInterval(0), emit.WithClock(func() time.Time { return at }))
+	em, err := emit.New(&reg, exp, emit.WithFlushInterval(0), emit.WithClock(clock))
 	if err != nil {
 		panic(fmt.Sprintf("testkit: harness emitter: %v", err))
 	}
 
-	tr := emit.NewInFlightTracker(em, emit.WithTrackerClock(func() time.Time { return at }))
+	tr := emit.NewInFlightTracker(em, emit.WithTrackerClock(clock))
+
+	var timeline []queueEvent
 	for _, txn := range res.Ledger.Txns {
+		txn := txn
 		money := biz.Money{Amount: txn.AmountMinor, Currency: txn.Currency, Exponent: 2}
-		if !txn.AuthedAt.IsZero() && !txn.AuthedAt.After(at) {
-			tr.Track("invoice.pay", "capture", txn.ID, money, txn.AuthedAt)
+		if !txn.AuthedAt.IsZero() {
+			timeline = append(timeline, queueEvent{txn.AuthedAt, 1, func(t *emit.InFlightTracker) {
+				t.Track("invoice.pay", "capture", txn.ID, money, txn.AuthedAt)
+			}})
 		}
 
-		if !txn.CapturedAt.IsZero() && !txn.CapturedAt.After(at) {
-			tr.Done("invoice.pay", "capture", txn.ID)
-			tr.Track("invoice.pay", "settle", txn.ID, money, txn.CapturedAt)
+		if !txn.CapturedAt.IsZero() {
+			timeline = append(timeline, queueEvent{txn.CapturedAt, 0, func(t *emit.InFlightTracker) {
+				t.Done("invoice.pay", "capture", txn.ID)
+			}})
+			timeline = append(timeline, queueEvent{txn.CapturedAt, 1, func(t *emit.InFlightTracker) {
+				t.Track("invoice.pay", "settle", txn.ID, money, txn.CapturedAt)
+			}})
 		}
 
-		if !txn.SettledAt.IsZero() && !txn.SettledAt.After(at) {
-			tr.Done("invoice.pay", "settle", txn.ID)
+		if !txn.SettledAt.IsZero() {
+			timeline = append(timeline, queueEvent{txn.SettledAt, 0, func(t *emit.InFlightTracker) {
+				t.Done("invoice.pay", "settle", txn.ID)
+			}})
 		}
 	}
 
-	tr.Publish()
+	sort.SliceStable(timeline, func(i, j int) bool {
+		if !timeline[i].at.Equal(timeline[j].at) {
+			return timeline[i].at.Before(timeline[j].at)
+		}
+
+		return timeline[i].order < timeline[j].order
+	})
+
+	sorted := append([]time.Time(nil), instants...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Before(sorted[j]) })
+
+	next := 0
+	for _, at := range sorted {
+		for next < len(timeline) && !timeline[next].at.After(at) {
+			timeline[next].apply(tr)
+			next++
+		}
+
+		now = at
+		tr.Publish()
+		if err := em.Flush(context.Background()); err != nil {
+			panic(fmt.Sprintf("testkit: harness emitter flush: %v", err))
+		}
+	}
+
 	if err := em.Close(context.Background()); err != nil {
 		panic(fmt.Sprintf("testkit: harness emitter close: %v", err))
 	}

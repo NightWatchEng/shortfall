@@ -35,13 +35,15 @@ var ageBucketOrder = []string{"lt1m", "1m-5m", "5m-30m", "30m-2h", "gt2h"}
 // a level of zero included, because a tracker that observed Done knows about
 // completions the event stream may show only outside the window. When no
 // gauge series exists and the backend serves events, the leg is derived from
-// outcome events instead: an entity with a `deferred` outcome and, within
-// the lookback, no terminal outcome and no further deferral at the same or a
-// later stage of the flow is in flight, valued at its largest single deferred
-// amount (ADR-0009), aged from its first deferred event. Ordering in time is
-// not known to this path — only stage order is — and the caveat says so. A
-// backend serving neither signal cannot ground the leg and Deferred returns
-// an error.
+// outcome events instead: an entity with a `deferred` outcome is in flight
+// at that stage unless, within the lookback, it has a terminal outcome at
+// the same or a later stage of the flow, or a further deferral at a strictly
+// later stage (a re-deferral at the same stage is the same item, counted
+// once at the larger amount). It is valued at its largest single deferred
+// amount (ADR-0009) and aged from its first deferred event. Ordering in time
+// is not known to this path — only stage order is — and the caveat says so.
+// A backend serving neither signal cannot ground the leg and Deferred
+// returns an error.
 //
 // ByAgeBucket and ByCurrency are exact reads on the gauge path and exact
 // per-entity sums on the events path. ProjectedLostMinor is a conservative
@@ -178,11 +180,15 @@ var ageCutoffs = []struct {
 // than the window is still backlog.
 const minEventsLookback = 2 * time.Hour
 
-// deferredFromEvents derives the leg from outcome events (ADR-0019).
+// deferredFromEvents derives the leg from outcome events (ADR-0019). Each
+// flow's queries start at that flow's own lookback, so a flow's leg never
+// depends on which other flows share the request.
 func deferredFromEvents(ctx context.Context, reg *registry.Registry, q query.Querier, req Request) (DeferredLeg, error) {
 	leg := newDeferredLeg()
 	leg.Caveats = []string{eventsDerivedCaveat}
-	start := req.Window.From.Add(-eventsLookback(reg, req))
+	startFor := func(filters map[string]string) time.Time {
+		return req.Window.From.Add(-eventsLookback(reg, filters["flow"]))
+	}
 
 	type entityStage struct{ flow, stage, currency, entity string }
 	type inflightItem struct {
@@ -191,12 +197,12 @@ func deferredFromEvents(ctx context.Context, reg *registry.Registry, q query.Que
 	}
 	inflight := map[entityStage]inflightItem{}
 	for _, cut := range ageCutoffs {
-		rng := query.TimeRange{From: start, To: cutEnd(req.Window.To, cut.before)}
-		if !rng.To.After(rng.From) {
-			continue
-		}
-
 		for _, filters := range flowFilters(req, "deferred") {
+			rng := query.TimeRange{From: startFor(filters), To: cutEnd(req.Window.To, cut.before)}
+			if !rng.To.After(rng.From) {
+				continue
+			}
+
 			groups, err := q.QueryEvents(ctx, query.EventQuery{
 				Range: rng, Filters: filters,
 				GroupBy: []string{"flow", "stage", "currency", "entity"},
@@ -242,7 +248,7 @@ func deferredFromEvents(ctx context.Context, reg *registry.Registry, q query.Que
 	for _, outcome := range terminalOutcomes {
 		for _, filters := range flowFilters(req, outcome) {
 			groups, err := q.QueryEvents(ctx, query.EventQuery{
-				Range: query.TimeRange{From: start, To: req.Window.To}, Filters: filters,
+				Range: query.TimeRange{From: startFor(filters), To: req.Window.To}, Filters: filters,
 				GroupBy: []string{"flow", "stage", "currency", "entity"},
 			})
 			if err != nil {
@@ -371,17 +377,19 @@ func stageIndex(reg *registry.Registry, flow, stage string) int {
 }
 
 // eventsLookback is how far before the window start the events path looks
-// for still-open deferrals: at least minEventsLookback, and at least the
-// longest SLA deadline of the flows in scope, so a backlog that has been
-// breaching for a day is still seen.
-func eventsLookback(reg *registry.Registry, req Request) time.Duration {
+// for a flow's still-open deferrals: at least minEventsLookback, and at
+// least that flow's longest SLA deadline, so a backlog that has been
+// breaching for a day is still seen. An empty flow name is a request naming
+// no flow — one query over every flow — and takes the registry's longest
+// deadline, since one range must serve them all.
+func eventsLookback(reg *registry.Registry, flow string) time.Duration {
 	lookback := minEventsLookback
 	if reg == nil {
 		return lookback
 	}
 
-	flows := req.Flows
-	if len(flows) == 0 {
+	flows := []string{flow}
+	if flow == "" {
 		flows = reg.FlowNames()
 	}
 

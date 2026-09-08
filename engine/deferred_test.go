@@ -456,6 +456,24 @@ func TestDeferredFromEventsResolution(t *testing.T) {
 			wantCount: 1, wantUSD: 100, wantBucket: "5m-30m",
 		},
 		{
+			// A stage the registry does not order (a "dispute" the flow never
+			// declared) resolves only on its own terminal: capture is not
+			// "later" than it, because neither position is known.
+			name: "an unordered stage is not resolved by an ordered one",
+			events: []biz.Outcome{
+				deferredEvent("e", "dispute", biz.ResultDeferred, 320, to.Add(-12*time.Minute)),
+				deferredEvent("e", "capture", biz.ResultFailed, 320, to.Add(-6*time.Minute)),
+			},
+			wantCount: 1, wantUSD: 320, wantBucket: "5m-30m",
+		},
+		{
+			name: "an unordered stage is resolved by its own terminal",
+			events: []biz.Outcome{
+				deferredEvent("e", "dispute", biz.ResultDeferred, 320, to.Add(-12*time.Minute)),
+				deferredEvent("e", "dispute", biz.ResultSuccess, 320, to.Add(-6*time.Minute)),
+			},
+		},
+		{
 			name:      "exactly two hours old is gt2h",
 			events:    []biz.Outcome{deferredEvent("e", "capture", biz.ResultDeferred, 100, to.Add(-2*time.Hour))},
 			wantCount: 1, wantUSD: 100, wantBucket: "gt2h", wantBreaches: 1, wantProjected: 100,
@@ -676,5 +694,65 @@ flows:
 
 	if leg.ProjectedLostMinor["USD"] != 5000 || leg.SLABreaches != 1 || leg.OldestAgeMinutes != 30 {
 		t.Fatalf("projected lost %v breaches %d oldest %d, want USD 5000 / 1 / 30", leg.ProjectedLostMinor, leg.SLABreaches, leg.OldestAgeMinutes)
+	}
+}
+
+// TestDeferredFromEventsLookbackIsPerFlow pins that a flow's lookback is its
+// own longest SLA, never a co-requested flow's: a.flow (PT30M) keeps the
+// two-hour floor whether or not b.flow (P1D) shares the request, so a
+// three-hour-old a.flow deferral is unseen either way.
+func TestDeferredFromEventsLookbackIsPerFlow(t *testing.T) {
+	reg, err := registry.Parse([]byte(`
+version: 1
+segments: [smb]
+flows:
+  a.flow:
+    money: { kind: fee }
+    stages: [{ name: pay, signals: ["http:POST /a"] }]
+    sla: { pay: { deadline: PT30M, on_breach: lost } }
+    baseline:  { seasonality: hour_of_week, lookback_weeks: 1 }
+    recovery:  { model: usage_loss_curve, recovered_fraction: 0 }
+    reconcile: { source: "sql:a" }
+  b.flow:
+    money: { kind: fee }
+    stages: [{ name: pay, signals: ["http:POST /b"] }]
+    sla: { pay: { deadline: P1D, on_breach: at_risk } }
+    baseline:  { seasonality: hour_of_week, lookback_weeks: 1 }
+    recovery:  { model: usage_loss_curve, recovered_fraction: 0 }
+    reconcile: { source: "sql:b" }
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	old := eventsWindow.From.Add(-3 * time.Hour)
+	ev := func(flow string) biz.Outcome {
+		return biz.Outcome{At: old, Stage: "pay", Result: biz.ResultDeferred, Source: "test", VC: biz.ValueContext{
+			Flow: flow, EntityID: "e-" + flow, CustomerID: "h:c1",
+			Money: biz.Money{Amount: 1000, Currency: "USD", Exponent: 2}, Kind: biz.KindFee,
+		}}
+	}
+	q := memq.New(memq.WithEvents([]biz.Outcome{ev("a.flow"), ev("b.flow")}), memq.WithCaps(query.Caps{Events: true}))
+	cases := []struct {
+		name    string
+		flows   []string
+		wantUSD int64
+	}{
+		{"a.flow alone: unseen past its two-hour lookback", []string{"a.flow"}, 0},
+		{"a.flow with b.flow: still unseen; b.flow's day-long lookback is its own", []string{"a.flow", "b.flow"}, 1000},
+		{"b.flow alone: seen within its day-long lookback", []string{"b.flow"}, 1000},
+		{"no flow named: one query at the registry's longest lookback sees both", nil, 2000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			leg, err := Deferred(context.Background(), &reg, q, Request{Window: eventsWindow, Flows: c.flows})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if leg.ByCurrency["USD"] != c.wantUSD {
+				t.Fatalf("USD = %d, want %d", leg.ByCurrency["USD"], c.wantUSD)
+			}
+		})
 	}
 }
