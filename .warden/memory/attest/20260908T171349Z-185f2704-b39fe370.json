@@ -1,0 +1,472 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+  "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-08T17:13:49+00:00",
+  "range_patch_ids": [
+    "02fc66faef7c6239b3b481704d838709ace0862d",
+    "30b93258db0bc108d5267a135a5b506a369f411a",
+    "6270ef443c53025dc99b8101e4fcc837a08130cd",
+    "7021c9f019b4c14707f2852aae72eabbbbd26346",
+    "94e765aa673d43b4a4a2d8d25dfd36ed1884dd09",
+    "9802fab9d6a8d99539480bd860fe7ff69e14bed7",
+    "b8b12b5723e381b7cd78f482bdac262abf30c76a"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 1 of 3 on head 9e30145; raw output round-hoMFvZ/reviewers/code-reviewer.json (8 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 1 of 3 on head 9e30145; raw output round-hoMFvZ/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 2 of 3 on head 0c873dc; raw output round-qKtnxm/reviewers/code-reviewer.json (5 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 2 of 3 on head 0c873dc; raw output round-qKtnxm/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 pre-pr-review reviewer pass, round 3 of 3 on head cde01a9; raw output round-USsHlB/reviewers/code-reviewer.json (4 findings)"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (separate context, received only candidates.json + the review package) \u2014 pre-pr-review examiner pass, round 3 of 3 on head cde01a9; raw output round-USsHlB/reviewers/cross-examiner.json"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 round 4, scoped to the round-3 repair commit 133d96f only (cde01a9..133d96f); all four repairs verdicted addressed; raised two findings on the repair itself; raw output round-Ftx0et/reviewers/scoped-re-reviewer.json"
+    },
+    {
+      "role": "scoped-re-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 round 5, scoped to the tie-break fix 185f270 only (133d96f..185f270); both repairs verdicted addressed, no new findings; raw output round-ZbCDJN/reviewers/scoped-re-reviewer.json"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/example-webhooks.md",
+      "line": 167,
+      "severity": "MEDIUM",
+      "finding": "The worked example claims the events-derived deferred leg projects the ingest backlog to loss past PT30M, but the example's own registry (line 32) declares the SLA on `process` only, and the events path evaluates breach/projected-lost at the stage the `deferred` outcome was recorded (`ingest`, engine/deferred.go:280-286 via breached()/breachedAndLost() looking up f.SLA[stage]). Run against the doc's registry, a 50-minute-old ingest deferral yields ByCurrency USD 5000, ProjectedLostMinor empty, SLABreaches 0; the engine test TestDeferredFromEventsSeesAPaymentsServiceOutage only passes because it moved the SLA to `ingest` (engine/deferred_test.go:594), a registry the doc does not have. Line 227 repeats the claim ('projected loss against the SLA').",
+      "evidence": "docs/example-webhooks.md:167 \u2014 \"past `PT30M` it projects to loss (`on_breach: lost`). When payments-service is down its tracker publishes nothing, and the leg is derived instead from the Lambda's `ingest` deferred outcomes with no later terminal outcome (ADR-0019) \u2014 the same backlog\"; docs/example-webhooks.md:32 \u2014 \"process: { deadline: PT30M, on_breach: lost }\" (no `ingest` SLA); fixture run: \"webhook doc registry: byCur=map[USD:5000] buckets=map[30m-2h:map[USD:5000]] projLost=map[] breaches=0\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 1: Reproduced against the doc's own registry (SLA on `process` only): an `ingest` deferral 50m old on the events path yields ByCurrency USD 5000, bucket 30m-2h, ProjectedLostMinor empty, SLABreaches 0, because breached()/breachedAndLost() look up f.SLA[k.stage] with k.stage = the stage the deferred outcome was recorded at (`ingest`), which has no SLA. Line 167 (new in this diff) chains 'past PT30M it projects to loss' to 'the same backlog' derived from ingest deferreds, and line 227 (also new) says 'projected loss against the SLA'; neither holds for the documented registry. TestDeferredFromEventsSeesAPaymentsServiceOutage passes only because its registry moves the SLA to `ingest` (engine/deferred_test.go:594). \u2014 fixed in 1f5b82c (round-1 repair) with the superseding decision shard 0c873dc.",
+      "id": "6b4493d135820089"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0019-deferred-from-events.md",
+      "line": 34,
+      "severity": "MEDIUM",
+      "finding": "ADR-0019 and the decision shard state the in-flight predicate as 'a deferred outcome in scope and no terminal outcome in the same scope', but the code implements a different rule: a terminal resolves the deferral only at the same or a LATER registry stage (resolvedByLaterStage, engine/deferred.go:298-315), and additionally a `deferred` at a later stage resolves an earlier one (progressedPast, engine/deferred.go:320-333) \u2014 a resolution the ADR never mentions. The test pins the opposite of the ADR's literal rule: e6 (settle deferred, earlier capture success) is counted in flight (engine/deferred_test.go:379-382), whereas under 'no terminal outcome in the same scope' it would be resolved. The HIGH-tier record and the code disagree on the terminal predicate the shard itself names as the cost-if-wrong.",
+      "evidence": "docs/adr/0019-deferred-from-events.md:32-34 \u2014 \"An entity is in flight at the window end when it has a `deferred` outcome in scope and no terminal outcome \u2014 `success`, `failed` or `abandoned` \u2014 in the same scope.\"; .warden/memory/decide/20260908T1600310000-6b2db223-4d70bc07.json line 7 \u2014 \"no terminal outcome (`success`, `failed`, `abandoned`) in scope\"; engine/deferred.go:261 \u2014 \"if resolvedByLaterStage(reg, k.flow, k.stage, terminalStages[fe]) || progressedPast(reg, k.flow, k.stage, laterDeferred[fe]) { continue }\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 1: ADR-0019 line 32-34 and the shard's `decided` field state the predicate as 'no terminal outcome in the same scope'. The code (engine/deferred.go:261, 298-333) resolves a deferral only by a terminal at the same or a later registry stage, and additionally by a `deferred` at a later stage (progressedPast) \u2014 a rule the ADR never mentions. Reproduced: settle deferred + earlier capture success (the test's e6) is counted in flight (USD 400, Count 1); under the ADR's literal rule it would be resolved. The ADR is a new file in this range and the code godoc (line 38-39) already states the narrower rule, so the record and the implementation disagree on the very predicate the shard names as its cost-if-wrong. \u2014 fixed in 1f5b82c (round-1 repair) with the superseding decision shard 0c873dc.",
+      "id": "191ecfe81b510449"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "unmapped:precedence-granularity",
+      "tags": [
+        "scope-misstatement"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 66,
+      "severity": "MEDIUM",
+      "finding": "Gauge precedence is decided once per request, not per flow or stage: sawGauge is OR-ed across every flow's inflight query (line 105), so a single flow or stage with a live tracker \u2014 even at level zero \u2014 makes the events path never run for the whole scope, and a second flow (or a stage in the same flow, e.g. a Lambda's `ingest`) whose only in-flight signal is `deferred` events reads as zero backlog with no caveat. This is exactly the mixed deployment ADR-0019's Context motivates (Lambda producer + tracker-hosting service), and the weaker source is picked silently; the shard's cost-if-wrong names this risk and the one-predicate design does not cover it.",
+      "evidence": "engine/deferred.go:105 \u2014 \"sawGauge = sawGauge || len(series) > 0\"; engine/deferred.go:66-68 \u2014 \"if sawGauge || !caps.Events { return leg, nil }\"; fixture: invoice.pay gauge at level 0 plus payment.webhook `deferred` USD 7000 with no gauge \u2192 \"mixed-source two flows: byCur=map[] caveats=[]\"",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "REFUTED by the cross-examiner in round 1: Design as recorded, not a divergence from it. Per-scope OR-ing is exactly what the ADR's Decision says: 'A metrics backend that returns any biz_inflight_value series for the scope \u2014 a level of zero included \u2014 is authoritative and the events path does not run', and the shard repeats it ('the events path never runs'). The code (deferred.go:105,66) implements that sentence; the 'events always win' alternative was considered and rejected; docs/example-webhooks.md:167 describes the consequence consistently ('When payments-service is down its tracker publishes nothing, and the leg is derived instead'). I reproduced the reviewer's fixture (two flows, one zero gauge -> ByCurrency empty, no caveat) and the same-flow variant (process gauge at 0 + ingest deferred -> empty, no caveat), so the facts hold \u2014 but the behavior matches the change's stated intent. That the ADR's rationale ('a tracker that observed Done knows about completions') is per-tracker while the precedence is per-scope is a legitimate follow-up design question for a new record, not a defect in this range.",
+      "id": "8692471012558115"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 3,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "unmapped:bucket-boundary",
+      "tags": [
+        "gauge-parity"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 189,
+      "severity": "MEDIUM",
+      "finding": "The nested-range derivation is half-open at the cut (memq inRange: t.Before(r.To); ADR text `[lookback, To-2h)`), so an entity whose first deferred event is exactly 30m / 2h / 5m / 1m before To lands one bucket YOUNGER than emit.AgeBucketFor assigns (age >= 30m is 30m-2h, left-closed). At the capture SLA this flips breach and projected-lost: a deferral exactly 30 minutes old is breached and projected lost by the tracker's gauge but unbreached on the events path. The harness truncates every timestamp to the minute and CLI windows are whole minutes, so the instant is reachable; the fence only agrees because it reads the window as end+1s (engine/deferred_test.go:548), which shifts every cut off the minute.",
+      "evidence": "engine/deferred.go:189 \u2014 \"rng := query.TimeRange{From: start, To: req.Window.To.Add(-cut.before)}\"; emit/inflight.go:28-31 \u2014 \"case age < 2*time.Hour: return Age30mTo2h / default: return AgeGt2h\"; fixture: capture deferred at To-30m \u2192 \"boundary events: buckets=map[5m-30m:map[USD:100]] projLost=map[] breaches=0\" vs \"AgeBucketFor(30m)=30m-2h\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 1: Derived precisely. Entity first deferred at exactly To-30m: range [start, To-2h) excludes it; range [start, To-30m) excludes it because memq inRange requires t.Before(r.To) (half-open, query/memq/memq.go:80) and the ADR text itself writes the ranges half-open; it first appears in [start, To-5m) and is assigned 5m-30m. emit.AgeBucketFor(30m) is left-closed (age < 30m false -> 30m-2h). For the PT30M capture SLA the breach rule (bucket floor >= deadline) then differs: floor(5m-30m)=5m < 30m -> not breached, not projected lost; floor(30m-2h)=30m >= 30m -> breached and projected lost. Reproduced end to end with a real emit.InFlightTracker replay (age exactly 30m): gauge path buckets=30m-2h breaches=1 projLost=USD 100; events path buckets=5m-30m breaches=0 projLost empty. Same off-by-one at the 2h, 5m and 1m cuts (events gives 30m-2h/1m-5m/lt1m where the tracker gives gt2h/5m-30m/1m-5m). The ADR's intent is bucket parity with the gauge path and the fence asserts DeepEqual with the tracker; the fence only passes because its window is end+1s (deferred_test.go:548) while harness timestamps are minute-truncated (examples/checkout/checkout.go:355-356, 448), so every cut lands off the minute. \u2014 fixed in 1f5b82c (round-1 repair) with the superseding decision shard 0c873dc.",
+      "id": "4b08c0c052709058"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 4,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 148,
+      "severity": "MEDIUM",
+      "finding": "The caveat and three docs describe the exclusion as 'no LATER terminal outcome', which reads as temporal; the code has no per-event timestamps and treats any terminal at the same stage \u2014 including one recorded BEFORE the deferral \u2014 as resolving it. A failed capture followed by a deferred retry at capture is excluded from the leg (and is simultaneously realized loss), so the sentence overstates what the mechanism decides. Same wording at docs/adapters.md:29, docs/integration.md:241, docs/example-webhooks.md:167.",
+      "evidence": "engine/deferred.go:148 \u2014 \"built from deferred outcome events with no later terminal outcome\"; engine/deferred.go:299 \u2014 \"if terminals[stage] { return true }\" (no time comparison); fixture: capture failed at To-50m then capture deferred at To-10m \u2192 \"failed-then-deferred retry: byCur=map[] count=0\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 1: The caveat (deferred.go:148) and docs/adapters.md:29, docs/integration.md:241, docs/example-webhooks.md:167 (all new text in this range) say 'no later terminal outcome'. The mechanism has no per-event timestamps and resolvedByLaterStage returns true on terminals[stage] regardless of order (deferred.go:299). Reproduced: capture failed at To-50m followed by capture deferred at To-10m -> ByCurrency empty, Count 0 \u2014 a terminal recorded 40 minutes BEFORE the deferral resolves it. Under the alternative 'later stage' reading the sentence is still narrower than the code, which also resolves on the same stage; either way the wording overstates what the mechanism decides. \u2014 fixed in 1f5b82c (round-1 repair) with the superseding decision shard 0c873dc.",
+      "id": "d188b83afeb1ea04"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 5,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 52,
+      "severity": "MEDIUM",
+      "finding": "README (and docs/money.md:42, README:265 'says which of its two sources it stands on') claims the report says which source grounded the deferred leg, but only the events path attaches a caveat (engine/deferred.go:179); the gauge path renders 'DEFERRED [deterministic] USD ... in-flight' with nothing naming the gauge (engine/report/render.go:70,160). The source is stated for one of the two sources, not both.",
+      "evidence": "README.md:50-52 \u2014 \"read from the gauge the in-flight tracker publishes, or derived from `deferred` outcome events when no tracker was alive to publish one (the report says which)\"; engine/report/render.go:70 \u2014 \"fmt.Fprintf(&b, \\\"DEFERRED   [%s] %s in-flight\\\\n\\\", r.Deferred.Evidence, money(r.Deferred.ByCurrency))\" with no source line on the gauge path",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 1: README.md:50-52 and :265-266 and docs/money.md:42 are all new in this diff and claim the report says which of the two sources grounded the deferred leg. DeferredLeg (engine/engine.go:68-74) has no source field; deferredFromGauge attaches no caveat (only the count-unavailable one when the count gauge is missing); RenderText line 70 and RenderMarkdown line 160 print Evidence and value with nothing naming the gauge. Only the events path attaches eventsDerivedCaveat (deferred.go:179). A reader of a gauge-grounded report gets no statement of source, so 'says which' holds for one source only, as claimed. \u2014 fixed in 1f5b82c (round-1 repair) with the superseding decision shard 0c873dc.",
+      "id": "2432fa7299fd4a68"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 6,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier.go",
+      "line": 132,
+      "severity": "MEDIUM",
+      "finding": "The comment says the harness mirrors a queue-entry `deferred` outcome 'as emit.Record does' with one biz_txn_total point, but emit.Record also appends a biz_value_total{outcome=deferred} point for every non-estimated outcome (emit/emitter.go:227-240); MetricsFromResultAt emits only the txn counter (lines 155-165), so the metric mirror does not match the emitter it claims to copy. No leg reads it (AOV and coverage filter outcome=success), so this is a comment-accuracy defect, not a number.",
+      "evidence": "testkit/querier.go:130-133 \u2014 \"each `deferred` outcome the emitter records at enqueue (see EventsFromResult) carries its biz_txn_total{outcome=deferred} point at the queued stage, as emit.Record does\"; emit/emitter.go:233-240 \u2014 \"valuePoint := MetricPoint{ Name: \\\"biz_value_total\\\", ... \\\"outcome\\\": string(result) ... }; s.appendMetrics(valuePoint, txnPoint)\"",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "REFUTED by the cross-examiner in round 1: The comment is literally accurate about what it states. 'carries its biz_txn_total{outcome=deferred} point at the queued stage, as emit.Record does' asserts that Record emits a biz_txn_total point for the deferred result, which it does (emit/emitter.go txnPoint is appended for every result). The comment does not say 'only' and makes no claim that the harness reproduces every point Record emits; the omission of a biz_value_total{outcome=deferred} point is not a false statement, the same paragraph block already documents that the harness emits value only at the terminal stage (testkit/querier.go:143-146), and the reviewer concedes no leg reads it. A missing sentence is not a docs-accuracy defect.",
+      "id": "4a17c2f98a71f7a1"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 7,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "tests-required",
+      "tags": [
+        "non-table-test"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred_test.go",
+      "line": 358,
+      "severity": "MEDIUM",
+      "finding": "TestDeferredFromEventsGroundsTheLeg packs seven distinct resolution cases (e1 never resolved, e2 retry max, e3 same-stage success, e4 at_risk stage, e5 later-stage failure, e6 earlier-stage success, e7 later-stage deferral) into one fixture and asserts them only as aggregates (USD 4500, Count 5, one bucket map), so a wrong branch in resolvedByLaterStage/progressedPast fails with a total, not a case name. ADR-0007 asks for t.Run-named subtests with one assertion body; the decision shard promised 'table-driven tests for ... the terminal set, the bucket derivation', and this is not one of ADR-0007's exception shapes (it drives memq, not an end-to-end scenario).",
+      "evidence": "engine/deferred_test.go:400-406 \u2014 \"// e1 1000 + e2 500 + e4 2000 + e6 400 + e7 600.\\n if leg.ByCurrency[\\\"USD\\\"] != 4500 { ... }\\n if leg.Count != 5 { ... }\"; shard scope \u2014 \"engine/deferred_test.go and engine/engine_test.go carry table-driven tests for the precedence, the terminal set, the bucket derivation and the caveat\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 1: TestDeferredFromEventsGroundsTheLeg (new in this range) packs seven independent per-entity resolution cases into one memq fixture and asserts only aggregates (USD 4500, Count 5, one bucket map): a wrong branch in resolvedByLaterStage for e6 fails as 'ByAgeBucket[5m-30m] = 500 want 900', a wrong progressedPast for e7 fails as '30m-2h = 2600 want 2000' \u2014 totals, not case names. Entities are keyed independently so each is a natural table row. ADR-0007 mandates t.Run tables the moment a second case appears; this is none of its four exceptions (it hand-builds memq events, not a harness scenario). The shard's scope promised table-driven tests for 'the terminal set, the bucket derivation'; only precedence and lookback got tables. \u2014 fixed in 1f5b82c (round-1 repair) with the superseding decision shard 0c873dc.",
+      "id": "d9181ca07834a283"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 8,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0019-deferred-from-events.md",
+      "line": 91,
+      "severity": "MEDIUM",
+      "finding": "ADR-0019's Consequences state the events path costs five bounded event queries per flow; deferredFromEvents issues eight per flow \u2014 five nested-range `deferred` queries (engine/deferred.go:193-223) plus one query per terminal outcome for success, failed and abandoned (engine/deferred.go:242-261). The first decision shard's `why` repeats the same 'five' count.",
+      "evidence": "ADR: \"Five bounded event queries per flow, and only on the path where no gauge grounded the leg.\" Code: `for _, cut := range ageCutoffs { ... q.QueryEvents(...) }` (five cuts) and `for _, outcome := range terminalOutcomes { for _, filters := range flowFilters(req, outcome) { q.QueryEvents(...) } }` with `terminalOutcomes = []string{\"success\", \"failed\", \"abandoned\"}`.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Reproduced: a counting Querier wrapped around an events-only memq shows deferredFromEvents issues 8 QueryEvents per flow (16 for two flows) \u2014 5 nested-range `deferred` queries (engine/deferred.go:193-223, none skipped since cutEnd(To,2h) > From-lookback always) plus one per terminal outcome (lines 242-261, terminalOutcomes = success/failed/abandoned). Base engine/deferred.go issued zero QueryEvents, so all 8 are new cost. ADR-0019 line 91 states 'Five bounded event queries per flow'; the count is wrong at the cited location. \u2014 fixed in cde01a9 (round-2 repair).",
+      "id": "a66a9969731580b9"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 9,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred_test.go",
+      "line": 632,
+      "severity": "MEDIUM",
+      "finding": "The test's doc comment says the backlog is projected against the process stage's SLA, but the registry it parses declares an SLA on `ingest` only and the code reads the SLA of the stage the deferral was recorded at (`breachedAndLost(reg, k.flow, k.stage, ...)` with k.stage == ingest); docs/example-webhooks.md:172 correctly says 'projected against the `ingest` SLA'. The comment contradicts the adjacent code and the doc it mirrors.",
+      "evidence": "Comment: \"The leg must show the backlog, aged and projected against the process stage's SLA.\" Registry in the same test: \"sla:\\n      ingest: { deadline: PT30M, on_breach: lost }\" \u2014 no process SLA; assertion expects `leg.ProjectedLostMinor[\"USD\"] != 5000` from the ingest-stage deferral.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 2: The comment at engine/deferred_test.go:631-632 says the backlog is 'projected against the process stage's SLA', but the registry parsed at lines 644-645 declares `sla: ingest: { deadline: PT30M, on_breach: lost }` only, every event is recorded at Stage \"ingest\" (line 656), and deferredFromEvents projects via breachedAndLost(reg, k.flow, k.stage, ...) with k.stage == ingest (engine/deferred.go:289), reading f.SLA[\"ingest\"]. The asserted ProjectedLostMinor USD 5000 / SLABreaches 1 / OldestAgeMinutes 30 come from the ingest SLA; a process SLA does not exist. docs/example-webhooks.md:172 and shard 2's scope ('registry gains an ingest SLA so the deferred ingest backlog projects as the text says') both say ingest; the test comment is the outlier. Test passes (-run -v), so this is a stale comment, not a behavioural bug. \u2014 fixed in cde01a9 (round-2 repair).",
+      "id": "de080802b29959cc"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 10,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs",
+      "file": "docs/example-webhooks.md",
+      "line": 172,
+      "severity": "MEDIUM",
+      "finding": "The signals table claims that when payments-service is down the leg is derived from the Lambda's ingest deferred outcomes. Under the scope-wide precedence the code implements (engine/deferred.go:107 `sawGauge = sawGauge || len(series) > 0`; ADR-0019 'any series ... a level of zero included ... is authoritative'), that holds only when no gauge series exists anywhere in the window: on a metrics+events backend a tracker that published before dying mid-window still returns a series (promql reads `last_over_time(m[window] @ To-1ms)` over the whole window), so the leg reads the stale pre-outage level and the events path never runs. README.md:51-52 ('derived from `deferred` outcome events when no tracker was alive to publish one') carries the same overclaim; the sentence is only true for the events-only wiring in \u00a75.",
+      "evidence": "\"When payments-service is down its tracker publishes nothing, and the leg is derived instead from the Lambda's `ingest` deferred outcomes whose entity reached no terminal outcome at `ingest` or `process` (ADR-0019)\" vs engine/deferred.go: `if sawGauge || !caps.Events { return leg, nil }`.",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "REFUTED by the cross-examiner in round 2: The code behaviour the reviewer describes is real (probe: a metrics+events memq with one biz_inflight_value sample at From+10m returns the stale level 100 and never runs the events path; promql reads last_over_time(m[window] @ To-1ms), translate.go:44/83, so a tracker that published inside the window and then died would likewise ground the leg). But that is the scope-wide precedence ADR-0019's Decision states verbatim ('any biz_inflight_value series for the scope \u2014 a level of zero included \u2014 is authoritative and the events path does not run'), already ruled design-as-recorded in the previous round of this branch. The sentence at docs/example-webhooks.md:172 is not false as written: it sits in the 'What each outage direction yields' signals table, is immediately qualified by 'That is what the *signals* support. What you can read back depends on the adapters you wire' (lines 175-179, which name the events-derived leg for \u00a75's wiring), and describes the outage direction 'payments-service down' \u2014 tracker publishes nothing \u2192 no gauge series in the read \u2192 events path \u2014 which is exactly what the engine does (probe: no gauge sample \u2192 USD 12000 with the events caveat). It does not claim anything about a sample published earlier in the same window. The reviewer's own restatement is the overclaim: the sentence is true on any wiring whenever the window holds no gauge sample, not 'only for the events-only wiring in \u00a75'. README.md:51-52 conditions on 'no tracker was alive to publish one', which matches the precedence rule exactly.",
+      "id": "5bf3dead8a80453e"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 11,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "unmapped:events-lookback-undercount",
+      "tags": [
+        "dishonest-zero"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 179,
+      "severity": "MEDIUM",
+      "finding": "A deferral recorded before From \u2212 max(2h, longest SLA) with no terminal outcome is still in flight at To and the gauge path would report it in gt2h, but the events path never queries it (every range starts at `start := req.Window.From.Add(-eventsLookback(...))`), so a 2h report window over a queue that has been stalled for six hours silently drops the first hours of the backlog. Neither the caveat (line 150 names two limits: stage-order resolution and first-event ageing) nor ADR-0019 names this bound \u2014 the ADR (line 56) says 'backlog older than the window start is still seen' and the comment here says 'backlog older than the window is still backlog', both describing it as unbounded; TestDeferredFromEventsLookback:553 pins the drop without naming it a limit. In a HIGH-tier money path an unnamed under-count relative to the gauge it stands in for is a defect against ADR-0017/ADR-0019's own 'a leg that cannot be grounded says so'.",
+      "evidence": "engine/deferred.go: \"// minEventsLookback is how far before the window start the events path\\n// looks for deferrals still open at the window end, at least: backlog older\\n// than the window is still backlog.\\nconst minEventsLookback = 2 * time.Hour\"; ADR-0019 line 56: \"so backlog older than the window start is still seen.\"; test: `{\"deferred before the lookback\", eventsWindow.From.Add(-25 * time.Hour), 0}`.",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "REFUTED by the cross-examiner in round 2: The premise that the ADR and the comment describe the lookback as unbounded is false. ADR-0019 lines 55-56 read, in one sentence, 'The lookback is the larger of two hours and the flow's longest SLA deadline, so backlog older than the window start is still seen' \u2014 the bound is stated and the promise is 'older than the window start', not arbitrarily older; shard 1's decided text repeats 'The lookback is max(2h, the flow's largest SLA deadline)'. The code comment at engine/deferred.go:176-179 is the doc of a named constant minEventsLookback = 2h ('how far before the window start the events path looks ... at least'), and eventsLookback's doc (lines 373-376) states the SLA extension. The caveat (line 150) already says 'within the lookback', and names exactly the three limits ADR-0019's 'Evidence and caveat' bullet enumerates, so caveat and ADR agree. TestDeferredFromEventsLookback names the dropped case 'deferred before the lookback' (line 553) and its comment says 'older than that is not [seen]'. The under-count for a queue stalled longer than max(2h, SLA) is real (probe: 2h window, ingest SLA 30m, deferrals at To-1h/-3h/-5h \u2192 USD 200 of 300, the -5h one dropped) but it is the recorded design's bound, not an unnamed one; widening the lookback or adding a fourth caveat clause is a follow-up design question of the same kind as the precedence one, not a defect in this range.",
+      "id": "d8cfb65ef5583b05"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 12,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "test/promgolden",
+      "file": "test/promgolden/golden_test.go",
+      "line": 148,
+      "severity": "MEDIUM",
+      "finding": "The comment describes MetricsFromResult's default as a single gauge sample stamped exactly at To that the half-open read would drop; after this diff testkit.MetricsFromResult appends a second in-flight publish at End\u2212TrackerCadence (testkit/querier.go, `append(metrics, InFlightPointsAt(res, res.Config.End.Add(-TrackerCadence))...)`) precisely so that a [From, End) read is not empty, so the parenthetical describes the old behavior and its vacuity rationale no longer follows from it (the explicit MetricsFromResultAt call the comment justifies is still fine).",
+      "evidence": "\"A sample stamped exactly at To (MetricsFromResult's default, the run end == window end here) is dropped by the half-open [From,To) read on both sides ... so it would make the gauge parity vacuous.\" vs testkit/querier.go MetricsFromResult doc: \"plus the in-flight gauges as the tracker's last two publishes: one TrackerCadence before the run's end and one at the end instant\".",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 2: Became stale in this range even though test/promgolden/golden_test.go is untouched. At base 6b2db22, testkit.MetricsFromResult was `return MetricsFromResultAt(res, res.Config.End)` \u2014 a single gauge snapshot at End \u2014 so the comment's parenthetical '(MetricsFromResult's default, the run end == window end here)' and the vacuity rationale were accurate. At head, MetricsFromResult (testkit/querier.go:120-123) appends InFlightPointsAt(res, End-TrackerCadence) and its doc says a [From, End) read 'reads the earlier sample' and that a lone End-stamped sample would fall back to events 'for a reason no real deployment has'. So MetricsFromResult's default is no longer a sample the half-open read drops, and the comment's stated reason for calling MetricsFromResultAt(res, end-1m) no longer follows from it. Unlike the round-1 precedent (where nothing became old), the referenced behaviour did change here. The explicit MetricsFromResultAt call itself remains correct. \u2014 fixed in cde01a9 (round-2 repair).",
+      "id": "792e5aef93a4c700"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 13,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 38,
+      "severity": "MEDIUM",
+      "finding": "The Deferred doc comment states the in-flight condition as 'no terminal outcome and no further deferral at the same or a later stage', which reads as a same-stage re-deferral resolving the item. The code does the opposite: a second `deferred` at the same stage merges into the same entityStage key (lines 210-220, valued at the larger amount) and progressedPast resolves only on a strictly later stage index (line 344) \u2014 pinned by the test 'retried deferral with two amounts counts once at the larger'. ADR-0019 and the 16:34 shard scope 'same or later' to terminals and 'later' alone to deferrals; the comment collapses the two and mis-states the deferral half.",
+      "evidence": "engine/deferred.go:38-40: \"an entity with a `deferred` outcome and, within the lookback, no terminal outcome and no further deferral at the same or a later stage of the flow is in flight\" vs engine/deferred.go:343-346: \"for d := range deferredStages { if stageIndex(reg, flow, d) > idx { return true } }\" and ADR-0019:32-37: \"no terminal outcome ... at the same stage or any later stage ... and no further `deferred` outcome at a later stage\"",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 3: engine/deferred.go:38-40 (new in this range; base's comment had no events path) reads 'no terminal outcome and no further deferral at the same or a later stage'. Neither parse matches the code. If 'at the same or a later stage' distributes over both nouns, a same-stage re-deferral would take the entity out of flight; the code merges a same-stage second `deferred` into the same entityStage key (lines 210-220, larger amount wins) and progressedPast resolves only on a strictly greater stageIndex (line 344), pinned by TestDeferredFromEventsResolution 'retried deferral with two amounts counts once at the larger' (wantCount 1). If the modifier attaches only to 'further deferral', then 'no terminal outcome' is unqualified and a terminal at an EARLIER stage would resolve; resolvedByLaterStage (lines 315-331) requires same-or-later, pinned by 'success at an earlier stage does not resolve a later deferral' (wantCount 1). ADR-0019:32-37, the 16:34 shard, the caveat at line 150 and the in-body comment at lines 225-229 all state the split rule correctly; only this doc comment collapses it. \u2014 fixed in 133d96f (round-3 repair, at the cap; scoped re-review in round 4).",
+      "id": "11d6fe7d83123083"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 14,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "docs/adr",
+      "file": "docs/adr/0019-deferred-from-events.md",
+      "line": 55,
+      "severity": "MEDIUM",
+      "finding": "ADR-0019, both decision shards and the lookback test's comment state the lookback as max(2h, the flow's longest SLA deadline) \u2014 per flow. eventsLookback takes the maximum over every flow in scope (req.Flows, or all registry flows when Flows is empty) and applies that one start to every flow's queries, so a flow's events-derived leg depends on which other flows share the request: requesting invoice.pay alone versus alongside a flow with a P1D deadline admits different backlog for invoice.pay. The record and the code disagree on the rule; either the ADR should say 'the longest SLA deadline of the flows in scope' or the code should compute the lookback per flow.",
+      "evidence": "ADR-0019:55-56: \"The lookback is the larger of two hours and the flow's longest SLA deadline\"; shard 4d70bc07: \"The lookback is max(2h, the flow's largest SLA deadline)\"; engine/deferred.go:383-399: \"flows := req.Flows; if len(flows) == 0 { flows = reg.FlowNames() } for _, name := range flows { ... for _, sla := range f.SLA { if sla.Deadline > lookback { lookback = sla.Deadline } } }\" feeding one `start` at engine/deferred.go:185 used for every flow's queries",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 3: Rule as recorded: ADR-0019:55-56 'the larger of two hours and the flow's longest SLA deadline'; shard 4d70bc07 'max(2h, the flow's largest SLA deadline)'; the test comment at deferred_test.go:542 says the same. Code: eventsLookback (lines 377-402) takes the max over every flow in req.Flows (or reg.FlowNames() when empty) and line 185 derives ONE `start` used by every flow's deferred and terminal queries; its own comment (373-376) says 'of the flows in scope', so comment and code agree with each other and disagree with the ADR/shard. Reproduced with an overlay probe (round-USsHlB/probe/zz_probe_test.go) on a two-flow registry (a.flow capture PT30M; b.flow settle P1D): eventsLookback = 2h for Flows=[a.flow], 24h for Flows=[a.flow,b.flow] and for Flows=[]. An a.flow deferral 3h before the window start yields count 0 / USD 0 when a.flow is requested alone and count 1 / USD 1000 (gt2h) when b.flow is co-requested \u2014 a flow's events-derived leg depends on which other flows share the request, which the per-flow wording of the record excludes. Distinct from the earlier-round lookback-undercount precedent, which concerned the bound's size, not its scope. \u2014 fixed in 133d96f (round-3 repair, at the cap; scoped re-review in round 4).",
+      "id": "cabe2ebaf2397a56"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 15,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "unmapped:stale-gauge-series",
+      "tags": [
+        "gauge-parity"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier.go",
+      "line": 120,
+      "severity": "LOW",
+      "finding": "MetricsFromResult publishes 'the tracker's last two publishes' by calling InFlightPointsAt twice, each on a fresh emit.InFlightTracker. The real tracker's second Publish runs a retire pass that zeroes every combo that had items last time and none now (emit/inflight.go:310-319); two independent trackers never do. A (stage, bucket, currency) series live at End-15s and empty at End is therefore left with no End point, and memq's per-series carry-forward (query/memq/memq.go:225-232, matching last_over_time) keeps its stale level alive \u2014 the gauge leg would count that value in both its old and new bucket in any window that sees both samples, such as the agreement fence's [start, end+1s). Latent today: a scratch sweep of seeds 1-40 x {stall, healthy} at 3h found no series present at End-15s and absent at End, and the demo's [From, End) window reads only the earlier sample \u2014 but the harness makes no such guarantee, and the doc comment claims tracker parity it does not have.",
+      "evidence": "testkit/querier.go:111-113: \"plus the in-flight gauges as the tracker's last two publishes: one TrackerCadence before the run's end and one at the end instant\"; testkit/querier.go:121-122: \"metrics := MetricsFromResultAt(res, res.Config.End); return append(metrics, InFlightPointsAt(res, res.Config.End.Add(-TrackerCadence))...)\"; testkit/querier.go:233: \"tr := emit.NewInFlightTracker(em, ...)\" (a new tracker per call)",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 3: In principle, yes: a (flow, stage, currency) combo whose last item drained in the final TrackerCadence is present at End-15s and absent at End. Reproduced with an overlay probe on a one-transaction checkout.Result (captured at +2m, settled at End-5s): testkit.MetricsFromResult emits five settle-combo points at End-15s (30m-2h = 1000, the others 0) and NO settle points at End, because the End call's fresh tracker has an empty `live` map so Publish's retire pass (emit/inflight.go:319-329, 339-351) has nothing to zero. memq's gauge read (memq.go:144-146 keeps any sample At < To; aggregate 222-233 carries each full-label series' last level forward) returns 1000 for a window [start, End+1s) that covers both samples, and Deferred reports count 1 / USD 1000 in 30m-2h with no caveat for money that settled before End. One real tracker with publishes at End-15s and End emits explicit zeros for every bucket of that combo at End, and Deferred over the same window reports 0 \u2014 so the doc claim at testkit/querier.go:111-113 ('the tracker's last two publishes') does not hold for a drained combo. Precise effect is a stale over-count at the last non-zero level (the drained combo has no 'new bucket' to double into); live combos are unaffected because a fresh tracker still publishes zeros for their empty buckets. Latent for the shipped scenarios, as the finding says; severity stands as filed. \u2014 fixed in 133d96f (round-3 repair, at the cap; scoped re-review in round 4).",
+      "id": "f13187b876266431"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 16,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "unmapped:untested-branch",
+      "tags": [
+        "untested-surface"
+      ],
+      "dir_prefix": "engine",
+      "file": "engine/deferred.go",
+      "line": 320,
+      "severity": "LOW",
+      "finding": "The events path's documented rule 'Stages the registry does not order resolve only their own deferrals' \u2014 the deferredIdx < 0 / idx < 0 early returns in resolvedByLaterStage and progressedPast, reached with a nil registry, an unregistered flow, or a stage the flow does not declare \u2014 has no test case. TestDeferredEdgeCases' nil-registry case drives the gauge path (memq.WithMetrics) only, and every row of TestDeferredFromEventsResolution uses registry-ordered stages of invoice.pay. An entity deferred at two unordered stages is counted twice by design here; nothing pins that or the terminal-at-unordered-stage behaviour.",
+      "evidence": "engine/deferred.go:228-229: \"Stages the registry does not order resolve only their own deferrals.\"; engine/deferred.go:320-323: \"deferredIdx := stageIndex(reg, flow, stage); if deferredIdx < 0 { return false }\"; engine/deferred_test.go:209-223 (nil registry, gauge points only) and :358-489 (all cases on capture/settle of invoice.pay)",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "CONFIRMED by the cross-examiner in round 3: Verified by coverage rather than by reading: `go test ./engine/... ./testkit/... -coverpkg=./engine/` (all test packages that call Deferred; the only other callers are in engine/deferred_test.go) leaves engine/deferred.go:322.3,323.1 and :340.3,341.1 at 0 hits \u2014 the deferredIdx<0 / idx<0 returns are never executed. TestDeferredEdgeCases' nil-registry case (deferred_test.go:209-223) seeds memq.WithMetrics only, so sawGauge is true and the events path never runs; TestDeferredFromEventsResolution (358-489), the lookback, precedence, fence and outage tests all use registry-ordered stages. With stageIndex -1 the code's stated rule holds as described: resolvedByLaterStage reduces to terminals[stage] and progressedPast to false, so an entity deferred at two unordered stages is counted twice and a terminal at another unordered stage resolves nothing \u2014 nothing pins either. Severity stands as filed (unmapped). \u2014 fixed in 133d96f (round-3 repair, at the cap; scoped re-review in round 4).",
+      "id": "10e7d7013ec6fe2c"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 17,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "unmapped:double-count",
+      "tags": [
+        "gauge-parity"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier.go",
+      "line": 285,
+      "severity": "MEDIUM",
+      "finding": "The new tie-break in inFlightPointsAtInstants sorts Done (order 0) before Track (order 1) at equal instants ACROSS transactions, so a single transaction whose AuthedAt == CapturedAt has its own 'Done capture' applied before its own 'Track capture' (Done on an unknown id is a no-op, emit/inflight.go:232-243). The transaction then sits in BOTH the capture and the settle queue forever: a double count, and for CapturedAt == SettledAt the settle queue never drains, a stale level. The pre-repair code applied each transaction's events in pipeline order (Track capture, Done capture, Track settle, Done settle) and got this right. The harness can produce equal instants via the documented InstantStage sentinel (examples/checkout/checkout.go:102, 225-226: CaptureDelayMin/SettleDelayMin = InstantStage gives a zero-delay schedule, and stage.schedule returns `eligible` itself when capacity allows), and InFlightPointsAt / MetricsFromResult are public testkit API. No shipped golden scenario sets InstantStage today (grep: only examples/checkout uses it), which is why the goldens and the parity fence still pass; a future scenario using it would make memq and Prometheus agree on a wrong number, so the parity fence would not catch it. Fix: drop the `order` key and stable-sort by `at` alone; the per-transaction append order already encodes 'leave a queue before entering the next', and relative order between different transactions at one instant cannot change the published level because Publish only runs after every event <= at is applied.",
+      "evidence": "Probe run via go -overlay (no repo file touched), scratch at <round>/probe/probe_test.go: one txn with CreatedAt=AuthedAt=CapturedAt=end-10m, State captured. HEAD 133d96f: biz_inflight_value capture=1000 AND settle=1000 (truth: capture 0, settle 1000). Same probe with SettledAt also equal: HEAD publishes capture=1000 and settle=1000 (truth: nothing in flight). Baseline pre-repair testkit/querier.go from cde01a9 (overlay_old.json): settle=1000 only for the first case and no non-zero points for the second, i.e. correct. Sort code at testkit/querier.go:285-291; queueEvent.order comment at line 235.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "Raised by the scoped re-reviewer in round 4 on the round-3 repair itself: the Done-before-Track tie-break applied across transactions, so a transaction authed and captured at one instant sat in both queues (reachable via the harness's InstantStage sentinel; no shipped scenario). Fixed in 185f270 \u2014 stable sort by time alone, per-transaction append order preserved \u2014 with the named equal-instant test; verdicted by a further scoped re-review in round 5.",
+      "id": "e7fb4f380ab9e5aa"
+    },
+    {
+      "ts": "2026-09-08T17:13:49+00:00",
+      "seq": 18,
+      "source": "attest",
+      "sha": "185f27046c6e357d919f67f44f0b4c4f956fd65f",
+      "base_sha": "6b2db2233e33ef91e6c6535c08bf9ebf557c09b2",
+      "rule_id": "tests-required",
+      "tags": [
+        "non-table-test"
+      ],
+      "dir_prefix": "testkit",
+      "file": "testkit/querier_test.go",
+      "line": 250,
+      "severity": "LOW",
+      "finding": "The repair adds new branching logic, the equal-instant tie-break (queueEvent.order and the SliceStable comparator), but the only new test, TestInFlightReplayZeroesADrainedCombo, uses distinct instants (authed end-40m, captured end-5s) and never exercises the tie. A named case with AuthedAt == CapturedAt (and one with CapturedAt == SettledAt) asserting capture=0 / settle=1000 would have caught the double count above.",
+      "evidence": "testkit/querier_test.go:257-264 sets AuthedAt end-40m and CapturedAt end-5s only; no test in the range constructs equal timestamps; the probe in <round>/probe/ fails the intended semantics on HEAD.",
+      "status": "fixed",
+      "origin": "interactive",
+      "bead": "workspace-a8q.2",
+      "reason": "Raised by the scoped re-reviewer in round 4 on the round-3 repair itself: the Done-before-Track tie-break applied across transactions, so a transaction authed and captured at one instant sat in both queues (reachable via the harness's InstantStage sentinel; no shipped scenario). Fixed in 185f270 \u2014 stable sort by time alone, per-transaction append order preserved \u2014 with the named equal-instant test; verdicted by a further scoped re-review in round 5.",
+      "id": "c4cdea23e197ca75"
+    }
+  ]
+}

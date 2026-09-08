@@ -267,6 +267,7 @@ sequenceDiagram
         Note over E,Q: Phase 3 — deferred, money still in flight
         E->>Q: QueryMetric(biz_inflight_value by flow · stage · age_bucket · currency)
         E->>Q: QueryMetric(biz_inflight_count by flow · stage · age_bucket · currency)
+        Note over E,Q: no gauge series → QueryEvents(outcome=deferred) over five nested ranges,<br/>less entities with a terminal outcome at that or a later stage (ADR-0019)
     end
     Note over E: Two gauges, read as levels rather than summed. The SLA deadline<br/>and on-breach rule come from the registry — a breach becomes<br/>projected-lost inside this leg and never moves into realized.
 
@@ -305,7 +306,7 @@ sequenceDiagram
 | 7 | querier → backend | The adapter translates. **Every query in this diagram takes this hop**; it is drawn once because the constraint is the same each time |
 | 9 | engine → querier | The failure sweep, grouped `(currency, entity)` with `Agg: EventAggMaxPerGroup` — the largest single failed attempt, a real observed figure (ADR-0009) |
 | 11 | engine → querier | The metrics-only fallback for `Leg.Count` carries the caveat `metrics-only: upper bound, not de-duped by entity` — metrics have no entity label, by design (ADR-0004) |
-| 12–13 | engine → querier | `biz_inflight_value` and `biz_inflight_count`, no aggregation set: gauges read at the window, not summed over it. A missing count gauge beside a non-empty value gauge raises the ADR-0012 caveat rather than inventing a count |
+| 12–13 | engine → querier | `biz_inflight_value` and `biz_inflight_count`, no aggregation set: gauges read at the window, not summed over it. A missing count gauge beside a non-empty value gauge raises the ADR-0012 caveat rather than inventing a count. With no gauge series at all and an events-capable backend, the leg is derived from `deferred` outcome events instead — the gauge is the source of record whenever it exists (ADR-0019) |
 | 14 | engine → querier | Failed events grouped `(currency, customer, segment)` — **no order-by, no limit, no distinct-count verb**. `EventAggDistinctCount` and `OrderSumDesc` exist in the AST and in the adapters, and the engine uses neither |
 | 18 | engine → querier | Average order value at the flow's declared value stage (ADR-0016), in a fixed order of preference: successful events, then `biz_value_total ÷ biz_txn_total`, then the registry's estimator. A failed events query is disclosed as a note rather than silently downgraded |
 | 20 | engine → itself | **No query.** The trust number needs a provider ledger an impact request does not carry, so `Compute` writes an unavailable reason and `shortfall reconcile` calls `engine.Coverage` separately |

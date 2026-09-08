@@ -48,9 +48,10 @@ func TestComputeAssemblesDeterministicLegs(t *testing.T) {
 		t.Fatalf("customers distinct = %d, want 1", report.Customers.Distinct)
 	}
 
-	// Deferred needs metrics; this events-only backend marks it unavailable.
-	if len(report.Deferred.Caveats) == 0 {
-		t.Fatal("deferred must be marked unavailable on an events-only backend")
+	// Deferred grounds from events on an events-only backend (ADR-0019): the
+	// leg is measured, not unavailable, and its caveat names the source.
+	if report.Deferred.Unavailable || len(report.Deferred.Caveats) != 1 || !strings.Contains(report.Deferred.Caveats[0], "events-derived") {
+		t.Fatalf("deferred on an events-only backend = %+v, want an events-derived leg", report.Deferred)
 	}
 
 	// Unavailable legs say why instead of rendering zeros.

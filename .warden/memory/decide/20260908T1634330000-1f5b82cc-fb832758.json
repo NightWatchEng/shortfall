@@ -1,0 +1,15 @@
+{
+  "bead": "workspace-a8q.2",
+  "head_sha": "1f5b82cc7e5fb7938853ada741513c489896c529",
+  "base_sha": "1f5b82cc7e5fb7938853ada741513c489896c529",
+  "rules_version": "a3f6dbfa21cd",
+  "decided_at": "2026-09-08T16:34:33+00:00",
+  "decided": "Refines the earlier shard on this branch on two points review round 1 found the code and the record disagreeing on. (1) The terminal rule is the one the code implements, stated plainly: a terminal outcome (success, failed, abandoned) at the same stage or any later stage of the flow's registry order resolves a deferral, and so does a further deferral at a later stage, because entering the next queue means the earlier one released the transaction; a terminal at an earlier stage does not. The event AST returns no per-event times, so 'later' is by stage order, never by time: a deferral retried after a failure at the same stage is not seen, and the caveat says so. (2) The nested-range cuts are inclusive of the cut instant \u2014 an entity whose first deferred event is exactly 30 minutes old is 30m-2h, as emit.AgeBucketFor's left-closed intervals have it \u2014 so the two groundings never disagree at a bucket floor, which is where the SLA breach test sits. Precedence stays scope-wide, as the first shard and ADR-0019 state; the reviewer's per-(flow, stage) alternative was judged a design question outside this change and is noted on the parent item.",
+  "why": "Both surfaced when the round-1 reviewer ran the leg against the code rather than the prose: test case e6 pinned same-or-later-stage resolution while the shard and ADR said 'no terminal outcome in the same scope'; and an entity exactly 30m old flipped its breach verdict between the gauge and events paths on the reference registry's PT30M capture SLA, hidden by the agreement fence's end+1s window. Each is a correction of the record to the intent the first shard already stated \u2014 the events path stands in for the gauge, and the two must agree.",
+  "cost_if_wrong": "The inclusive cut is one nanosecond on four range ends; the per-entity resolution table now pins the exact-30m, one-second-short and exact-2h boundaries by name. If the stage-order rule is wrong for a flow, a resolved deferral is counted or an open one dropped \u2014 bounded by the window and named in the caveat, never merged with realized or estimate.",
+  "alternatives": [
+    "Per-(flow, stage) precedence with a merged leg \u2014 a real design question the reviewer raised; not this change's, recorded as a follow-up.",
+    "Add a time-ordered aggregation to the query AST to make 'later' mean later in time \u2014 rejected for this round; the caveat names the limit instead."
+  ],
+  "scope": "engine/deferred.go (inclusive cuts, caveat wording); engine/deferred_test.go (per-entity resolution table with the boundary cases); docs/adr/0019-deferred-from-events.md restated to match; docs/example-webhooks.md registry gains an ingest SLA so the deferred ingest backlog projects as the text says; README, docs/money.md and the other deferred-leg sentences say the caveat is what names the events source; no wire, query-surface or gate-surface change."
+}

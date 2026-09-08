@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NightWatchEng/shortfall/biz"
+	"github.com/NightWatchEng/shortfall/emit"
 	"github.com/NightWatchEng/shortfall/examples/checkout"
 	"github.com/NightWatchEng/shortfall/query"
 	"github.com/NightWatchEng/shortfall/query/memq"
@@ -88,12 +89,17 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 
 	// Ground truth by hand: terminal txns and their failed value, plus the
 	// flow entries (txns that authed — each adds one entry-stage point).
-	var wantTerminal, wantEntered, wantAuthFailed int
+	var wantTerminal, wantEntered, wantAuthFailed, wantQueued int
 	var wantFailedValueUSD int64
 	var currencies = map[string]bool{}
 	for _, txn := range res.Ledger.Txns {
 		if !txn.AuthedAt.IsZero() {
 			wantEntered++
+			wantQueued++ // entered the capture queue
+		}
+
+		if !txn.CapturedAt.IsZero() {
+			wantQueued++ // entered the settle queue
 		}
 
 		_, result, _, visible := telemetryOutcome(txn)
@@ -117,9 +123,10 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	full := query.TimeRange{From: start, To: start.Add(24 * time.Hour)}
 
 	// Metrics: the total biz_txn_total is one terminal point per terminal
-	// txn plus one entry-stage point per txn that entered the flow, and the
-	// entry-stage sum (over outcomes) counts every entry — successes via
-	// their entry point, auth failures via their terminal point.
+	// txn, one entry-stage point per txn that entered the flow, and one
+	// deferred point per queue entry; the entry-stage sum (over outcomes)
+	// counts every entry — successes via their entry point, auth failures
+	// via their terminal point — and no deferred point lands there.
 	sumTxn := func(filters map[string]string) int {
 		series, err := q.QueryMetric(ctx, query.Query{
 			Metric: "biz_txn_total", Agg: query.AggSum, Filters: filters, Range: full,
@@ -137,8 +144,16 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 
 		return int(got)
 	}
-	if got := sumTxn(nil); got != wantTerminal+wantEntered {
-		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d)", got, wantTerminal+wantEntered, wantTerminal, wantEntered)
+	if got := sumTxn(nil); got != wantTerminal+wantEntered+wantQueued {
+		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d + queued %d)", got, wantTerminal+wantEntered+wantQueued, wantTerminal, wantEntered, wantQueued)
+	}
+
+	if wantQueued == 0 {
+		t.Fatal("fixture queued nothing — the deferred half of the sum would be vacuous")
+	}
+
+	if got := sumTxn(map[string]string{"outcome": "deferred"}); got != wantQueued {
+		t.Fatalf("deferred biz_txn_total sum = %d, want %d queue entries", got, wantQueued)
 	}
 
 	if wantAuthFailed == 0 {
@@ -227,6 +242,97 @@ func TestInFlightGaugeSnapshotVisibleWithinWindow(t *testing.T) {
 
 			if seen := len(series) > 0; seen != c.wantSeen {
 				t.Fatalf("gauge series seen = %v (%d series), want %v", seen, len(series), c.wantSeen)
+			}
+		})
+	}
+}
+
+// TestInFlightReplayZeroesADrainedCombo pins that MetricsFromResult's two
+// gauge samples come from ONE tracker: a queue that drains between the
+// samples is published as an explicit zero at the later one — the tracker's
+// retire pass — so a last-level read over both samples sees 0, not the
+// earlier level carried forward as stale.
+func TestInFlightReplayZeroesADrainedCombo(t *testing.T) {
+	end := time.Date(2026, 8, 24, 1, 0, 0, 0, time.UTC)
+	res := checkout.Result{
+		Config: checkout.Config{End: end},
+		Ledger: checkout.Ledger{Txns: []checkout.Txn{{
+			ID: "t1", CustomerID: "h:c1", Segment: checkout.SegmentSMB, AmountMinor: 1000, Currency: "USD",
+			CreatedAt: end.Add(-40 * time.Minute), AuthedAt: end.Add(-40 * time.Minute),
+			CapturedAt: end.Add(-5 * time.Second), // leaves the capture queue between the two samples
+			State:      checkout.StateCaptured,
+		}}},
+	}
+
+	level := func(points []emit.MetricPoint, stage string, at time.Time) (int64, bool) {
+		var sum int64
+		seen := false
+		for _, p := range points {
+			if p.Name == "biz_inflight_value" && p.Labels["stage"] == stage && p.At.Equal(at) {
+				sum += p.Value
+				seen = true
+			}
+		}
+
+		return sum, seen
+	}
+	points := MetricsFromResult(res)
+	cases := []struct {
+		name     string
+		stage    string
+		at       time.Time
+		wantSeen bool
+		wantSum  int64
+	}{
+		{"capture holds the value at the earlier sample", "capture", end.Add(-TrackerCadence), true, 1000},
+		{"capture is published as an explicit zero once drained", "capture", end, true, 0},
+		{"settle is absent before the transaction reached it", "settle", end.Add(-TrackerCadence), false, 0},
+		{"settle holds the value at the later sample", "settle", end, true, 1000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sum, seen := level(points, c.stage, c.at)
+			if seen != c.wantSeen || sum != c.wantSum {
+				t.Fatalf("stage %s at %s: seen=%v sum=%d, want seen=%v sum=%d", c.stage, c.at.Format(time.TimeOnly), seen, sum, c.wantSeen, c.wantSum)
+			}
+		})
+	}
+}
+
+// TestInFlightReplayKeepsATransactionsOwnOrderAtOneInstant pins the replay
+// against an instant stage: a transaction authed and captured at the same
+// instant (the harness's InstantStage capture delay) must leave the capture
+// queue and enter the settle queue, never sit in both — its own Done cannot
+// be applied before its own Track.
+func TestInFlightReplayKeepsATransactionsOwnOrderAtOneInstant(t *testing.T) {
+	at := time.Date(2026, 8, 24, 1, 0, 0, 0, time.UTC)
+	res := checkout.Result{
+		Config: checkout.Config{End: at},
+		Ledger: checkout.Ledger{Txns: []checkout.Txn{{
+			ID: "t1", CustomerID: "h:c1", Segment: checkout.SegmentSMB, AmountMinor: 1000, Currency: "USD",
+			CreatedAt: at.Add(-10 * time.Minute), AuthedAt: at.Add(-10 * time.Minute),
+			CapturedAt: at.Add(-10 * time.Minute), // captured the instant it was authed
+			State:      checkout.StateCaptured,
+		}}},
+	}
+	sums := map[string]int64{}
+	for _, p := range InFlightPointsAt(res, at) {
+		if p.Name == "biz_inflight_value" {
+			sums[p.Labels["stage"]] += p.Value
+		}
+	}
+
+	cases := []struct {
+		stage string
+		want  int64
+	}{
+		{"capture", 0},
+		{"settle", 1000},
+	}
+	for _, c := range cases {
+		t.Run(c.stage, func(t *testing.T) {
+			if sums[c.stage] != c.want {
+				t.Fatalf("%s in-flight = %d, want %d (all: %v)", c.stage, sums[c.stage], c.want, sums)
 			}
 		})
 	}
