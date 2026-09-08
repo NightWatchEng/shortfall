@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "443740b369f58fcec3884944a172f1b86ddd7d24",
+  "base_sha": "d9c149df81b38e71e8152fd991b646f2bffe3bb0",
+  "rules_version": "a3f6dbfa21cd",
+  "reviewed_at": "2026-09-08T22:32:04+00:00",
+  "range_patch_ids": [
+    "8a3d3207f7304618f9634709f28cd9cec5fb0a40"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (independent context) \u2014 combined reviewer + cross-examiner pass for a trivial docs-only diff, round 1 on head 443740b; verified diff scope, the archive URL and asset, every Status claim against the tree, docsnippets and symbolcheck in a scratch clone, remaining v0.3.0 mentions; raw output round-docs136/reviewers/code-reviewer.json (2 candidates, both refuted)"
+    }
+  ],
+  "records": [
+    {
+      "ts": "2026-09-08T22:32:04+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "443740b369f58fcec3884944a172f1b86ddd7d24",
+      "base_sha": "d9c149df81b38e71e8152fd991b646f2bffe3bb0",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "README.md",
+      "line": 324,
+      "severity": "LOW",
+      "finding": "The new 'Since v0.3.0 ...' summary names four changes but v0.3.0..v0.4.0 also carries #130 (the CLI's `version` verb, `reconcile --format`) and the Stripe stage map from #131; the sentence could be read as the full delta.",
+      "evidence": "git log --oneline v0.3.0..v0.4.0 lists #130..#134; git merge-base --is-ancestor 9f0d07b v0.3.0 fails, so #130 is new in v0.4.0. README.md:322-326 at head names only ADR-0019, ADR-0020, check-events and query.Combine.",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.4",
+      "reason": "REFUTED by the combined pass's cross-examination: Not a false statement: every item the sentence names is true in the head tree, and the sentence does not claim to be exhaustive (it is a Status summary, not a changelog; the release notes carry the full delta). An omission in a non-exhaustive summary is not a stale or false claim under docs-accuracy.",
+      "id": "e7f8c79d4ca04304"
+    },
+    {
+      "ts": "2026-09-08T22:32:04+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "443740b369f58fcec3884944a172f1b86ddd7d24",
+      "base_sha": "d9c149df81b38e71e8152fd991b646f2bffe3bb0",
+      "rule_id": "unmapped:missing-signoff-trailer",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "(commit 443740b)",
+      "line": 0,
+      "severity": "LOW",
+      "finding": "The commit carries no Signed-off-by trailer, which CONTRIBUTING names as the DCO convention.",
+      "evidence": "git log -1 --format='%(trailers:only)' 443740b prints nothing. CONTRIBUTING.md:60-62: 'Sign-off is a stated convention, not yet machine-checked ... reviewers may ask for it.'",
+      "status": "refuted",
+      "origin": "interactive",
+      "bead": "workspace-a8q.4",
+      "reason": "REFUTED by the combined pass's cross-examination: CONTRIBUTING explicitly says sign-off is not enforced, and none of the five preceding commits on main (#131-#135) carry the trailer either, so this branch matches the repository's actual practice. The commit header does satisfy the enforced rule: `docs: <summary> (workspace-a8q.4)`, no scope, 79 bytes, single tracked id.",
+      "id": "74d8c4aa6cf93664"
+    }
+  ]
+}

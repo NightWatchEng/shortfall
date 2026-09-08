@@ -319,9 +319,12 @@ and `engine` packages, and
 
 ## Status
 
-v0.3.0 is released and meant to be used: the library installs with `go
+v0.4.0 is released and meant to be used: the library installs with `go
 get`, the CLI installs with `go install` or as a release archive with
-checksums, and every leg described above is implemented.
+checksums, and every leg described above is implemented. Since v0.3.0 the
+deferred leg also grounds from outcome events (ADR-0019), the registry's
+baseline, recovery and reconcile blocks are optional (ADR-0020), the CLI
+gained `check-events`, and `query.Combine` is exported.
 
 What is unsettled is the shape of the public interfaces, not whether they
 work. That is what v0.x means here, and the paragraph below is the whole

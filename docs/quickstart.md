@@ -72,8 +72,8 @@ Prefer not to build? Every release also carries archives with checksums:
 
 ```sh
 # pick your platform; darwin_arm64 shown
-curl -sSLO https://github.com/NightWatchEng/shortfall/releases/download/v0.3.0/shortfall_0.3.0_darwin_arm64.tar.gz
-tar xzf shortfall_0.3.0_darwin_arm64.tar.gz
+curl -sSLO https://github.com/NightWatchEng/shortfall/releases/download/v0.4.0/shortfall_0.4.0_darwin_arm64.tar.gz
+tar xzf shortfall_0.4.0_darwin_arm64.tar.gz
 
 ./shortfall validate registry.yaml
 # registry.yaml: ok — 1 flow(s), 2 segment(s)
