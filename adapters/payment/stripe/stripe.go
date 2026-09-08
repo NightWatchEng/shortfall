@@ -101,20 +101,22 @@ type mapConfig struct {
 	stages map[string]string
 }
 
-// WithStageMap renames the stages this adapter emits — the keys are the
-// adapter's defaults ("auth", "capture", "settle", "dispute"), the values
-// are the names the flow registry declares. A registry that calls Stripe's
-// capture stage "charge" passes {"capture": "charge"}; unnamed stages keep
-// their defaults. A key this adapter never emits is a typo that would
-// otherwise remap nothing while looking configured, so it panics at
-// construction rather than surfacing as stage="unregistered" on a
-// dashboard during an incident.
+// WithStageMap renames the stages the webhook path emits — the keys are
+// the adapter's defaults ("auth", "capture", "settle", "dispute"), the
+// values are the names the flow registry declares. A registry that calls
+// Stripe's capture stage "charge" passes {"capture": "charge"}; unnamed
+// stages keep their defaults. The wrapped backend emits "auth" too, from
+// its own constructor: hand the same map to WithBackendStageMap so one
+// transaction never lands under two names.
+//
+// The map is validated once, at construction, and a bad entry panics
+// rather than surfacing as stage="unregistered" on a dashboard during an
+// incident: a key this adapter never emits is a typo that would remap
+// nothing while looking configured, and a value that is not a registry-
+// shaped stage name (lowercase [a-z0-9._-], 1–32 bytes) would have every
+// webhook for that stage dropped at Record.
 func WithStageMap(stages map[string]string) Option {
-	for from := range stages {
-		if !emitsStage(from) {
-			panic(fmt.Sprintf("stripe: WithStageMap: %q is not a stage this adapter emits", from))
-		}
-	}
+	validateStageMap(stages)
 
 	return func(c *mapConfig) {
 		if c.stages == nil {
@@ -127,8 +129,45 @@ func WithStageMap(stages map[string]string) Option {
 	}
 }
 
-// emitsStage reports whether some mapped event produces the stage.
+// validateStageMap is the shared fence for WithStageMap and
+// WithBackendStageMap.
+func validateStageMap(stages map[string]string) {
+	for from, to := range stages {
+		if !emitsStage(from) {
+			panic(fmt.Sprintf("stripe: stage map: %q is not a stage this adapter emits", from))
+		}
+
+		if !stageShaped(to) {
+			panic(fmt.Sprintf("stripe: stage map: %q -> %q is not a registry stage name (lowercase [a-z0-9._-], 1-32 bytes)", from, to))
+		}
+	}
+}
+
+// stageShaped mirrors the biz stage-name fence, so a remap target that
+// Record would reject is refused here instead.
+func stageShaped(s string) bool {
+	if s == "" || len(s) > 32 {
+		return false
+	}
+
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+// emitsStage reports whether some mapped event, or the wrapped backend's
+// synchronous auth path, produces the stage.
 func emitsStage(stage string) bool {
+	if stage == authStage {
+		return true
+	}
+
 	for _, m := range eventMap {
 		if m.stage == stage {
 			return true

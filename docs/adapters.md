@@ -197,7 +197,9 @@ defer em.Close(ctx)
   Stripe backend to observe provider calls and maps webhooks to
   `biz.Outcome`s, under the stage names `auth`, `capture`, `settle` and
   `dispute` — `stripe.WithStageMap` renames them to what your registry
-  declares. See the [money path](architecture/money-path.md).
+  declares, and the same map goes to `stripe.WithBackendStageMap` so the
+  wrapped client's synchronous `auth` failures land under the same name.
+  See the [money path](architecture/money-path.md).
 - `adapters/incident/slack` — posts and refreshes the impact ledger in
   the incident channel: `slack.New(token).Post(ctx, channel, report)`,
   or `Refresh` to keep one message live as the incident evolves.

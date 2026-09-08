@@ -188,3 +188,27 @@ func TestBackendObservesEveryCallAndEmitsAuthFailure(t *testing.T) {
 		t.Fatal("no biz metadata -> no groundable auth outcome")
 	}
 }
+
+func TestWithBackendStageMapRenamesTheAuthOutcome(t *testing.T) {
+	cases := []struct {
+		name      string
+		stages    map[string]string
+		wantStage string
+	}{
+		{"auth remapped", map[string]string{"auth": "authorize", "capture": "charge"}, "authorize"},
+		{"map without auth keeps the default", map[string]string{"capture": "charge"}, "auth"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var auths []biz.Outcome
+			b := WrapBackend(&fakeBackend{err: &stripe.Error{HTTPStatusCode: 503}},
+				WithAuthOutcome(func(o biz.Outcome) { auths = append(auths, o) }),
+				WithBackendStageMap(c.stages),
+			)
+			_ = b.Call("POST", "/v1/payment_intents", "", piParams(14900, "usd", true), nil)
+			if len(auths) != 1 || auths[0].Stage != c.wantStage {
+				t.Fatalf("auth outcomes = %+v, want one at stage %q", auths, c.wantStage)
+			}
+		})
+	}
+}

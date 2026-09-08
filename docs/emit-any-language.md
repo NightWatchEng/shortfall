@@ -73,11 +73,11 @@ produced:
 Three things a JSON library will get wrong on your behalf:
 
 - **Types are the contract.** `"14900"` is not `14900`, and `"false"` is
-  not `false`. A reader that compares by value alone would accept both;
-  the engine does not.
+  not `false`. A lenient reader may decode the quoted numeral; the checker
+  below rejects it, because the contract vector a port is held to would.
 - **Absent, not empty.** An optional fact you do not have is a key you do
   not write. `"biz.segment": ""` is a claim that the segment is the empty
-  string, and it is rejected by the checker below.
+  string, and the checker below rejects it.
 - **No PII.** Entity id, customer id, source and error text are checked
   for email addresses, card numbers (Luhn-valid 13–19 digit runs) and
   IBANs, and rejected. Hash the account id before it reaches the event;
@@ -134,10 +134,13 @@ events.jsonl: 5 event(s) ok, 2 rejected
 ```
 
 Exit status is 0 when every line passes and 1 otherwise, so the check
-runs in CI against a fixture your service's test suite writes. A file may
-carry an `at` field (RFC 3339) per line to stand in for the store's
-timestamp; nothing else outside the table above is allowed under the
-`biz.` prefix.
+runs in CI against a fixture your service's test suite writes. It is
+stricter than the stores' own readers where the contract is: the `event`
+marker must be present, because the log-store queriers select on it and a
+line without it is never read back; numbers must be JSON numbers; and the
+optional keys must be absent rather than empty. A file may carry an `at`
+field (RFC 3339) per line to stand in for the store's timestamp; nothing
+else outside the table above is allowed under the `biz.` prefix.
 
 A minimal producer, in Python, to show how little there is:
 

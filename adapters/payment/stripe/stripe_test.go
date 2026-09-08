@@ -199,23 +199,30 @@ func postWebhook(t *testing.T, h http.Handler, payload []byte, sig string) *http
 
 func TestWithStageMapRemapsMappedStages(t *testing.T) {
 	created := time.Date(2026, 8, 27, 14, 0, 0, 0, time.UTC)
-	payload, sig := fixture(t, "payment_intent.payment_failed", created, `{"amount":14900,"currency":"usd",`+meta+`}`)
-
-	// A registry that names Stripe's capture stage "charge" and leaves the
-	// rest alone: only the named stage moves, every other mapping is intact.
-	out, mapped, err := VerifyAndMap(payload, sig, testSecret, WithStageMap(map[string]string{"capture": "charge"}))
-	if err != nil || !mapped {
-		t.Fatalf("mapped=%v err=%v", mapped, err)
+	remap := map[string]string{"capture": "charge"}
+	cases := []struct {
+		name       string
+		eventType  string
+		objectJSON string
+		wantStage  string
+	}{
+		// A registry that names Stripe's capture stage "charge": only the
+		// named stage moves, every other mapping keeps its default.
+		{"named stage moves", "payment_intent.payment_failed", `{"amount":14900,"currency":"usd",` + meta + `}`, "charge"},
+		{"unnamed stage keeps its default", "invoice.paid", `{"amount_paid":9900,"currency":"usd",` + meta + `}`, "settle"},
 	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			payload, sig := fixture(t, c.eventType, created, c.objectJSON)
+			out, mapped, err := VerifyAndMap(payload, sig, testSecret, WithStageMap(remap))
+			if err != nil || !mapped {
+				t.Fatalf("mapped=%v err=%v", mapped, err)
+			}
 
-	if out.Stage != "charge" {
-		t.Fatalf("stage = %q, want the remapped %q", out.Stage, "charge")
-	}
-
-	payload, sig = fixture(t, "invoice.paid", created, `{"amount_paid":9900,"currency":"usd",`+meta+`}`)
-	out, _, err = VerifyAndMap(payload, sig, testSecret, WithStageMap(map[string]string{"capture": "charge"}))
-	if err != nil || out.Stage != "settle" {
-		t.Fatalf("an unnamed stage must keep its default: stage=%q err=%v", out.Stage, err)
+			if out.Stage != c.wantStage {
+				t.Fatalf("stage = %q, want %q", out.Stage, c.wantStage)
+			}
+		})
 	}
 }
 
@@ -234,12 +241,32 @@ func TestWithStageMapReachesTheHandler(t *testing.T) {
 	}
 }
 
-func TestWithStageMapRejectsAnUnknownDefaultStage(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("remapping a stage this adapter never emits must panic: it is a typo, not a configuration")
-		}
-	}()
+func TestStageMapRejectsBadEntriesAtConstruction(t *testing.T) {
+	cases := []struct {
+		name   string
+		stages map[string]string
+	}{
+		{"key this adapter never emits", map[string]string{"captur": "charge"}},
+		{"empty target", map[string]string{"capture": ""}},
+		{"uppercase target", map[string]string{"capture": "Charge"}},
+		{"target over 32 bytes", map[string]string{"capture": strings.Repeat("c", 33)}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			for _, build := range []func(){
+				func() { WithStageMap(c.stages) },
+				func() { WithBackendStageMap(c.stages) },
+			} {
+				func() {
+					defer func() {
+						if recover() == nil {
+							t.Fatal("a map entry Record would drop must panic at construction, not during an incident")
+						}
+					}()
 
-	WithStageMap(map[string]string{"captur": "charge"})
+					build()
+				}()
+			}
+		})
+	}
 }

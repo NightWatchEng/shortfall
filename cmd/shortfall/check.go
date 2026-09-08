@@ -41,12 +41,27 @@ var knownKeys = map[string]bool{
 	"source_system": true,
 }
 
+// numericKeys must be JSON numbers on the wire. The decoder happens to
+// tolerate a quoted numeral, so this check is stricter than it: a producer
+// that writes "14900" has a type bug the contract vector would fail it on,
+// and this verb exists to say so before a store does.
+var numericKeys = []string{biz.AttrAmountMinor, biz.AttrExponent}
+
+// absentNotEmpty are the optional keys the contract requires to be absent
+// rather than empty (testkit/vectors/outcome-event.json, required_only).
+// An empty string decodes to the same zero value absence does, so only a
+// check at the raw-JSON layer can tell them apart.
+var absentNotEmpty = []string{biz.AttrSegment, biz.AttrSLADeadline, biz.AttrSource, biz.AttrError, biz.AttrTraceID}
+
 // runCheckEvents implements `shortfall check-events <file.jsonl>`: every
 // non-blank line is decoded as one outcome event on the wire contract and
 // validated at the biz boundary — the same fences emit.Record applies —
 // so a service written in another language can prove its events would be
-// accepted before any land in a store. Exit 0 when every line passes, 1
-// when any is rejected (each named by line and defect), 2 on usage.
+// accepted before any land in a store. It is stricter than the decoders
+// where the contract is: the event marker must be present, numbers must be
+// numbers, and optional facts must be absent rather than empty. Exit 0
+// when every line passes, 1 when any is rejected (each named by line and
+// defect), 2 on usage.
 func runCheckEvents(args []string, stdout, stderr io.Writer) int {
 	if len(args) != 1 {
 		wln(stderr, "usage: shortfall check-events <events.jsonl>")
@@ -92,8 +107,10 @@ func runCheckEvents(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// checkEventLine holds one line to the contract: unknown biz.* keys are
-// rejected, at (if present) must parse, and the decoded outcome must pass
+// checkEventLine holds one line to the contract: the event marker must
+// name this library's record, unknown biz.* keys are rejected, numbers
+// must be JSON numbers, optional facts must be absent rather than empty,
+// at (if present) must parse, and the decoded outcome must pass
 // biz.Outcome.Validate.
 func checkEventLine(raw []byte) error {
 	var fields map[string]json.RawMessage
@@ -104,6 +121,25 @@ func checkEventLine(raw []byte) error {
 	for k := range fields {
 		if strings.HasPrefix(k, "biz.") && !knownKeys[k] {
 			return fmt.Errorf("%s is not in the outcome-event contract (biz/semconv.go)", k)
+		}
+	}
+
+	// The log-store queriers select on this marker; a line without it is
+	// never read back, however well-formed the rest is.
+	var marker string
+	if raw, ok := fields[biz.EventKey]; !ok || json.Unmarshal(raw, &marker) != nil || marker != biz.EventOutcome {
+		return fmt.Errorf("%s must be the string %q — the log-store queriers select on it", biz.EventKey, biz.EventOutcome)
+	}
+
+	for _, k := range numericKeys {
+		if raw, ok := fields[k]; ok && !isNumberToken(raw) {
+			return fmt.Errorf("%s must be a JSON number, not %s", k, raw)
+		}
+	}
+
+	for _, k := range absentNotEmpty {
+		if raw, ok := fields[k]; ok && string(raw) == `""` {
+			return fmt.Errorf("%s is present as an empty string — the contract requires it absent", k)
 		}
 	}
 
@@ -128,4 +164,11 @@ func checkEventLine(raw []byte) error {
 	}
 
 	return out.Validate()
+}
+
+// isNumberToken reports whether a raw JSON value is a number token rather
+// than a string or anything else — a leading digit or minus sign.
+func isNumberToken(raw json.RawMessage) bool {
+	t := strings.TrimSpace(string(raw))
+	return t != "" && (t[0] == '-' || (t[0] >= '0' && t[0] <= '9'))
 }

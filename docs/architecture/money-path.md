@@ -235,7 +235,7 @@ sequenceDiagram
         participant E as engine.Compute<br/>core module — four legs, strictly one at a time
     end
 
-    participant Q as combined query.Querier<br/>cmd/shortfall — promql for metrics, sql for events
+    participant Q as query.Combine(promql, sql)<br/>core module — one Querier, each verb to the side that owns it
 
     participant B as Your backends<br/>Prometheus + your event store
 
@@ -243,7 +243,7 @@ sequenceDiagram
         Note over O,Q: Phase 1 — the question
         O->>CLI: shortfall impact --registry r.yaml --from … --to …<br/>--scope stage=capture --prometheus … --sql …
         CLI->>R: registry.Load(r.yaml)
-        CLI->>Q: buildQuerier — combined{metrics: promql, events: sql}
+        CLI->>Q: buildQuerier — query.Combine(promql, sql)
         CLI->>E: Compute(ctx, reg, q, Request{Window, Scope, Flows})
     end
     Note over CLI,Q: The CLI owns both. The engine is handed a loaded registry value<br/>and a Querier — it opens no file and dials no backend of its own.
@@ -299,7 +299,7 @@ sequenceDiagram
 | # | Step | Mechanism / constraint |
 |---|---|---|
 | 1 | on-call → CLI | `--registry`, `--from` and `--to` are required (RFC3339); `--scope k=v` and `--flow` repeat. With neither `--prometheus` nor `--sql` the command exits 2 before reaching the engine — there is no default backend |
-| 3 | CLI → querier | With both flags the CLI builds a `combined` `Querier` over the two nested modules. `Capabilities()` takes **each field from the backend that owns it** — not an intersection: PromQL reports `Events: false` and SQL reports `Metrics: false`, so ANDing them would leave every leg ungrounded |
+| 3 | CLI → querier | With both flags the CLI pairs the two nested modules with `query.Combine`. Its `Capabilities()` takes **each field from the backend that owns it** — not an intersection: PromQL reports `Events: false` and SQL reports `Metrics: false`, so ANDing them would leave every leg ungrounded |
 | 5 | engine → querier | `Capabilities()` is asked **before every leg**. A leg whose capability is absent is skipped and marked, so the unsupported verb is never issued |
 | 6 | engine → querier | The recovery sweep: successes in the window, grouped `(currency, entity)`. It reads no money — it exists only to build the set of entities to exclude |
 | 7 | querier → backend | The adapter translates. **Every query in this diagram takes this hop**; it is drawn once because the constraint is the same each time |
