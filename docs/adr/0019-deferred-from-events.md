@@ -88,8 +88,9 @@ on. It carries the flow, stage, entity, amount and time of every
   past the `gt2h` floor never registers as breached. Exact ages would need
   a per-group timestamp aggregation on the query surface — a frozen-AST
   amendment left for a flow that needs it.
-- Five bounded event queries per flow, and only on the path where no gauge
-  grounded the leg.
+- Eight bounded event queries per flow — five nested-range reads of
+  `deferred`, one per terminal outcome — and only on the path where no
+  gauge grounded the leg.
 - A broker-depth in-flight source (queue attributes, consumer lag) remains
   a separate question: it yields counts, not money, and needs its own
   record.

@@ -629,7 +629,8 @@ func TestDeferredFromEventsAgreesWithTracker(t *testing.T) {
 // example's failure direction: the Lambda records ingest as deferred when
 // payments-service answers 5xx, payments-service itself is down and publishes
 // no gauge, and the events store is all the report has. The leg must show
-// the backlog, aged and projected against the process stage's SLA.
+// the backlog, aged and projected against the ingest stage's SLA — the
+// stage the deferral was recorded at.
 func TestDeferredFromEventsSeesAPaymentsServiceOutage(t *testing.T) {
 	reg, err := registry.Parse([]byte(`
 version: 1

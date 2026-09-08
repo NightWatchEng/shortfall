@@ -144,12 +144,14 @@ func TestPromQLParityAgainstRealPrometheus(t *testing.T) {
 			}
 
 			res := checkout.Run(checkout.Config{Seed: 5, Start: start, End: end, Faults: faults, Curve: &flat})
-			// Snapshot the in-flight gauge one minute before the window closes.
-			// A sample stamped exactly at To (MetricsFromResult's default, the
-			// run end == window end here) is dropped by the half-open [From,To)
+			// Snapshot the in-flight gauge once, one minute before the window
+			// closes, rather than taking MetricsFromResult's two publishes
+			// (End-15s and End): a single sample at a known instant is what the
+			// gauge parity compares, and a sample stamped exactly at To (run
+			// end == window end here) is dropped by the half-open [From,To)
 			// read on both sides — memq excludes At>=To and the promql adapter
-			// evaluates last_over_time at To-1ms — so it would make the gauge
-			// parity vacuous. Inside the window it exercises last_over_time.
+			// evaluates last_over_time at To-1ms — which would make the parity
+			// vacuous. Inside the window it exercises last_over_time.
 			gaugeAt := end.Add(-time.Minute)
 			points := testkit.MetricsFromResultAt(res, gaugeAt)
 			if len(points) == 0 {
