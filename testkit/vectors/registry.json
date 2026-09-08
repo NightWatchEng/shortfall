@@ -427,6 +427,27 @@
       "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 0, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
     },
     {
+      "name": "baseline_empty_block",
+      "note": "a present, empty block is validated in full and fails its first rule — it is not the absent block (ADR-0020)",
+      "error": "baseline_seasonality",
+      "reference_message": "flow invoice.pay: baseline seasonality \"\" is not supported (hour_of_week)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline: {}\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "recovery_empty_block",
+      "note": "a present, empty block is validated in full and fails its first rule — it is not the absent block (ADR-0020)",
+      "error": "recovery_model",
+      "reference_message": "flow invoice.pay: recovery model \"\" is not supported (usage_loss_curve)",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery: {}\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n"
+    },
+    {
+      "name": "reconcile_empty_block",
+      "note": "a present, empty block names no source — it is not the absent block (ADR-0020)",
+      "error": "reconcile_source_required",
+      "reference_message": "flow invoice.pay: reconcile block names no source — name the ledger coverage is measured against, or omit the block",
+      "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [USD]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 2, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: {}\n"
+    },
+    {
       "name": "recovery_model",
       "error": "recovery_model",
       "reference_message": "flow invoice.pay: recovery model \"linear\" is not supported (usage_loss_curve)",

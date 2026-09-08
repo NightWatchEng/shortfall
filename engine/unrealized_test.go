@@ -637,3 +637,61 @@ func TestUnrealizedAbsentBlocks(t *testing.T) {
 		})
 	}
 }
+
+// TestUnrealizedThinCurrencyGetsNoEntry pins the per-currency half of the
+// ADR-0020 marker: when one currency is sized and another has baseline
+// history only at other hours, the second gets no entry in the ranges — an
+// entry of zero beside a sized currency would render as a measured zero.
+func TestUnrealizedThinCurrencyGetsNoEntry(t *testing.T) {
+	baseMon := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	const hour = 10 * time.Hour
+	incident := baseMon.Add(7*24*time.Hour + hour)
+	eur := func(name, stage string, at time.Time, v int64) emit.MetricPoint {
+		labels := map[string]string{"flow": "invoice.pay", "stage": stage, "outcome": "success", "currency": "EUR", "segment": "smb"}
+		if name == "biz_value_total" {
+			labels["kind"] = "fee"
+		}
+
+		return emit.MetricPoint{Name: name, Value: v, At: at, Labels: labels}
+	}
+	pts := []emit.MetricPoint{
+		txnPoint("auth", "success", baseMon.Add(hour), 100), // USD: history at the incident hour
+		txnPoint("auth", "success", incident, 40),
+		txnPoint("settle", "success", incident, 40),
+		valuePoint("settle", "success", incident, 200000),
+		eur("biz_txn_total", "auth", baseMon.Add(hour+time.Hour), 100), // EUR: history at another hour only
+		eur("biz_txn_total", "auth", incident, 10),
+		eur("biz_txn_total", "settle", incident, 10),
+		eur("biz_value_total", "settle", incident, 50000),
+	}
+	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
+	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
+	reg := optionalBlocksRegistry(t, "    baseline: { seasonality: hour_of_week, lookback_weeks: 1 }\n", "", true)
+	leg, err := Unrealized(context.Background(), reg, q, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name     string
+		currency string
+		wantSet  bool
+	}{
+		{"USD is sized and carries an estimate", "USD", true},
+		{"EUR is thin at every incident hour and carries no entry", "EUR", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, low := leg.LowMinor[c.currency]
+			_, mid := leg.MidMinor[c.currency]
+			_, high := leg.HighMinor[c.currency]
+			if low != c.wantSet || mid != c.wantSet || high != c.wantSet {
+				t.Fatalf("%s present in (low, mid, high) = (%v, %v, %v), want %v; maps %v %v %v", c.currency, low, mid, high, c.wantSet, leg.LowMinor, leg.MidMinor, leg.HighMinor)
+			}
+		})
+	}
+
+	if leg.Unavailable || leg.MidMinor["USD"] <= 0 || !hasNoteContaining(leg.Notes, "currency EUR") {
+		t.Fatalf("leg must be sized by USD and note EUR: unavailable=%v mid=%v notes=%v", leg.Unavailable, leg.MidMinor, leg.Notes)
+	}
+}

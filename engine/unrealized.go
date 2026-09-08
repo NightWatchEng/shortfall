@@ -39,7 +39,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 		Evidence:  EvidenceEstimate,
 	}
 	if reg == nil {
-		leg.Notes = []string{"unavailable: the counterfactual leg needs a registry (baseline lookback, stages, recovery)"}
+		leg.Notes = []string{"unavailable: the counterfactual leg needs a registry (the flow's stages and baseline lookback)"}
 		leg.Unavailable = true
 		return leg, nil
 	}
@@ -165,6 +165,7 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			recovery := clampFraction(flow.Recovery.RecoveredFraction)
 			observedAt := hourMap(obs[currency])
 			var low, mid, high float64
+			valued := false
 			for i, e := range exp {
 				if e.N == 0 {
 					thin = true
@@ -172,14 +173,21 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 				}
 
 				// An hour with history and a valued AOV is an estimate; only
-				// then is the leg sized. A flow whose every incident hour is
-				// thin, or that has no AOV, contributes nothing and must not
-				// turn empty ranges into a measured zero.
-				sized = true
+				// then is this currency valued and the leg sized. A currency
+				// whose every incident hour is thin gets no entry at all — an
+				// entry of zero would render as a measured zero beside the
+				// currencies that were sized.
+				valued, sized = true, true
 				o := observedAt[hourKey(target[i])]
 				low += shortfallValue(e.Lower, o, aov, recovery)
 				mid += shortfallValue(e.Expected, o, aov, recovery)
 				high += shortfallValue(e.Upper, o, aov, recovery)
+			}
+
+			if !valued {
+				notes = append(notes, fmt.Sprintf(
+					"flow %q currency %s: no baseline history for any incident hour — not valued", flowName, currency))
+				continue
 			}
 
 			leg.LowMinor[currency] += int64(math.Round(low))

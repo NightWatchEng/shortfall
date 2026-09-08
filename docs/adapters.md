@@ -93,9 +93,9 @@ both signals, so the engine gets one adapter per signal kind — paired with
 owns its signal and takes each `Capabilities()` field from that side — and
 each declares the other unsupported: `cwinsights` or `gcplogging` grounds the
 realized, customer and (from `deferred` outcomes) deferred legs from
-events, and `promql` grounds the unrealized and baseline legs — and the
-deferred leg from the gauge, which takes precedence — against a
-Prometheus-compatible metrics store (on GCP, Managed Service for Prometheus, fed by
+events, and `promql` grounds the unrealized leg — for a flow whose
+registry declares a `baseline` — and the deferred leg from the gauge,
+which takes precedence, against a Prometheus-compatible metrics store (on GCP, Managed Service for Prometheus, fed by
 `adapters/export/otlp`). That is why `query.Caps` carries `Metrics` and
 `Events` independently: an events-only querier returns
 `query.ErrUnsupported` from `QueryMetric`, and the engine turns that into

@@ -32,7 +32,9 @@ loads, and the leg that needs it reports itself unavailable rather than
 guessing (6.3). A key whose value is null — a bare `baseline:`, `~` or
 `null` — is an absent block, exactly as omission is; the `null_blocks`
 acceptance vector pins it. A present *mapping* — the empty `{}` included
-— is validated in full under the classes of 4.3.
+— is validated in full under the classes of 4.3; the `baseline_empty_block`,
+`recovery_empty_block` and `reconcile_empty_block` rejection vectors pin
+that an empty mapping is not the absent block.
 
 ### 4.2 Validation rules that are easy to get wrong
 
