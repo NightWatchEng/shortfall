@@ -388,6 +388,7 @@ func buildRegistryVectors() testkit.RegistryVectors {
 	}{
 		{"reference", "the shape docs/registry.md documents", baseYAML},
 		{"minimal", "every optional block omitted; value_stage falls back to the last stage (ADR-0016)", minimalYAML},
+		{"null_blocks", "baseline, recovery and reconcile keys present with null values are absent blocks, the same as omission (ADR-0020)", minimalYAML + "    baseline:\n    recovery: ~\n    reconcile: null\n"},
 		{
 			"zero_exponent_estimator",
 			"a JPY flow's estimator declares exponent 0, so an estimate cannot inherit a 100x error",

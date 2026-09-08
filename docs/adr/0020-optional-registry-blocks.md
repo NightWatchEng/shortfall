@@ -25,9 +25,11 @@ into the file to do it.
 ## Decision
 
 - **The three blocks are optional.** A flow with no `baseline`, no
-  `recovery` and no `reconcile` block loads. A block that is present —
-  `baseline: {}` included — is validated in full, exactly as before: an
-  empty block is a typo, and the way to declare no block is to omit it.
+  `recovery` and no `reconcile` block loads, and a key with a null value
+  (`baseline:`, `~`, `null`) is the same as omission. A block that is
+  present as a mapping — `baseline: {}` included — is validated in full,
+  exactly as before: an empty block is a typo, and the way to declare no
+  block is to omit it.
 - **No baseline: the unrealized leg is unavailable, naming the block.**
   The leg is now marked `Unavailable` whenever no requested flow could be
   sized, which it was not before (it returned empty maps a renderer could

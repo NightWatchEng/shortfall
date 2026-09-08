@@ -29,8 +29,10 @@ optional; everything present is required. The `baseline`, `recovery` and
 `reconcile` blocks are optional since
 [ADR-0020](../adr/0020-optional-registry-blocks.md): an absent block
 loads, and the leg that needs it reports itself unavailable rather than
-guessing (6.3); a present block — empty included — is validated in full
-under the classes of 4.3.
+guessing (6.3). A key whose value is null — a bare `baseline:`, `~` or
+`null` — is an absent block, exactly as omission is; the `null_blocks`
+acceptance vector pins it. A present *mapping* — the empty `{}` included
+— is validated in full under the classes of 4.3.
 
 ### 4.2 Validation rules that are easy to get wrong
 

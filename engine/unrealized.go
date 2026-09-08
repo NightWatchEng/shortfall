@@ -103,7 +103,6 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			))
 		}
 
-		sized = true
 		entryStage := flow.Stages[0].Name
 
 		// Query observed over the aligned span [target[0], lastTarget+1h), not
@@ -121,6 +120,16 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			return EstLeg{}, fmt.Errorf("engine: unrealized observed query: %w", err)
 		}
 
+		// No entry-stage history in the lookback means nothing to fit a
+		// baseline against: the flow is not sized, and the leg says so
+		// rather than returning empty ranges that render as zero.
+		if len(hist) == 0 {
+			notes = append(notes, fmt.Sprintf(
+				"flow %q: no entry-stage history in the %d-week lookback — nothing to fit a baseline against; not sized",
+				flowName, flow.Baseline.LookbackWeeks))
+			continue
+		}
+
 		for currency, histSamples := range hist {
 			exp, err := (baseline.HourOfWeek{}).Expected(
 				histSamples,
@@ -130,6 +139,8 @@ func Unrealized(ctx context.Context, reg *registry.Registry, q query.Querier, re
 			if err != nil {
 				return EstLeg{}, fmt.Errorf("engine: unrealized baseline: %w", err)
 			}
+
+			sized = true // a baseline was fitted for this currency
 
 			aov, aovSource, warn, ok := aovMinor(ctx, q, flowName, currency, flow, req.Window)
 			if warn != "" {

@@ -118,6 +118,44 @@
       }
     },
     {
+      "name": "null_blocks",
+      "note": "baseline, recovery and reconcile keys present with null values are absent blocks, the same as omission (ADR-0020)",
+      "yaml": "version: 1\nsegments: [default]\nflows:\n  checkout:\n    money: { kind: gmv }\n    stages:\n      - { name: pay, signals: [\"http:POST /pay\"] }\n    baseline:\n    recovery: ~\n    reconcile: null\n",
+      "facts": {
+        "version": 1,
+        "segments": [
+          "default"
+        ],
+        "allow_hosts": [],
+        "flows": {
+          "checkout": {
+            "kind": "gmv",
+            "stages": [
+              {
+                "name": "pay",
+                "signals": [
+                  "http:POST /pay"
+                ]
+              }
+            ],
+            "value_stage": "pay",
+            "baseline": {
+              "seasonality": "",
+              "lookback_weeks": 0
+            },
+            "recovery": {
+              "model": "",
+              "recovered_fraction": 0,
+              "within_seconds": 0
+            },
+            "reconcile": {
+              "source": ""
+            }
+          }
+        }
+      }
+    },
+    {
       "name": "zero_exponent_estimator",
       "note": "a JPY flow's estimator declares exponent 0, so an estimate cannot inherit a 100x error",
       "yaml": "version: 1\nsegments: [smb, enterprise]\npropagation:\n  allow_hosts: [\"*.internal.example.com\", \"api.example.com\"]\nseverity:\n  - { sev: SEV1, min_per_minute: 100000 }\n  - { sev: SEV2, min_per_minute: 10000 }\nflows:\n  invoice.pay:\n    money: { kind: fee }\n    currencies: [JPY]\n    stages:\n      - { name: auth,    signals: [\"http:POST /pay\"] }\n      - { name: capture, signals: [\"queue:capture.q\"] }\n    sla:\n      capture: { deadline: PT30M, on_breach: lost }\n    estimator: { default_minor: 18750, exponent: 0, by_segment: { smb: 14200 } }\n    baseline:  { seasonality: hour_of_week, lookback_weeks: 8, holidays: us }\n    recovery:  { model: usage_loss_curve, recovered_fraction: 0.6, within: PT2H }\n    reconcile: { source: \"sql:ledger.payments\", stage: capture }\n",

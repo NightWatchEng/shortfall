@@ -572,23 +572,30 @@ func TestUnrealizedAbsentBlocks(t *testing.T) {
 		txnPoint("settle", "success", incident, 40),
 		valuePoint("settle", "success", incident, 200000),
 	}
-	q := memq.New(memq.WithMetrics(pts), memq.WithCaps(query.Caps{Metrics: true}))
 	req := Request{Window: query.TimeRange{From: incident, To: incident.Add(time.Hour)}, Flows: []string{"invoice.pay"}}
 	const withBaseline = "    baseline: { seasonality: hour_of_week, lookback_weeks: 1 }\n"
 	cases := []struct {
 		name            string
 		baseline        string
 		recovery        string
+		noHistory       bool // drop the lookback's history point: nothing to fit against
 		wantUnavailable bool
 		wantNote        string
 		wantNoNote      string
 	}{
-		{"no baseline: unavailable, naming the block", "", "", true, "declares no baseline", ""},
-		{"no recovery: sized gross, and the note says so", withBaseline, "", false, "declares no recovery", ""},
-		{"declared zero recovery: sized gross, no note", withBaseline, "    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n", false, "", "recovery"},
+		{"no baseline: unavailable, naming the block", "", "", false, true, "declares no baseline", ""},
+		{"baseline but no history in the lookback: unavailable, not sized", withBaseline, "", true, true, "nothing to fit a baseline against", ""},
+		{"no recovery: sized gross, and the note says so", withBaseline, "", false, false, "declares no recovery", ""},
+		{"declared zero recovery: sized gross, no note", withBaseline, "    recovery: { model: usage_loss_curve, recovered_fraction: 0 }\n", false, false, "", "recovery"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			points := pts
+			if c.noHistory {
+				points = pts[1:]
+			}
+
+			q := memq.New(memq.WithMetrics(points), memq.WithCaps(query.Caps{Metrics: true}))
 			leg, err := Unrealized(context.Background(), optionalBlocksRegistry(t, c.baseline, c.recovery), q, req)
 			if err != nil {
 				t.Fatal(err)

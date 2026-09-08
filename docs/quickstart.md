@@ -209,9 +209,10 @@ They ride the **outcome event** `Record` builds alongside each metric
 point instead — and this exporter throws those away. Prometheus has no
 place for them, so `adapters/export/prometheus` declares `Events: false`
 and keeps that promise. What you are seeing is the metrics half of the
-signal. That is enough for the deferred and unrealized legs and a
-realized upper bound; the exact de-duplicated realized figure and the
-customer list need the events, which means a second exporter — see
+signal. That is enough for the deferred leg and a realized upper bound —
+and for the unrealized leg once the registry declares a `baseline`,
+which this one does not yet; the exact de-duplicated realized figure and
+the customer list need the events, which means a second exporter — see
 [backends & adapters](adapters.md).
 
 You can already answer the 3am question with PromQL:
@@ -234,10 +235,12 @@ Using the binary from step 2:
   --flow invoice.pay --prometheus http://prometheus:9090
 ```
 
-Metrics alone ground the deferred and unrealized legs and a realized
-upper bound; the exact, de-duplicated realized figure and the customer
-list need the outcome events, so pair a metrics backend with an events
-one. Which backend grounds which leg is in
+Metrics alone ground the deferred leg and a realized upper bound. The
+unrealized leg needs metrics *and* a `baseline` block in the registry —
+with this registry that line reads unavailable and names the missing
+block, as step 2 said — and the exact, de-duplicated realized figure and
+the customer list need the outcome events, so pair a metrics backend with
+an events one. Which backend grounds which leg is in
 [backends & adapters](adapters.md).
 
 - [Integration guide](integration.md) — the real thing: multiple stages, queue backlog, propagation across services.
