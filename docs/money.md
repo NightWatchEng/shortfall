@@ -37,7 +37,9 @@ so you can act on each correctly:
 - **Deferred value** — money in flight or backlogged (queues, retries), by age.
   It is **not lost yet**. The registry's SLA says when a stage's deadline turns
   a delay into loss (`on_breach: lost`) versus merely at risk (`at_risk`). A
-  large deferred number during an incident is a warning, not a bill.
+  large deferred number during an incident is a warning, not a bill. It is
+  read from the in-flight gauge when one is published, and from the
+  `deferred` outcome events when none is — the report says which.
 - **Unrealized loss** — demand that never happened because the system was
   degraded (abandoned checkouts, upstream suppression). Those transactions do
   not exist in any log, so this is measured against a **baseline** forecast, and

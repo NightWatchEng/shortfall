@@ -153,12 +153,12 @@ func TestEvidenceTagsPresent(t *testing.T) {
 	}
 }
 
-// TestComputedEventsOnlyReportStatesDeferredGap drives engine.Compute over
-// an events-only backend (the shape the sql and cwinsights queriers
-// serve) and asserts the deferred leg's metrics-unavailable caveat survives
-// into both human renders — the exact plausible-looking zero this package
-// used to print.
-func TestComputedEventsOnlyReportStatesDeferredGap(t *testing.T) {
+// TestComputedEventsOnlyReportStatesDeferredSource drives engine.Compute
+// over an events-only backend (the shape the sql and cwinsights queriers
+// serve) and asserts the deferred leg's events-derived caveat survives into
+// both human renders and the summary shows the leg as measured — a leg this
+// package once printed as a plausible-looking zero, then as n/a.
+func TestComputedEventsOnlyReportStatesDeferredSource(t *testing.T) {
 	reg, err := registry.Load("../../registry/testdata/registry.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -176,17 +176,22 @@ func TestComputedEventsOnlyReportStatesDeferredGap(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The deferred leg is grounded from events on an events-only backend
+	// (ADR-0019); the renders must carry its caveat naming that source and
+	// the gauge it stands in for, and the summary must show it as measured.
 	for name, out := range map[string]string{"text": RenderText(rep), "markdown": RenderMarkdown(rep)} {
-		if !strings.Contains(out, "biz_inflight_value") {
-			t.Fatalf("%s render of an events-only report must state the deferred leg's missing metric source, got:\n%s", name, out)
+		if !strings.Contains(out, "events-derived") || !strings.Contains(out, "biz_inflight_value") {
+			t.Fatalf("%s render of an events-only report must state the deferred leg's events source, got:\n%s", name, out)
 		}
 	}
 
 	s := Summary(rep)
-	for _, marker := range []string{"deferred n/a", "unrealized n/a"} {
-		if !strings.Contains(s, marker) {
-			t.Fatalf("summary of an events-only report must carry %q, got: %q", marker, s)
-		}
+	if strings.Contains(s, "deferred n/a") || !strings.Contains(s, "deferred [deterministic]") {
+		t.Fatalf("summary of an events-only report must show deferred as measured, got: %q", s)
+	}
+
+	if !strings.Contains(s, "unrealized n/a") {
+		t.Fatalf("summary of an events-only report must carry \"unrealized n/a\", got: %q", s)
 	}
 }
 

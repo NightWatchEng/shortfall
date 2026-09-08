@@ -88,12 +88,17 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 
 	// Ground truth by hand: terminal txns and their failed value, plus the
 	// flow entries (txns that authed — each adds one entry-stage point).
-	var wantTerminal, wantEntered, wantAuthFailed int
+	var wantTerminal, wantEntered, wantAuthFailed, wantQueued int
 	var wantFailedValueUSD int64
 	var currencies = map[string]bool{}
 	for _, txn := range res.Ledger.Txns {
 		if !txn.AuthedAt.IsZero() {
 			wantEntered++
+			wantQueued++ // entered the capture queue
+		}
+
+		if !txn.CapturedAt.IsZero() {
+			wantQueued++ // entered the settle queue
 		}
 
 		_, result, _, visible := telemetryOutcome(txn)
@@ -117,9 +122,10 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 	full := query.TimeRange{From: start, To: start.Add(24 * time.Hour)}
 
 	// Metrics: the total biz_txn_total is one terminal point per terminal
-	// txn plus one entry-stage point per txn that entered the flow, and the
-	// entry-stage sum (over outcomes) counts every entry — successes via
-	// their entry point, auth failures via their terminal point.
+	// txn, one entry-stage point per txn that entered the flow, and one
+	// deferred point per queue entry; the entry-stage sum (over outcomes)
+	// counts every entry — successes via their entry point, auth failures
+	// via their terminal point — and no deferred point lands there.
 	sumTxn := func(filters map[string]string) int {
 		series, err := q.QueryMetric(ctx, query.Query{
 			Metric: "biz_txn_total", Agg: query.AggSum, Filters: filters, Range: full,
@@ -137,8 +143,16 @@ func TestQuerierFromResultServesLedgerWithNoBackend(t *testing.T) {
 
 		return int(got)
 	}
-	if got := sumTxn(nil); got != wantTerminal+wantEntered {
-		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d)", got, wantTerminal+wantEntered, wantTerminal, wantEntered)
+	if got := sumTxn(nil); got != wantTerminal+wantEntered+wantQueued {
+		t.Fatalf("biz_txn_total sum = %d, want %d (terminal %d + entered %d + queued %d)", got, wantTerminal+wantEntered+wantQueued, wantTerminal, wantEntered, wantQueued)
+	}
+
+	if wantQueued == 0 {
+		t.Fatal("fixture queued nothing — the deferred half of the sum would be vacuous")
+	}
+
+	if got := sumTxn(map[string]string{"outcome": "deferred"}); got != wantQueued {
+		t.Fatalf("deferred biz_txn_total sum = %d, want %d queue entries", got, wantQueued)
 	}
 
 	if wantAuthFailed == 0 {

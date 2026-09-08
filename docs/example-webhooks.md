@@ -102,7 +102,10 @@ func handle(ctx context.Context, wh ProviderWebhook) error {
 
     switch {
     case callErr != nil || resp.StatusCode >= 500:
-        em.Record(ctx, "ingest", biz.ResultDeferred) // accepted, not yet processed
+        // Accepted, not yet processed. This deferred outcome is what the
+        // deferred leg reads when payments-service is down and publishes
+        // no gauge (ADR-0019), so it is not decoration.
+        em.Record(ctx, "ingest", biz.ResultDeferred)
     case resp.StatusCode >= 400:
         em.Record(ctx, "ingest", biz.ResultFailed, emit.WithErr("rejected"))
     default:
@@ -161,14 +164,14 @@ door, so the report is deterministic:
 | Leg | Grounded by |
 |---|---|
 | Realized loss | `ingest`/`process` failures, summed, de-duped by `EntityID` |
-| Deferred value | the backlog the tracker publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`) |
+| Deferred value | the backlog the tracker publishes as `biz_inflight_value`, bucketed by age; past `PT30M` it projects to loss (`on_breach: lost`). When payments-service is down its tracker publishes nothing, and the leg is derived instead from the Lambda's `ingest` deferred outcomes with no later terminal outcome (ADR-0019) — the same backlog, aged from the first deferred event |
 | Customer impact | distinct hashed customers, segments and top accounts, from the ingest stamps |
 
 That is what the *signals* support. What you can read back depends on the
-adapters you wire, and with the CloudWatch wiring below it is less: the
-deferred leg is unreadable outright, and realized loss and customer
-impact only cover the stages whose log group your querier reads. §5 has
-the details.
+adapters you wire, and with the CloudWatch wiring below it is less: every
+leg covers only the stages whose log group your querier reads, and the
+deferred leg is the events-derived one, since the gauge lands in a store
+no shipped querier reads. §5 has the details.
 
 **Webhook Lambdas down.** The entry itself is dark, so no per-event
 telemetry exists — which is what the **unrealized loss** leg is for. The
@@ -221,11 +224,11 @@ you get:
 |---|---|---|
 | Realized loss | ✅ grounded, for the stages you read | events carry the amount and `EntityID`, so de-dup is exact |
 | Customer impact | ✅ grounded, for the stages you read | events carry the hashed customer and segment |
-| Deferred value | ⚠️ unavailable | needs the `biz_inflight_*` gauges; those land in CloudWatch's **metric** store, which no shipped querier reads |
+| Deferred value | ✅ grounded from events, with a caveat | the `biz_inflight_*` gauges land in CloudWatch's **metric** store, which no shipped querier reads, so the leg is derived from `ingest` deferred outcomes with no later terminal outcome (ADR-0019): exact value and count, ages at bucket granularity, projected loss against the SLA |
 | Unrealized loss | ⚠️ unavailable | needs `biz_txn_total` history for the baseline, same reason |
 | Coverage | ⚠️ read the caveat | `engine.Coverage` takes the same events-only querier plus a ledger — **not** `shortfall reconcile`, which builds its querier from `--prometheus`/`--sql` exactly as `impact` does. But it sums telemetry at the flow's **value stage**, `process` here, so a querier that cannot see `process` events returns a real **0%**, not an unavailable marker |
 
-The two metric legs come back marked unavailable with a reason — not as
+The unrealized leg comes back marked unavailable with a reason — not as
 zero. For this example that is a real gap, because "the Lambdas are down"
 is precisely the unrealized leg's case.
 

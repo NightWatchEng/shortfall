@@ -31,7 +31,8 @@ rule — and the ten-row customer list is truncated at three.
 ```text
 
 REALIZED   [deterministic] USD 2036192
-DEFERRED   [deterministic] none in-flight
+DEFERRED   [deterministic] USD 707661 in-flight
+           oldest in-flight ≥ 1 min
 UNREALIZED [estimate] USD 116029 … USD 1121407 (mid USD 455797)  — counterfactual; do not add to realized
            note: flow "invoice.pay": net of an assumed 60% recovery of suppressed demand
 CUSTOMERS  88 distinct (enterprise 9, smb 79)
@@ -45,9 +46,12 @@ Severity: SEV2 (suggested)
 ```
 
 Every number is labelled by the kind of evidence behind it, and that is the
-whole point. **Realized** is deterministic. **Unrealized** is a range, because
-demand that never arrived can only be sized against a baseline — and it is
-never added to realized. **Coverage** says `unavailable` and names its reason
+whole point. **Realized** is deterministic. **Deferred** is the money still
+in the queues at the window's end — late, not lost — read from the gauge the
+in-flight tracker publishes, or derived from `deferred` outcome events when
+no tracker was alive to publish one (the report says which). **Unrealized**
+is a range, because demand that never arrived can only be sized against a
+baseline — and it is never added to realized. **Coverage** says `unavailable` and names its reason
 rather than reporting `0%`, which would be a claim.
 
 That last line is not a limitation of the demo, and a real backend prints it
@@ -218,8 +222,9 @@ shortfall impact --registry registry.yaml \
   --prometheus http://prometheus:9090 --sql "file:outcomes.db"
 ```
 
-Metrics ground the deferred and unrealized legs; events ground realized
-de-duplication and customer impact. Wiring both signal kinds is what
+Metrics ground the unrealized leg and, through the in-flight gauge, the
+deferred leg; events ground realized de-duplication, customer impact, and
+the deferred leg when no gauge was published. Wiring both signal kinds is what
 makes every leg answerable — see [Backends](docs/adapters.md) for the
 matrix. The coverage ratio comes from a second command, which needs the
 provider's ledger rows — and renders in the same formats, so the trust
@@ -257,8 +262,9 @@ disagree with the library.
   carry a fixed label vocabulary; a customer id in a label set is an
   unbounded-cardinality incident waiting to happen (ADR-0004).
 - **A leg that cannot be grounded says so.** On an events-only backend
-  the deferred leg comes back marked unavailable, with a caveat naming
-  why, because a zero is a claim (ADR-0017).
+  the unrealized leg comes back marked unavailable, with a caveat naming
+  why, because a zero is a claim (ADR-0017); the deferred leg says which
+  of its two sources it stands on (ADR-0019).
 - **No severity ladder in the registry means no severity suggestion.**
 - **PII is fenced in code.** Raw emails, PANs and IBANs are rejected at
   the `biz.*` boundary, not discouraged in a style guide.

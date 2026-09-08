@@ -24,3 +24,4 @@ that rewrites history.
 | [0016](0016-value-stage-anchoring.md) | Success value is read at one declared value stage (ADR-0011 amendment) | accepted |
 | [0017](0017-unavailable-leg-marker.md) | Unavailable marker on report legs; contract v0.2.0 (frozen-interface amendment) | accepted |
 | [0018](0018-provider-call-writer.md) | biz_provider_calls_total gets an emit writer; its cardinality fence moves into the library (ADR-0004 amendment) | accepted |
+| [0019](0019-deferred-from-events.md) | The deferred leg is groundable from outcome events; the gauge stays authoritative when present (ADR-0005/0012 amendment) | accepted |

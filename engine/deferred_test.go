@@ -5,10 +5,12 @@ package engine
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/NightWatchEng/shortfall/biz"
 	"github.com/NightWatchEng/shortfall/emit"
 	"github.com/NightWatchEng/shortfall/examples/checkout"
 	"github.com/NightWatchEng/shortfall/query"
@@ -243,10 +245,18 @@ func TestDeferredEdgeCases(t *testing.T) {
 	})
 }
 
-func TestDeferredNoMetricsErrors(t *testing.T) {
+func TestDeferredEventsOnlyBackendWithNoEventsIsEmptyNotAnError(t *testing.T) {
+	// An events-only backend grounds the leg from events (ADR-0019); with no
+	// deferred events it is an empty leg carrying the events-derived caveat,
+	// never an error — that is reserved for a backend serving neither signal.
 	q := memq.New(memq.WithCaps(query.Caps{Events: true}))
-	if _, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: win}); err == nil {
-		t.Fatal("deferred without a metric source must error")
+	leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: win})
+	if err != nil {
+		t.Fatalf("events-only backend must ground the leg: %v", err)
+	}
+
+	if leg.Unavailable || leg.Count != 0 || len(leg.ByCurrency) != 0 || len(leg.Caveats) != 1 {
+		t.Fatalf("want an empty events-derived leg with one caveat, got %+v", leg)
 	}
 }
 
@@ -323,5 +333,296 @@ func TestDeferredMatchesGoldenQueueScenario(t *testing.T) {
 
 	if leg.ProjectedLostMinor["USD"] != wantProjLost["USD"] {
 		t.Fatalf("projected-lost USD = %d, want %d", leg.ProjectedLostMinor["USD"], wantProjLost["USD"])
+	}
+}
+
+// deferredEvent builds one outcome event for the events-derived deferred
+// path: flow invoice.pay, USD at exponent 2, entity and stage as given.
+func deferredEvent(entity, stage string, result biz.Result, amount int64, at time.Time) biz.Outcome {
+	return biz.Outcome{
+		At: at, Stage: stage, Result: result, Source: "test",
+		VC: biz.ValueContext{
+			Flow: "invoice.pay", EntityID: entity, CustomerID: "h:c1", Segment: "smb",
+			Money: biz.Money{Amount: amount, Currency: "USD", Exponent: 2}, Kind: biz.KindFee,
+		},
+	}
+}
+
+// eventsWindow is a three-hour window, long enough that every age bucket
+// and the two-hour lookback can be exercised from event times alone.
+var eventsWindow = query.TimeRange{
+	From: time.Date(2026, 8, 25, 9, 0, 0, 0, time.UTC),
+	To:   time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC),
+}
+
+func TestDeferredFromEventsGroundsTheLeg(t *testing.T) {
+	to := eventsWindow.To
+	events := []biz.Outcome{
+		// e1: deferred at capture three hours ago, never resolved — gt2h,
+		// past the capture SLA (PT30M, on_breach lost): breach + projected lost.
+		deferredEvent("e1", "capture", biz.ResultDeferred, 1000, to.Add(-3*time.Hour)),
+		// e2: deferred at capture ten minutes ago, twice (a retry) with two
+		// amounts — one entity, the larger amount, bucket 5m-30m, no breach.
+		deferredEvent("e2", "capture", biz.ResultDeferred, 300, to.Add(-10*time.Minute)),
+		deferredEvent("e2", "capture", biz.ResultDeferred, 500, to.Add(-8*time.Minute)),
+		// e3: deferred at capture, then captured (success at the same stage)
+		// — resolved, not in flight.
+		deferredEvent("e3", "capture", biz.ResultDeferred, 700, to.Add(-40*time.Minute)),
+		deferredEvent("e3", "capture", biz.ResultSuccess, 700, to.Add(-20*time.Minute)),
+		// e4: deferred at settle fifty minutes ago — 30m-2h; settle's SLA is
+		// P1D at_risk, so no breach and nothing projected lost.
+		deferredEvent("e4", "settle", biz.ResultDeferred, 2000, to.Add(-50*time.Minute)),
+		// e5: deferred at capture, then failed at the LATER settle stage — a
+		// terminal at a later registry stage resolves the earlier deferral.
+		deferredEvent("e5", "capture", biz.ResultDeferred, 900, to.Add(-45*time.Minute)),
+		deferredEvent("e5", "settle", biz.ResultFailed, 900, to.Add(-15*time.Minute)),
+		// e6: deferred at settle, and its EARLIER capture stage succeeded —
+		// an earlier-stage terminal does not resolve a later deferral.
+		deferredEvent("e6", "capture", biz.ResultSuccess, 400, to.Add(-30*time.Minute)),
+		deferredEvent("e6", "settle", biz.ResultDeferred, 400, to.Add(-25*time.Minute)),
+		// e7: deferred at capture, then deferred at settle with no capture
+		// terminal recorded (an emitter that records only at enqueue) —
+		// entering the settle queue resolves the capture deferral, so the
+		// money counts once, at settle, aged from the settle entry (1m-5m).
+		deferredEvent("e7", "capture", biz.ResultDeferred, 600, to.Add(-70*time.Minute)),
+		deferredEvent("e7", "settle", biz.ResultDeferred, 600, to.Add(-3*time.Minute)),
+	}
+	q := memq.New(memq.WithEvents(events), memq.WithCaps(query.Caps{Events: true}))
+	leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: eventsWindow, Flows: []string{"invoice.pay"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if leg.Unavailable {
+		t.Fatalf("an events-only backend must ground the leg, got unavailable: %v", leg.Caveats)
+	}
+
+	// e1 1000 + e2 500 + e4 2000 + e6 400 + e7 600.
+	if leg.ByCurrency["USD"] != 4500 {
+		t.Fatalf("ByCurrency = %v, want USD 4500", leg.ByCurrency)
+	}
+
+	if leg.Count != 5 {
+		t.Fatalf("Count = %d, want 5 in-flight entities", leg.Count)
+	}
+
+	want := map[string]int64{"gt2h": 1000, "5m-30m": 900, "30m-2h": 2000, "1m-5m": 600}
+	for bucket, minor := range want {
+		if got := leg.ByAgeBucket[bucket]["USD"]; got != minor {
+			t.Fatalf("ByAgeBucket[%s] = %d, want %d (all: %v)", bucket, got, minor, leg.ByAgeBucket)
+		}
+	}
+
+	if leg.ProjectedLostMinor["USD"] != 1000 || leg.SLABreaches != 1 {
+		t.Fatalf("projected lost = %v breaches = %d, want USD 1000 and 1 (e1 only)", leg.ProjectedLostMinor, leg.SLABreaches)
+	}
+
+	if leg.OldestAgeMinutes != 120 {
+		t.Fatalf("OldestAgeMinutes = %d, want 120 (gt2h floor)", leg.OldestAgeMinutes)
+	}
+
+	if leg.Evidence != EvidenceDeterministic {
+		t.Fatalf("evidence = %q, want deterministic", leg.Evidence)
+	}
+
+	found := false
+	for _, c := range leg.Caveats {
+		if strings.Contains(c, "events") {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("the events-derived leg must carry a caveat naming its source: %v", leg.Caveats)
+	}
+}
+
+func TestDeferredSourcePrecedence(t *testing.T) {
+	to := eventsWindow.To
+	deferred := []biz.Outcome{deferredEvent("e1", "capture", biz.ResultDeferred, 1000, to.Add(-3*time.Hour))}
+	gaugeZero := []emit.MetricPoint{inflightPoint("capture", "lt1m", "USD", 0, to.Add(-time.Minute))}
+	gaugeLevel := []emit.MetricPoint{inflightPoint("capture", "5m-30m", "USD", 250, to.Add(-time.Minute))}
+
+	cases := []struct {
+		name        string
+		q           query.Querier
+		wantUSD     int64
+		wantEvents  bool // the events-derived caveat present
+		wantUnavail bool
+		wantErr     bool
+	}{
+		{"gauge with a level wins over events", memq.New(memq.WithEvents(deferred), memq.WithMetrics(gaugeLevel)), 250, false, false, false},
+		{"gauge at level zero still wins: the tracker saw Done", memq.New(memq.WithEvents(deferred), memq.WithMetrics(gaugeZero)), 0, false, false, false},
+		{"metrics backend with no gauge series falls to events", memq.New(memq.WithEvents(deferred)), 1000, true, false, false},
+		{"events-only backend grounds from events", memq.New(memq.WithEvents(deferred), memq.WithCaps(query.Caps{Events: true})), 1000, true, false, false},
+		{"metrics-only backend with no gauge stays an empty measured leg", memq.New(memq.WithCaps(query.Caps{Metrics: true})), 0, false, false, false},
+		{"neither signal is an error", nullQuerier{}, 0, false, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			leg, err := Deferred(context.Background(), testRegistry(t), c.q, Request{Window: eventsWindow, Flows: []string{"invoice.pay"}})
+			if (err != nil) != c.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, c.wantErr)
+			}
+
+			if c.wantErr {
+				return
+			}
+
+			if leg.ByCurrency["USD"] != c.wantUSD {
+				t.Fatalf("USD = %d, want %d (caveats %v)", leg.ByCurrency["USD"], c.wantUSD, leg.Caveats)
+			}
+
+			gotEvents := false
+			for _, cv := range leg.Caveats {
+				if strings.Contains(cv, "events") {
+					gotEvents = true
+				}
+			}
+
+			if gotEvents != c.wantEvents {
+				t.Fatalf("events caveat present = %v, want %v: %v", gotEvents, c.wantEvents, leg.Caveats)
+			}
+		})
+	}
+}
+
+func TestDeferredFromEventsLookback(t *testing.T) {
+	// The lookback is max(2h, the flow's longest SLA deadline): the reference
+	// registry's settle SLA is P1D, so backlog deferred a day before the
+	// window start is still seen; older than that is not.
+	to := eventsWindow.To
+	cases := []struct {
+		name    string
+		at      time.Time
+		wantUSD int64
+	}{
+		{"deferred inside the window", to.Add(-10 * time.Minute), 100},
+		{"deferred before the window, inside the lookback", eventsWindow.From.Add(-20 * time.Hour), 100},
+		{"deferred before the lookback", eventsWindow.From.Add(-25 * time.Hour), 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			q := memq.New(memq.WithEvents([]biz.Outcome{deferredEvent("e1", "settle", biz.ResultDeferred, 100, c.at)}),
+				memq.WithCaps(query.Caps{Events: true}))
+			leg, err := Deferred(context.Background(), testRegistry(t), q, Request{Window: eventsWindow, Flows: []string{"invoice.pay"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if leg.ByCurrency["USD"] != c.wantUSD {
+				t.Fatalf("USD = %d, want %d", leg.ByCurrency["USD"], c.wantUSD)
+			}
+		})
+	}
+}
+
+// TestDeferredFromEventsAgreesWithTracker is the events path's fence: the
+// leg derived from deferred outcome events alone must equal the leg read
+// from the gauge the real InFlightTracker published for the same ledger —
+// value, buckets, projected-lost, count and breaches. A capture stall
+// exercises breaches and projected loss; a healthy run exercises the settle
+// backlog, where a transaction deferred at capture and again at settle must
+// count once. Both legs come from one run, so the assertion is
+// platform-self-consistent.
+func TestDeferredFromEventsAgreesWithTracker(t *testing.T) {
+	start := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	end := start.Add(3 * time.Hour)
+	cases := []struct {
+		name         string
+		faults       []checkout.FaultSpec
+		wantBreaches bool
+	}{
+		{"capture consumer stall", []checkout.FaultSpec{{
+			Kind:  checkout.FaultConsumerStall,
+			From:  start.Add(30 * time.Minute),
+			To:    end,
+			Queue: checkout.QueueCapture,
+		}}, true},
+		{"healthy pipeline, settle backlog only", nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res := checkout.Run(checkout.Config{Seed: 11, Start: start, End: end, Faults: c.faults})
+			reg := testRegistry(t)
+			req := Request{Window: query.TimeRange{From: start, To: end.Add(time.Second)}, Flows: []string{"invoice.pay"}}
+
+			gauge, err := Deferred(context.Background(), reg, testkit.QuerierFromResult(res), req)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			eventsOnly := memq.New(memq.WithEvents(testkit.EventsFromResult(res)), memq.WithCaps(query.Caps{Events: true}))
+			events, err := Deferred(context.Background(), reg, eventsOnly, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if gauge.Count == 0 || (gauge.SLABreaches == 0) == c.wantBreaches || len(gauge.Caveats) != 0 {
+				t.Fatalf("gauge leg must be non-trivial (breaches=%v) and caveat-free for this fence to prove anything: %+v", c.wantBreaches, gauge)
+			}
+
+			if len(events.Caveats) != 1 || !strings.Contains(events.Caveats[0], "events-derived") {
+				t.Fatalf("events leg must carry the events-derived caveat: %v", events.Caveats)
+			}
+
+			events.Caveats = nil
+			if !reflect.DeepEqual(gauge, events) {
+				t.Fatalf("events-derived leg disagrees with the tracker's gauge:\ngauge:  %+v\nevents: %+v", gauge, events)
+			}
+		})
+	}
+}
+
+// TestDeferredFromEventsSeesAPaymentsServiceOutage is the worked webhook
+// example's failure direction: the Lambda records ingest as deferred when
+// payments-service answers 5xx, payments-service itself is down and publishes
+// no gauge, and the events store is all the report has. The leg must show
+// the backlog, aged and projected against the process stage's SLA.
+func TestDeferredFromEventsSeesAPaymentsServiceOutage(t *testing.T) {
+	reg, err := registry.Parse([]byte(`
+version: 1
+segments: [smb, enterprise]
+flows:
+  payment.webhook:
+    money: { kind: fee }
+    currencies: [USD]
+    stages:
+      - { name: ingest,  signals: ["webhook:payment_intent.succeeded"] }
+      - { name: process, signals: ["http:POST /internal/webhooks/process"] }
+    sla:
+      ingest: { deadline: PT30M, on_breach: lost }
+    baseline:  { seasonality: hour_of_week, lookback_weeks: 8 }
+    recovery:  { model: usage_loss_curve, recovered_fraction: 0.9, within: PT2H }
+    reconcile: { source: "stripe:payment_intents" }
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	to := eventsWindow.To
+	webhook := func(id string, amount int64, at time.Time) biz.Outcome {
+		return biz.Outcome{At: at, Stage: "ingest", Result: biz.ResultDeferred, Source: "lambda", VC: biz.ValueContext{
+			Flow: "payment.webhook", EntityID: id, CustomerID: "h:c9",
+			Money: biz.Money{Amount: amount, Currency: "USD", Exponent: 2}, Kind: biz.KindFee,
+		}}
+	}
+	events := []biz.Outcome{
+		webhook("pi_1", 5000, to.Add(-50*time.Minute)), // past the 30m SLA: projected lost
+		webhook("pi_2", 7000, to.Add(-10*time.Minute)),
+		webhook("pi_2", 7000, to.Add(-4*time.Minute)), // the provider redelivered; one entity
+	}
+	q := memq.New(memq.WithEvents(events), memq.WithCaps(query.Caps{Events: true}))
+	leg, err := Deferred(context.Background(), &reg, q, Request{Window: eventsWindow, Flows: []string{"payment.webhook"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if leg.ByCurrency["USD"] != 12000 || leg.Count != 2 {
+		t.Fatalf("deferred = %v count %d, want USD 12000 over 2 entities", leg.ByCurrency, leg.Count)
+	}
+
+	if leg.ProjectedLostMinor["USD"] != 5000 || leg.SLABreaches != 1 || leg.OldestAgeMinutes != 30 {
+		t.Fatalf("projected lost %v breaches %d oldest %d, want USD 5000 / 1 / 30", leg.ProjectedLostMinor, leg.SLABreaches, leg.OldestAgeMinutes)
 	}
 }

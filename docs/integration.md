@@ -231,11 +231,16 @@ Results are `ResultSuccess`, `ResultFailed`, `ResultDeferred`,
 ## Step 6 — Track in-flight value on queued stages
 
 Deferred value — money sitting in a queue during an incident — is a
-*level*, not a count, and the deferred leg reads it from the
-`biz_inflight_value` gauge rather than from `deferred` outcome events.
-Recording `ResultDeferred` marks the outcome; the tracker is what the
-leg actually measures. Skip this step and the deferred leg has nothing
-to stand on.
+*level*, and the deferred leg reads it from the `biz_inflight_value` gauge
+whenever one exists. The tracker that publishes it lives in one process,
+which is also its limit: a producer and its consumer are different
+processes, a stalled consumer stops publishing at exactly the wrong
+moment, and a Lambda cannot host one. So the `ResultDeferred` you
+recorded in step 5 is load-bearing too: with no gauge series in the
+window, the leg is derived from those `deferred` outcomes — every entity
+with one and no later terminal outcome, aged from its first deferred
+event at bucket granularity (ADR-0019). Wire the tracker where you can;
+record the deferred outcome everywhere.
 
 ```go
 tr := emit.NewInFlightTracker(em)
