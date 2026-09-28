@@ -16,7 +16,8 @@ The per-project contract the AgentOps skill pack reads (platform
   golangci-lint needs a local install: `scripts/ci-go.sh` pins both and
   runs them through `go run` when the pinned binary is not present.
 - `graph.yaml` changed: `.warden/bin/warden verify --scope graph`.
-- Iteration budget before revert: 3 attempts (the platform cap).
+- Repair budget: `repo.yaml` `repair.budget` is the one declaration; certify
+  rung R-12 reads it there.
 
 ## Autonomy scope
 
@@ -24,10 +25,12 @@ The per-project contract the AgentOps skill pack reads (platform
   (2026-08-27, recorded in `graph.yaml`, revocable there), the session agent
   may merge its own PRs — but only when everything is green: verify scopes
   pass, `.warden/bin/warden review --base origin/main --no-comment` exits 0,
-  and the pre-PR attestation is CLEAN. Always the pinned shim
-  (`.warden/bin/warden`), never a PATH-resolved `warden` — the pin backstop
-  compares version strings, not code. Anything red or ambiguous: do not merge,
-  report instead. Merge authority itself remains the founder's.
+  and the pre-PR attestation is CLEAN. `.warden/bin/warden` is a launcher
+  for the `warden` installed at `repo.yaml` `platform.pin`; every command
+  fails closed when the installed version differs from the pin. That
+  backstop compares version strings, not code, so install from the tag, never
+  from a local checkout. Anything red or ambiguous: do not merge, report
+  instead. Merge authority itself remains the founder's.
 - Never eligible for autonomous work: flipping the repo public (M9 prepares
   it; the flip is the founder's), changing LICENSE, weakening any rule,
   test, benchmark baseline, or verify command to reach green.
@@ -75,7 +78,7 @@ Money-correctness focus, applied to every review:
   doc/comment-only changes, generated code, and skeleton scaffolding that a
   same-milestone item immediately fills with tested behavior.
 - systematic-debugging: any red test, flake, or unexpected behavior — name
-  the root cause before changing a line. The 3-attempt budget is a stopping
+  the root cause before changing a line. The repair budget is a stopping
   rule, not a method; an attempt without a named cause is spent.
 - verification-before-completion: before any "passes" / "done" claim, have
   fresh output from the full command in hand — never a prior run, never an

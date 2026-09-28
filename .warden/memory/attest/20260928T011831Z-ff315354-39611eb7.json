@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "ff315354e5d4ee85f8c21cadd498c946d9f27cb8",
+  "base_sha": "533f5995336ab06f432a74cb02a4d10a84bbe8b7",
+  "rules_version": "8ae2d99cbf8f",
+  "reviewed_at": "2026-09-28T01:18:31+00:00",
+  "range_patch_ids": [
+    "c8b5ea4f75206bd0dcd629722c3a669a673fe6eb",
+    "ce8e7b318a6b18616120ec28db665962dd92e993"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context; read the full changed files, the platform at v1.1.0 and v2.2.0, ran warden 2.2.0 certify/ingest/graph/review on a clone of the head",
+      "round": 1,
+      "returned": true,
+      "findings": 6,
+      "output": "code-reviewer.json",
+      "outcome": "reviewed-findings"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude general-purpose subagent, separate context, given only candidates.json and the review package",
+      "round": 1,
+      "returned": true,
+      "findings": 6,
+      "output": "cross-examiner.json",
+      "outcome": "reviewed-findings"
+    }
+  ],
+  "roster_verification": "verified",
+  "round_binding": "bound",
+  "records": [
+    {
+      "ts": "2026-09-28T01:18:31+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "ff315354e5d4ee85f8c21cadd498c946d9f27cb8",
+      "base_sha": "533f5995336ab06f432a74cb02a4d10a84bbe8b7",
+      "rule_id": "unmapped:exit-code-contract-dropped",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".warden/bin",
+      "file": ".warden/bin/warden",
+      "line": 7,
+      "severity": "LOW",
+      "finding": "The old shim carried an explicit exit-code contract (review P2-3): 2 means the gate did not run, and an unresolvable platform is never reported as exit 1. The launcher drops it without saying so. When no warden is on PATH, `exec warden` exits 127 ('not found'), so the skill pack, which calls this path, gets neither 2 (did not run) nor a warden exit code. CI is unaffected, because its install step exits 2 itself. Reproduced by running the launcher with no warden on PATH: rc=127. Either a `command -v warden || { echo ... >&2; exit 2; }` guard, or a comment noting that the contract now lives only in the CI install step, would keep the stated contract true.",
+      "evidence": ".warden/bin/warden:7 `exec warden \"$@\"`; removed text: `# Exit-code contract (review P2-3): 2 = gate DID NOT RUN. Resolve the platform env first (cache or network); an unresolvable platform is an infra failure, never a \"blocking finding\" (exit 1).`; `env -i PATH=/usr/bin:/bin sh .warden/bin/warden --version` -> `exec: warden: not found`, rc=127",
+      "status": "refuted",
+      "origin": "interactive",
+      "reason": "Cross-examiner: The quote is verified and the repro holds (env -i PATH=/usr/bin:/bin sh .warden/bin/warden --version gives 'exec: warden: not found', rc=127). But the property the P2-3 contract existed to protect was that an unresolvable platform is never reported as exit 1, a blocking finding, and 127 is not 1. The skill pack reads exit 1 as a refusal (deliver/SKILL.md:264, orchestrate/SKILL.md:158), so a missing binary cannot masquerade as a blocking finding, and the stderr is unambiguous. The launcher is verbatim the one the platform prescribes (v2.2.0 Installation.md section 2: `exec warden \"$@\"`). CI's install step keeps the exit-2 contract where the gate actually runs.",
+      "lens": "code-reviewer",
+      "round": 1,
+      "id": "8b9e094cf86f0041"
+    }
+  ]
+}
