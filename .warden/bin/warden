@@ -1,23 +1,7 @@
 #!/bin/sh
-# shortfall consumes the AgentOps platform, pinned to an IMMUTABLE commit SHA
-# (a tag can be force-moved; a full SHA cannot — review P2-2), which also
-# makes warm uv caches valid offline. repo.yaml's platform.pin carries the
-# semantic version; warden fails closed if they disagree.
-# Bump procedure: update PIN_SHA here AND platform.pin in repo.yaml together
-# (one PR; both files are HIGH-tier).
-PIN_SHA="a900e56810e5f0cded65345782a5de25e1d991c2"   # = v1.1.0 (attest survives a content-preserving rebase, agentops-4ft)
-FROM="git+ssh://git@github.com/NightWatchEng/agentops@${PIN_SHA}"
-
-# Exit-code contract (review P2-3): 2 = gate DID NOT RUN. Resolve the platform
-# env first (cache or network); an unresolvable platform is an infra failure,
-# never a "blocking finding" (exit 1).
-# Retried once: a transient ssh/network hiccup must not be reported as a
-# missing platform — that turns a blip into a red gate people learn to ignore.
-if ! uvx --from "$FROM" warden --version >/dev/null 2>&1; then
-  sleep 2
-  if ! uvx --from "$FROM" warden --version >/dev/null 2>&1; then
-    echo "warden shim: cannot resolve the platform (network/ssh/cache) — gate DID NOT RUN" >&2
-    exit 2
-  fi
-fi
-exec uvx --from "$FROM" warden "$@"
+# The launcher the AgentOps skill pack calls. It runs the warden installed at
+# repo.yaml's platform.pin (`uv tool install
+# git+https://github.com/NightWatchEng/agentops@<platform.pin>`) and carries
+# no version of its own: warden compares its version to platform.pin and fails
+# closed on a mismatch. CI calls the installed `warden` directly.
+exec warden "$@"

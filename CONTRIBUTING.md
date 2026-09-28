@@ -81,6 +81,13 @@ contribution PR; they are founder-only paths.
   setup: govulncheck and golangci-lint are pinned in the script and run
   through `go run` when the pinned binary is not already installed (the
   first such run builds the tool, later ones are cached).
+- `uv tool install git+https://github.com/NightWatchEng/agentops@<tag>`,
+  where `<tag>` is `repo.yaml`'s `platform.pin` — installs `warden`, which
+  the commands below run (needs access to the private platform). The pin is
+  the one version source: CI installs the same tag, and warden fails closed
+  when its own version differs from the pin, so a pin bump means reinstalling
+  at the new tag. `.warden/bin/warden` is a launcher for that install, kept
+  because the AgentOps skill pack calls it by path.
 - `.warden/bin/warden verify --scope core` — the attested verify, same six
   commands via the policy in `repo.yaml`, and the same six checks the
   required `core checks` job runs. Running it before opening a PR is the

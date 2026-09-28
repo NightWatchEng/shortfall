@@ -2,8 +2,16 @@
 # not in this YAML — jobs here only orchestrate. Gate shape follows the
 # AgentOps adoption guide (distill is the reference consumer).
 #
-# Third-party actions are pinned to immutable commit SHAs, same reasoning as
-# .warden/bin/warden's platform pin: a tag can be force-moved, a SHA cannot.
+# Third-party actions are pinned to immutable commit SHAs: a tag can be
+# force-moved, a SHA cannot.
+#
+# The platform itself is installed at repo.yaml's platform.pin, the one
+# version this repo declares for it (AgentOps Installation, "The CLI, from a
+# release tag"). Each job that runs warden reads that line and installs the
+# tag with `uv tool install`, and every warden command fails closed when its
+# own version differs from the pin. There is no second copy of the version to
+# keep in step: .warden/bin/warden is only the launcher the skill pack calls,
+# and it execs whatever warden is on PATH.
 #
 # Fork PRs: every job that runs on a pull request runs fine from a fork
 # except `warden gate`, which needs AGENTOPS_DEPLOY_KEY — and GitHub sends no
@@ -259,7 +267,8 @@ jobs:
           # clone can do.
           fetch-depth: 0
       # The gate must never execute PR-controlled gate code: a PR could swap
-      # the shim for `exit 0` (vacuous pass) or read the deploy key. Restore
+      # the launcher or a verify command for `exit 0` (vacuous pass), move
+      # platform.pin, or read the deploy key. Restore
       # the executable gate surface from the BASE ref before the key exists
       # on disk and before anything under .warden/bin runs. Policy changes
       # therefore take effect only after they merge — a gate-surface PR is
@@ -340,9 +349,10 @@ jobs:
         run: |
           # An absent key is a fork PR, not a network fault. Without this the
           # empty secret writes a 1-byte key file, every step here exits 0, and
-          # the first red step is the shim reporting "network/ssh/cache" — which
-          # sends a contributor to debug connectivity they do not control. 2 =
-          # the gate DID NOT RUN, the same contract the shim uses.
+          # the first red step is the platform install reporting "network/ssh"
+          # — which sends a contributor to debug connectivity they do not
+          # control. 2 = the gate DID NOT RUN, the same contract the install
+          # step uses.
           if [ -z "$KEY" ]; then
             echo "warden gate: no platform credential. A pull request from a" >&2
             echo "fork receives no repository secrets, by GitHub's design, so" >&2
@@ -358,18 +368,43 @@ jobs:
           printf '%s\n' 'github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=' >> ~/.ssh/known_hosts
           printf '%s\n' "$KEY" > ~/.ssh/agentops_key && chmod 600 ~/.ssh/agentops_key
           printf 'Host github.com\n  IdentityFile ~/.ssh/agentops_key\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+      # platform.pin is read from repo.yaml as text, the way the workflow
+      # `warden init` writes reads it, and that tag is installed over the
+      # deploy key configured above. In this job repo.yaml is the BASE ref's
+      # copy (pinned above), so a pin bump takes effect only once it merges:
+      # a PR that moves the pin is judged by the platform it is moving from.
+      # 2 = the gate DID NOT RUN. Retried once, so a transient ssh blip is
+      # not reported as a missing platform.
+      - name: install warden at repo.yaml platform.pin
+        run: |
+          pin="$(awk '/^platform:/ {inside = 1; next} inside && /^[^[:space:]#]/ {inside = 0} inside && $1 == "pin:" {print $2; exit}' repo.yaml | tr -d "\"'\r")" || pin=""
+          if ! printf '%s\n' "$pin" | grep -Eqx 'v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "warden install: repo.yaml platform.pin is ${pin:-missing}, not a release tag like v1.2.3 — gate DID NOT RUN" >&2
+            exit 2
+          fi
+          src="git+ssh://git@github.com/NightWatchEng/agentops@v${pin#v}"
+          if ! uv tool install --no-config "$src"; then
+            sleep 2
+            if ! uv tool install --no-config "$src"; then
+              echo "warden install: cannot install the platform at v${pin#v} (network/ssh/tag) — gate DID NOT RUN" >&2
+              exit 2
+            fi
+          fi
+          bin="$(uv tool dir --bin)"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/warden" --version
       - name: warden review (rules in .warden/rules, policy in repo.yaml)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: .warden/bin/warden review --event "$GITHUB_EVENT_PATH"
+        run: warden review --event "$GITHUB_EVENT_PATH"
       - name: warden verify (declared scopes)
         run: |
-          .warden/bin/warden verify --scope core
-          .warden/bin/warden verify --scope graph
+          warden verify --scope core
+          warden verify --scope graph
       # Assert the PR left a pre-PR review attestation in the COMMITTED corpus
       # (.warden/memory/attest/) — that is what makes the corpus grow every PR.
       - name: pre-PR review attestation
-        run: .warden/bin/warden attest check --base "origin/${BASE_REF}"
+        run: warden attest check --base "origin/${BASE_REF}"
       - name: upload evidence run dirs (provenance archive)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()
@@ -393,7 +428,7 @@ jobs:
           # and an absent key means the repository secret is unset, renamed or
           # rotated — not a fork. Without this the empty secret writes a 1-byte
           # key file, every step here exits 0, and the failure surfaces later as
-          # the shim blaming "network/ssh/cache". 2 = it DID NOT RUN.
+          # the platform install blaming "network/ssh". 2 = it DID NOT RUN.
           if [ -z "$KEY" ]; then
             echo "corpus ingest: no platform credential on a push to main." >&2
             echo "AGENTOPS_DEPLOY_KEY is unset, renamed, or rotated — check the" >&2
@@ -407,9 +442,32 @@ jobs:
           printf '%s\n' 'github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=' >> ~/.ssh/known_hosts
           printf '%s\n' "$KEY" > ~/.ssh/agentops_key && chmod 600 ~/.ssh/agentops_key
           printf 'Host github.com\n  IdentityFile ~/.ssh/agentops_key\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+      # platform.pin is read from repo.yaml as text, the way the workflow
+      # `warden init` writes reads it, and that tag is installed over the
+      # deploy key configured above. This job runs on main, so the pin is
+      # main's. 2 = corpus ingest DID NOT RUN. Retried once, so a transient
+      # ssh blip is not reported as a missing platform.
+      - name: install warden at repo.yaml platform.pin
+        run: |
+          pin="$(awk '/^platform:/ {inside = 1; next} inside && /^[^[:space:]#]/ {inside = 0} inside && $1 == "pin:" {print $2; exit}' repo.yaml | tr -d "\"'\r")" || pin=""
+          if ! printf '%s\n' "$pin" | grep -Eqx 'v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "warden install: repo.yaml platform.pin is ${pin:-missing}, not a release tag like v1.2.3 — corpus ingest DID NOT RUN" >&2
+            exit 2
+          fi
+          src="git+ssh://git@github.com/NightWatchEng/agentops@v${pin#v}"
+          if ! uv tool install --no-config "$src"; then
+            sleep 2
+            if ! uv tool install --no-config "$src"; then
+              echo "warden install: cannot install the platform at v${pin#v} (network/ssh/tag) — corpus ingest DID NOT RUN" >&2
+              exit 2
+            fi
+          fi
+          bin="$(uv tool dir --bin)"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/warden" --version
       - name: rebuild + validate review-memory corpus
-        run: .warden/bin/warden memory ingest
+        run: warden memory ingest
       - name: certification floor (Level 3 — Reviewed)
         # Level 4 (Evidenced) needs 5+ committed review-event shards (E-04);
         # raise this to --level 4 once the corpus is there. Ratchet up only.
-        run: .warden/bin/warden certify --level 3
+        run: warden certify --level 3

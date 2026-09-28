@@ -5,8 +5,11 @@
 version: 1
 repo: shortfall
 
+# The platform release this repo's gate runs, and the one version source:
+# CI reads this line and installs `warden` at this tag, and every warden
+# command fails closed when its own version differs from it.
 platform:
-  pin: v1.1.0   # must agree with PIN_SHA in .warden/bin/warden (bump together)
+  pin: v2.2.0
 
 components:
   biz:       {path: biz/,       lang: go, description: "value types: Money (int64 minor units), ValueContext, Outcome, PII guard"}
@@ -40,7 +43,7 @@ risk_tiers:
 
 protected_paths:
   - {path: ".warden/rules/",     reason: "gate config; edits change rules_version and need review"}
-  - {path: ".warden/bin/warden", reason: "the executable gate entrypoint — the one gate file that runs as shell; pin bumps only, in lockstep with platform.pin"}
+  - {path: ".warden/bin/warden", reason: "the launcher the skill pack calls: it execs the installed warden and carries no version of its own"}
   - {path: "repo.yaml",          reason: "the policy source of truth; edits are policy PRs, never side effects"}
   - {path: "graph.yaml",         reason: "who judges, who gates, who merges — including the recorded merge-execution delegation"}
   - {path: "LICENSE",            reason: "Apache-2.0 decided at bootstrap; changing later is painful and a founder call"}
@@ -78,7 +81,12 @@ verify:
     # the pinned version when there is one and otherwise `go run`s that pin.
     - {run: "./scripts/ci-go.sh lint"}
   graph:
-    - {run: ".warden/bin/warden graph validate"}
+    - {run: "warden graph validate"}
+
+# Repair rounds a delivery may run before it reverts: 1 to the platform cap
+# of 2. Required for certification Level 3 (rung R-12 reads this key).
+repair:
+  budget: 2
 
 review:
   rules_dir: .warden/rules
