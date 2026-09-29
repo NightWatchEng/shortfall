@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "8c90834b48c207440f5e5646f4545cb50eb4f09f",
+  "base_sha": "c94bb6f6894173843ebdd4c045b1871ec7946e67",
+  "rules_version": "8ae2d99cbf8f",
+  "reviewed_at": "2026-09-29T01:37:05+00:00",
+  "range_patch_ids": [
+    "160dc1378d4dddb99e4baf5aced759cc8d4207fb"
+  ],
+  "verdict": "findings-open",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context; read repo.yaml, ci.yml, CONTRIBUTING, rules, graph.yaml and the platform at v2.2.0/v2.3.0; ran warden 2.3.0 certify/declare check/ingest",
+      "round": 1,
+      "returned": true,
+      "findings": 3,
+      "output": "code-reviewer.json",
+      "outcome": "reviewed-findings"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude general-purpose subagent, separate context, given only candidates.json and the review package",
+      "round": 1,
+      "returned": true,
+      "findings": 3,
+      "output": "cross-examiner.json",
+      "outcome": "reviewed-findings"
+    }
+  ],
+  "roster_verification": "verified",
+  "round_binding": "bound",
+  "base_ancestry": "ancestor",
+  "records": [
+    {
+      "ts": "2026-09-29T01:37:05+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "8c90834b48c207440f5e5646f4545cb50eb4f09f",
+      "base_sha": "c94bb6f6894173843ebdd4c045b1871ec7946e67",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/secrets-in-diff.md",
+      "line": 11,
+      "severity": "MEDIUM",
+      "finding": "The rule body names the pinned platform version, and this diff moves the pin away from it, so the sentence now states a pin that no longer holds. The checker's pattern list is byte-identical between v2.2.0 and v2.3.0 (git diff v2.2.0 v2.3.0 -- warden/mechanical.py is empty), so the enumerated patterns are still true; only the version label is stale. The fix is to change the label to v2.3.0, or to 'the pinned platform' so the sentence doesn't restate the pin.",
+      "evidence": ".warden/rules/secrets-in-diff.md:11 \"What the pinned mechanical checker (platform v2.2.0) actually fires on \u2014\" vs repo.yaml:12 \"  pin: v2.3.0\"",
+      "status": "confirmed",
+      "origin": "interactive",
+      "lens": "code-reviewer",
+      "round": 1,
+      "id": "fd7853a6389eb544"
+    },
+    {
+      "ts": "2026-09-29T01:37:05+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "8c90834b48c207440f5e5646f4545cb50eb4f09f",
+      "base_sha": "c94bb6f6894173843ebdd4c045b1871ec7946e67",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 83,
+      "severity": "MEDIUM",
+      "finding": "v2.3.0 (#331) ties the skill pack to platform.pin: `warden skills pin` refuses a skew, and the release notes and Releasing.md step 9 say a consumer bump re-adds the marketplace at the new tag. CONTRIBUTING's install bullet says a pin bump means reinstalling warden only and never mentions the pack. Run in this worktree, `warden skills pin` refuses: \"marketplace agentops is added with no ref (source: directory), so the pack floats ... repo.yaml pins v2.3.0\". A contributor following CONTRIBUTING after this bump has a warden at v2.3.0 and a skill pack at an unpinned version, and the pack is what calls .warden/bin/warden.",
+      "evidence": "CONTRIBUTING.md:86-90 \"The pin is the one version source: CI installs the same tag, and warden fails closed when its own version differs from the pin, so a pin bump means reinstalling at the new tag. `.warden/bin/warden` is a launcher for that install, kept because the AgentOps skill pack calls it by path.\" There is no marketplace, `#v2.3.0` or `skills pin` text anywhere in the tree (git grep).",
+      "status": "confirmed",
+      "origin": "interactive",
+      "lens": "code-reviewer",
+      "round": 1,
+      "id": "2d6da31b3c9d7a0f"
+    },
+    {
+      "ts": "2026-09-29T01:37:05+00:00",
+      "seq": 2,
+      "source": "attest",
+      "sha": "8c90834b48c207440f5e5646f4545cb50eb4f09f",
+      "base_sha": "c94bb6f6894173843ebdd4c045b1871ec7946e67",
+      "rule_id": "unmapped:incomplete-consumer-pin-bump",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 406,
+      "severity": "LOW",
+      "finding": "The platform's own bump procedure says a v2.3.0 pin bump copies the generator's new `proportionate review tier` step (`warden attest classify --enforce --base origin/$BASE_REF`) into the consumer gate in the same PR. This PR doesn't, and the gate job has no such step. It does nothing today: graph.yaml declares no light round, and certify R-14 passes (\"graph.yaml declares no light round: nothing to bind\"). But certify runs only in the push-only corpus job. If a light round is ever declared, PRs could land light-round attestations whose inertness proof CI never recomputes, and nothing would say so until main's certify goes red after the merge. Either add the step, or record in the PR why it is deliberately left out. The toolchain step (#284) is already covered by the gate's setup-go and golangci-lint install.",
+      "evidence": "Releasing.md step 9 at v2.3.0: \"a step the generator added since (v2.3.0's `proportionate review tier`) is copied into it in that PR.\" ci.yml gate job at lines 404-407 goes straight from \"- name: pre-PR review attestation\\n  run: warden attest check --base \\\"origin/${BASE_REF}\\\"\" to the upload step, with no `attest classify --enforce`.",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Confirmed by cross-examiner; parked to workspace-xrst. The gate job restores repo.yaml from the base ref, so this PR is judged by warden v2.2.0, which has no 'attest classify' (platform warden/enroll.py LACKS_CLASSIFY_COMMAND = v2.2.0): copying the step in here turns its own gate red. It lands in a follow-up once v2.3.0 is on main; latent until graph.yaml declares a light round (R-14 passes, nothing to bind).",
+      "lens": "code-reviewer",
+      "round": 1,
+      "id": "dbf913daa919d5ce"
+    }
+  ]
+}

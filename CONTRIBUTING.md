@@ -88,6 +88,12 @@ contribution PR; they are founder-only paths.
   when its own version differs from the pin, so a pin bump means reinstalling
   at the new tag. `.warden/bin/warden` is a launcher for that install, kept
   because the AgentOps skill pack calls it by path.
+- The AgentOps skill pack installs at the same tag:
+  `claude plugin marketplace add 'https://github.com/NightWatchEng/agentops#<tag>'`
+  then `claude plugin install agentops-skills@agentops` (remove a marketplace
+  added from another source first). `warden skills pin` refuses a machine
+  whose installed pack is not the one `platform.pin` names, so a pin bump
+  means re-adding the marketplace at the new tag as well.
 - `.warden/bin/warden verify --scope core` — the attested verify, same six
   commands via the policy in `repo.yaml`, and the same six checks the
   required `core checks` job runs. Running it before opening a PR is the
