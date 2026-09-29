@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "208490af9a66acd6f49df3ed2e24703d2531dfa6",
+  "base_sha": "c94bb6f6894173843ebdd4c045b1871ec7946e67",
+  "rules_version": "2de8ef8bf755",
+  "reviewed_at": "2026-09-29T01:39:49+00:00",
+  "range_patch_ids": [
+    "160dc1378d4dddb99e4baf5aced759cc8d4207fb",
+    "188a4ab42de6c457481d60cec5291dfe27678395"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "claude general-purpose subagent, independent context; scoped re-review of round-1 findings at 208490a against the platform's v2.3.0 Installation.md, packpin.py, mechanical.py",
+      "round": 2,
+      "returned": true,
+      "findings": 0,
+      "output": "code-reviewer.json",
+      "outcome": "reviewed-clean"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "claude general-purpose subagent, separate context, given only candidates.json and the review package",
+      "round": 2,
+      "returned": true,
+      "findings": 2,
+      "output": "cross-examiner.json",
+      "outcome": "reviewed-findings"
+    }
+  ],
+  "roster_verification": "verified",
+  "round_binding": "bound",
+  "base_ancestry": "ancestor",
+  "records": [
+    {
+      "ts": "2026-09-29T01:39:49+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "208490af9a66acd6f49df3ed2e24703d2531dfa6",
+      "base_sha": "c94bb6f6894173843ebdd4c045b1871ec7946e67",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": ".warden/rules",
+      "file": ".warden/rules/secrets-in-diff.md",
+      "line": 11,
+      "severity": "MEDIUM",
+      "finding": "The rule body names the pinned platform version, and this diff moves the pin away from it, so the sentence now states a pin that no longer holds. The checker's pattern list is byte-identical between v2.2.0 and v2.3.0 (git diff v2.2.0 v2.3.0 -- warden/mechanical.py is empty), so the enumerated patterns are still true; only the version label is stale. The fix is to change the label to v2.3.0, or to 'the pinned platform' so the sentence doesn't restate the pin.",
+      "evidence": "Line 11 now reads 'What the pinned mechanical checker (platform v2.3.0) actually fires on', matching repo.yaml:12 'pin: v2.3.0'. `git -C agentops diff --stat v2.2.0 v2.3.0 -- warden/mechanical.py` is empty, so the pattern list on lines 13-16 still holds unchanged at v2.3.0. git grep of the tree (outside .warden/memory) finds no other 'v2.2.0' mention.",
+      "status": "fixed",
+      "origin": "interactive",
+      "lens": "code-reviewer",
+      "round": 2,
+      "id": "2cc3768a5df4c6e4"
+    },
+    {
+      "ts": "2026-09-29T01:39:49+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "208490af9a66acd6f49df3ed2e24703d2531dfa6",
+      "base_sha": "c94bb6f6894173843ebdd4c045b1871ec7946e67",
+      "rule_id": "docs-accuracy",
+      "tags": [
+        "docs-drift"
+      ],
+      "dir_prefix": "",
+      "file": "CONTRIBUTING.md",
+      "line": 83,
+      "severity": "MEDIUM",
+      "finding": "v2.3.0 (#331) ties the skill pack to platform.pin: `warden skills pin` refuses a skew, and the release notes and Releasing.md step 9 say a consumer bump re-adds the marketplace at the new tag. CONTRIBUTING's install bullet says a pin bump means reinstalling warden only and never mentions the pack. Run in this worktree, `warden skills pin` refuses: \"marketplace agentops is added with no ref (source: directory), so the pack floats ... repo.yaml pins v2.3.0\". A contributor following CONTRIBUTING after this bump has a warden at v2.3.0 and a skill pack at an unpinned version, and the pack is what calls .warden/bin/warden.",
+      "evidence": "New bullet (lines 91-96) gives the pack install at the pin tag: `claude plugin marketplace add 'https://github.com/NightWatchEng/agentops#<tag>'` then `claude plugin install agentops-skills@agentops`. These are the same two commands as v2.3.0 docs/wiki/Installation.md section 3 (lines 156-157) and packpin.install_commands. The claim that 'warden skills pin refuses a machine whose installed pack is not the one platform.pin names' matches packpin.check at v2.3.0: it returns UNPINNED (exit 1) for a missing marketplace, no ref, a ref that differs from the pin, or an installed version/commit that differs from the clone. Run live here, warden 2.3.0 `skills pin` exits 1 with 'marketplace agentops is added with no ref (source: directory)... repo.yaml pins v2.3.0'. The 'remove a marketplace added from another source first' and 're-adding the marketplace at the new tag' wording agrees with Installation.md lines 179-187 ('a marketplace name refuses a changed source, so a bump is claude plugin marketplace remove agentops followed by the two lines above at the new tag') and with the remove-then-add fix string packpin prints.",
+      "status": "fixed",
+      "origin": "interactive",
+      "lens": "code-reviewer",
+      "round": 2,
+      "id": "393b3ea4eb764db7"
+    }
+  ]
+}
