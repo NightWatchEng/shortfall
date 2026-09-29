@@ -9,7 +9,7 @@ repo: shortfall
 # CI reads this line and installs `warden` at this tag, and every warden
 # command fails closed when its own version differs from it.
 platform:
-  pin: v2.2.0
+  pin: v2.3.0
 
 components:
   biz:       {path: biz/,       lang: go, description: "value types: Money (int64 minor units), ValueContext, Outcome, PII guard"}
