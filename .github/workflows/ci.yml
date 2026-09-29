@@ -397,6 +397,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: warden review --event "$GITHUB_EVENT_PATH"
+      # v2.3.0's proportionate review tier, as `warden init` emits it: binds
+      # graph.yaml's light round over the PUSHED range, exits 0 with none
+      # declared (true today), and is what certify's R-14 requires once one
+      # is. Added in its own PR, after the pin bump merged, because this job
+      # judges a PR at the BASE ref's pin, and v2.2.0 had no `attest
+      # classify` (workspace-xrst).
+      - name: proportionate review tier
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "fork PR: no attestation to bind"
+            exit 0
+          fi
+          out="$RUNNER_TEMP/attest-classify.txt"
+          status=0
+          warden attest classify --enforce \
+            --base "origin/${{ github.base_ref }}" > "$out" 2>&1 || status=$?
+          cat "$out"
+          { echo '### proportionate review tier';
+            echo '```'; cat "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: warden verify (declared scopes)
         run: |
           warden verify --scope core

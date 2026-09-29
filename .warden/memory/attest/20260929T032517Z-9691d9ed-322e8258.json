@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "source": "attest",
+  "sha": "9691d9ed27820d4a9beeab63e7f2b5eacf4035be",
+  "base_sha": "c39957f5f7cce52b5cba0c5c3ef8d706721b66c2",
+  "rules_version": "2de8ef8bf755",
+  "reviewed_at": "2026-09-29T03:25:17+00:00",
+  "range_patch_ids": [
+    "38a9ded60834d7e3efa3dee17646f9f85b474db6"
+  ],
+  "verdict": "clean",
+  "reviewers": [
+    {
+      "role": "code-reviewer",
+      "agent": "general-purpose subagent (Opus 5.5), finder",
+      "round": 1,
+      "returned": true,
+      "findings": 2,
+      "output": "code-reviewer.json",
+      "outcome": "reviewed-findings"
+    },
+    {
+      "role": "cross-examiner",
+      "agent": "general-purpose subagent (Opus 5.5), judge",
+      "round": 1,
+      "returned": true,
+      "findings": 2,
+      "output": "cross-examiner.json",
+      "outcome": "reviewed-findings"
+    }
+  ],
+  "roster_verification": "verified",
+  "round_binding": "bound",
+  "base_ancestry": "ancestor",
+  "records": [
+    {
+      "ts": "2026-09-29T03:25:17+00:00",
+      "seq": 0,
+      "source": "attest",
+      "sha": "9691d9ed27820d4a9beeab63e7f2b5eacf4035be",
+      "base_sha": "c39957f5f7cce52b5cba0c5c3ef8d706721b66c2",
+      "rule_id": "unmapped:unreachable-fork-exemption",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 410,
+      "severity": "LOW",
+      "finding": "The step's fork branch can never run in this job, and what it says contradicts the file's stated fork contract. The earlier 'platform access' step (line 356) exits 2 whenever AGENTOPS_DEPLOY_KEY is empty, which is always true on a fork PR, and this step has no `if: always()`, so it is skipped on every fork PR. The copied `exit 0` with 'fork PR: no attestation to bind' is dead code in shortfall. It also shows the pattern the header forbids: 'The gate says so and fails closed rather than passing vacuously' and 'No PR job is skipped ON ACCOUNT OF being a fork'. A reader, or a later edit that moves this step above the key step or adds always(), would take it as a sanctioned green skip for forks. The step is copied verbatim from the platform (enroll.render_classify_step), which is written for consumers whose gate does not already fail closed on forks. Either drop the fork guard here or add a one-line comment saying it is unreachable because the key step fails first. Harmless as it stands.",
+      "evidence": "line 356-361: `if [ -z \"$KEY\" ]; then ... exit 2`; line 410-413: `if [ \"${{ github.event.pull_request.head.repo.full_name }}\" != \"${{ github.repository }}\" ]; then\\n  echo \"fork PR: no attestation to bind\"\\n  exit 0`; header line 18-19: `The gate says so and fails closed rather than passing vacuously`",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Confirmed by cross-examiner (LOW). Inherited verbatim from the platform generator (warden/enroll.py render_classify_step, v2.3.0), which workspace-xrst requires be copied byte-for-byte; the fix belongs in the template and is parked to workspace-fodk, then re-copied here.",
+      "lens": "code-reviewer",
+      "round": 1,
+      "id": "8fd463421e5d1c4b"
+    },
+    {
+      "ts": "2026-09-29T03:25:17+00:00",
+      "seq": 1,
+      "source": "attest",
+      "sha": "9691d9ed27820d4a9beeab63e7f2b5eacf4035be",
+      "base_sha": "c39957f5f7cce52b5cba0c5c3ef8d706721b66c2",
+      "rule_id": "unmapped:expression-interpolation-in-run",
+      "tags": [
+        "ci-gate"
+      ],
+      "dir_prefix": ".github/workflows",
+      "file": ".github/workflows/ci.yml",
+      "line": 417,
+      "severity": "LOW",
+      "finding": "The new step pastes `${{ github.base_ref }}` straight into the shell text. The rest of this job reads the same value from the job-level `BASE_REF` env var and quotes it (lines 310-313 and line 429, `warden attest check --base \"origin/${BASE_REF}\"`). Git ref names may contain `$`, backticks and parentheses, so a base branch named with `$(...)` would be executed by the shell. Exploiting this needs write access to create the base branch, so the risk is minimal. The inconsistency is the defect, and it is inherited from the platform template. `--base \"origin/${BASE_REF}\"` behaves the same, and certify R-14 matches only the pattern `warden attest classify` plus `--enforce`, so the change would not affect certification.",
+      "evidence": "line 261: `BASE_REF: ${{ github.base_ref }}`; line 417: `--base \"origin/${{ github.base_ref }}\" > \"$out\" 2>&1 || status=$?`; line 429: `run: warden attest check --base \"origin/${BASE_REF}\"`",
+      "status": "dismissed-with-reason",
+      "origin": "interactive",
+      "reason": "Confirmed by cross-examiner (LOW). Inherited verbatim from the platform generator (warden/enroll.py render_classify_step, v2.3.0), which workspace-xrst requires be copied byte-for-byte; the fix belongs in the template and is parked to workspace-fodk, then re-copied here.",
+      "lens": "code-reviewer",
+      "round": 1,
+      "id": "cb1f00a9f585ff24"
+    }
+  ]
+}
